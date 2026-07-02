@@ -137,6 +137,10 @@ class MetroMapRenderer:
                 drawn.add(st.id)
                 self._add_station(st, self._station_lines[st.id])
 
+        # Terminal labels
+        for ln in self._lines:
+            self._add_terminal_label(ln)
+
     # ------------------------------------------------------------------
     # Line
     # ------------------------------------------------------------------
@@ -183,6 +187,43 @@ class MetroMapRenderer:
             gfx.PointsMaterial(size=size, size_space="screen", color=blended),
         )
         self._scene.add(centre)
+
+    # ------------------------------------------------------------------
+    # Terminal labels
+    # ------------------------------------------------------------------
+    def _add_terminal_label(self, ln) -> None:
+        pts = self._spline_data[ln.id]
+        if len(pts) < 2:
+            return
+        text_str = ln.name or f"地铁{ln.id}号线"
+        font_size = self._camera.width / 75  # world units, scales with zoom
+
+        for st, is_start in [(ln.route[0], True), (ln.route[-1], False)]:
+            sx, sy = st.position[0], st.position[1]
+
+            # Tangent direction at terminal
+            best_i = int(np.argmin(np.sum((pts[:, :2] - (sx, sy)) ** 2, axis=1)))
+            if best_i <= 0:
+                dx, dy = float(pts[1, 0] - pts[0, 0]), float(pts[1, 1] - pts[0, 1])
+            else:
+                dx, dy = float(pts[-1, 0] - pts[-2, 0]), float(pts[-1, 1] - pts[-2, 1])
+
+            mag = math.sqrt(dx * dx + dy * dy) or 1e-10
+            nx, ny = -dy / mag, dx / mag
+            sign = -1 if is_start else 1
+            offset = font_size * 1.8 * sign
+            lx, ly = sx + nx * offset, sy + ny * offset
+
+            fg = "#fff" if self._dark_mode else "#111"
+            text = gfx.Text(
+                text=text_str,
+                font_size=font_size,
+                screen_space=False,
+                anchor="middle-center",
+                material=gfx.TextMaterial(color=fg),
+            )
+            text.local.position = (lx, ly, 0.005)
+            self._scene.add(text)
 
     # ------------------------------------------------------------------
     # Keyboard

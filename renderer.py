@@ -92,6 +92,7 @@ class MetroMapRenderer:
         self._mouse_screen = (0, 0)
         self._pointer_down_pos = None
         self._page_stack = []          # detail page navigation stack
+        self._label_positions = []     # (screen_x, screen_y, line, station)
 
         # ---- Canvas & renderer ----
         self._canvas = RenderCanvas(size=(1280, 900),
@@ -250,7 +251,8 @@ class MetroMapRenderer:
     # ------------------------------------------------------------------
 
     def _draw_labels(self):
-        font_sz = 11  # screen pixels — consistent size
+        font_sz = 11
+        self._label_positions = []
         for ln in self._lines:
             if ln.hide_terminal_label or ln.id in self._hidden_lines:
                 continue
@@ -260,9 +262,7 @@ class MetroMapRenderer:
             label = line_identifier(ln.id, ln.name)
             for st, is_first in [(ln.route[0], True), (ln.route[-1], False)]:
                 sx, sy = st.position[0], st.position[1]
-                # Project world → screen
                 spx, spy = self._world_to_screen(sx, sy)
-                # Tangent in screen space for offset direction
                 bi = int(np.argmin(np.sum((pts[:, :2] - (sx, sy))**2, axis=1)))
                 if bi <= 0:
                     dx = float(pts[min(1, len(pts)-1), 0] - pts[0, 0])
@@ -282,6 +282,10 @@ class MetroMapRenderer:
                               material=gfx.TextMaterial(color=fg_c))
                 t.local.position = (spx, spy, 0)
                 self._scene.add(t)
+                # Store for click detection
+                tw = len(label) * font_sz * 0.55
+                self._label_positions.append((spx - tw/2, spy - font_sz,
+                                              spx + tw/2, spy + font_sz, ln))
 
     def _world_to_screen(self, wx, wy):
         """Convert world coords to screen pixel coords."""
@@ -655,6 +659,16 @@ class MetroMapRenderer:
             self._rebuild_ui()
             self._canvas.request_draw(self._render_frame)
             return
+
+        # Label click → hide terminal label
+        for lx1, ly1, lx2, ly2, ln in self._label_positions:
+            if lx1 <= event["x"] <= lx2 and ly1 <= event["y"] <= ly2:
+                ln.hide_terminal_label = True
+                self._rebuild_map()
+                self._rebuild_ui()
+                self._canvas.request_draw(self._render_frame)
+                print(f"[label] hidden for {line_identifier(ln.id, ln.name)}")
+                return
 
         # Map click
         wx, wy = self._screen_to_world(event["x"], event["y"])

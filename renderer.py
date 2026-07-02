@@ -185,14 +185,14 @@ class MetroMapRenderer:
     # ------------------------------------------------------------------
     def _rebuild_map(self):
         self._scene.clear()
-        if self._calibrator.active:
+        if self._calibrator.active or self._manual_cal.active:
             bg = (0, 0, 0, 1)
         else:
             bg = (0.06, 0.06, 0.06, 1) if self._dark_mode else (0.94, 0.94, 0.94, 1)
         self._scene.add(gfx.Background(
             None, gfx.BackgroundMaterial(bg, bg, bg, bg)))
 
-        if not self._calibrator.active:
+        if not self._calibrator.active and not self._manual_cal.active:
             for ln in self._lines:
                 if ln.id not in self._hidden_lines:
                     self._add_line(ln)
@@ -270,15 +270,64 @@ class MetroMapRenderer:
 
     # ------------------------------------------------------------------
     def _draw_manual_cal_ui(self):
-        """Draw crosshair cursor and calibration count."""
+        """Draw crosshair, coords, and sample count."""
+        import pygfx as gfx
+        lw = self._ui_camera.width or 1280
+        lh = self._ui_camera.height or 900
         cx, cy = self._manual_cal.cursor_pos()
-        add_crosshair_to_scene(self._ui_scene, cx, cy)
+
+        # Determine if cursor is on-screen
+        margin = 30
+        on_screen = (margin <= cx <= lw - margin and margin <= cy <= lh - margin)
+
+        if on_screen:
+            add_crosshair_to_scene(self._ui_scene, cx, cy)
+            # Show coords near crosshair
+            coord_text = f'({cx:.0f}, {cy:.0f})'
+            t = gfx.Text(text=coord_text, font_size=13, screen_space=True,
+                          anchor='top-left',
+                          material=gfx.TextMaterial(color='#0ff'))
+            t.local.position = (cx + 16, cy - 6, 0)
+            self._ui_scene.add(t)
+        else:
+            # Clamp to nearest edge and draw arrow
+            ex = max(margin, min(cx, lw - margin))
+            ey = max(margin, min(cy, lh - margin))
+            # Arrow direction
+            dx = cx - ex
+            dy = cy - ey
+            mag = (dx*dx + dy*dy)**0.5 or 1
+            ndx, ndy = dx/mag, dy/mag
+            # Draw arrow at edge pointing outward
+            import math
+            tip_x = ex + ndx * 15
+            tip_y = ey + ndy * 15
+            base_x = ex - ndx * 8
+            base_y = ey - ndy * 8
+            perp_x = -ndy * 6
+            perp_y = ndx * 6
+            pts = np.float32([
+                (tip_x, tip_y, 0),
+                (base_x + perp_x, base_y + perp_y, 0),
+                (base_x - perp_x, base_y - perp_y, 0),
+            ])
+            self._ui_scene.add(gfx.Mesh(
+                gfx.Geometry(positions=pts, indices=np.int32([[0,1,2]])),
+                gfx.MeshBasicMaterial(color=(0,1,1,1)),
+            ))
+            # Coords text
+            coord_text = f'({cx:.0f}, {cy:.0f})'
+            t = gfx.Text(text=coord_text, font_size=13, screen_space=True,
+                          anchor='top-left',
+                          material=gfx.TextMaterial(color='#ff0'))
+            t.local.position = (ex + 18, ey - 4, 0)
+            self._ui_scene.add(t)
+
+        # Sample count (top-right)
         n = self._manual_cal.sample_count()
         t = gfx.Text(text=f'Cal samples: {n}', font_size=16, screen_space=True,
                       anchor='top-right',
                       material=gfx.TextMaterial(color='#0ff'))
-        lw = self._ui_camera.width or 1280
-        lh = self._ui_camera.height or 900
         t.local.position = (lw - 180, lh - 10, 0)
         self._ui_scene.add(t)
 

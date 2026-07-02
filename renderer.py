@@ -438,9 +438,24 @@ class MetroMapRenderer:
         if len(pts) < 2:
             return
         text_str = ln.name or f"地铁{ln.id}号线"
-        font_size = self._camera.width / 75  # world units, scales with zoom
+        font_size = self._camera.width / 75
 
-        for st, is_start in [(ln.route[0], True), (ln.route[-1], False)]:
+        # Determine which stations get labels
+        is_circular = (len(ln.route) >= 2
+                       and ln.route[0].id == ln.route[-1].id)
+        if is_circular:
+            # Single label at ring_label_station_id (default: first station)
+            label_st = ln.route[0]
+            if ln.ring_label_station_id is not None:
+                for s in ln.route:
+                    if s.id == ln.ring_label_station_id:
+                        label_st = s
+                        break
+            terminals = [(label_st, True)]
+        else:
+            terminals = [(ln.route[0], True), (ln.route[-1], False)]
+
+        for st, is_start in terminals:
             sx, sy = st.position[0], st.position[1]
 
             # Tangent direction at terminal

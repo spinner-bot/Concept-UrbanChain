@@ -37,7 +37,8 @@ class Line:
                  color: tuple = (255, 0, 0),
                  fine_trajectory: list = None,
                  smooth_tension: float = 0.5,
-                 hide_terminal_label: bool = False):
+                 hide_terminal_label: bool = False,
+                 ring_label_station_id: int = None):
         self.id = id
         self.name = name
         self.route = route
@@ -46,6 +47,8 @@ class Line:
         # Catmull-Rom alpha: 0=uniform, 0.5=centripetal (default), 1=chordal
         self.smooth_tension = smooth_tension
         self.hide_terminal_label = hide_terminal_label
+        # For circular lines: station id where the single label is placed
+        self.ring_label_station_id = ring_label_station_id
         # fine_trajectory[i] = list of (x, y) waypoints between route[i] and route[i+1]
         # len(fine_trajectory) == len(route) - 1
         if fine_trajectory is None:
@@ -88,6 +91,11 @@ class MetroNetwork:
         """Return all lines that pass through the given station."""
         return [ln for ln in self.lines
                 if any(s.id == station_id for s in ln.route)]
+
+    @staticmethod
+    def is_circular(line: "Line") -> bool:
+        """Return True if the line is a circle (first and last station same)."""
+        return len(line.route) >= 2 and line.route[0].id == line.route[-1].id
 
 
 # ---------------------------------------------------------------------------

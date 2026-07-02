@@ -203,6 +203,7 @@ class MetroMapRenderer:
             self._draw_detail_page()
         else:
             self._draw_legend()
+            self._draw_tooltip()
 
     # ------------------------------------------------------------------
     def _add_line(self, ln):
@@ -327,6 +328,43 @@ class MetroMapRenderer:
                        material=gfx.TextMaterial(color="#888"))
         tn.local.position = (30, ny, 0)
         self._ui_scene.add(tn)
+
+    # ------------------------------------------------------------------
+    # Tooltip
+    # ------------------------------------------------------------------
+    def _draw_tooltip(self):
+        if not self._hovered:
+            return
+        mx, my = self._mouse_screen
+        fg = "#ddd" if self._dark_mode else "#111"
+        bg = (0.15, 0.15, 0.15, 0.85) if self._dark_mode else (0.96, 0.96, 0.96, 0.88)
+
+        h = self._hovered
+        if h["type"] == "station":
+            st = h["station"]
+            lines = " | ".join(line_identifier(l.id, l.name) for l in h["lines"])
+            text = f"{st.name}\n{lines}"
+        elif h["type"] == "line":
+            ln = h["line"]
+            text = line_identifier(ln.id, ln.name)
+        else:
+            return
+
+        pad = 8; font_sz = 12; line_h = font_sz * 1.5
+        lines = text.split("\n")
+        max_w = max(len(l) * font_sz * 0.6 for l in lines) + pad * 2
+        box_h = len(lines) * line_h + pad * 2
+        bx = mx + 14; by = my - box_h - 6
+
+        geo = gfx.Geometry(
+            positions=np.float32([(bx,by,0),(bx+max_w,by,0),(bx+max_w,by+box_h,0),(bx,by+box_h,0)]),
+            indices=np.int32([[0,1,2],[0,2,3]]))
+        self._ui_scene.add(gfx.Mesh(geo, gfx.MeshBasicMaterial(color=bg)))
+        for i, l in enumerate(lines):
+            t = gfx.Text(text=l, font_size=font_sz, screen_space=True,
+                          anchor="top-left", material=gfx.TextMaterial(color=fg))
+            t.local.position = (bx+pad, by+box_h-pad-i*line_h, 0)
+            self._ui_scene.add(t)
 
     # ------------------------------------------------------------------
     # Detail pages
@@ -545,8 +583,13 @@ class MetroMapRenderer:
         hit = self._hit_test(wx, wy)
         prev = self._hovered
         self._hovered = hit
-        if prev != hit:
+        changed = (prev != hit)
+        if changed:
             self._rebuild_map()
+            self._rebuild_ui()
+            self._canvas.request_draw(self._render_frame)
+        elif hit is not None:
+            # Same object, different position — update tooltip
             self._rebuild_ui()
             self._canvas.request_draw(self._render_frame)
 

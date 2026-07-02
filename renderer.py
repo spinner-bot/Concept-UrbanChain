@@ -174,11 +174,18 @@ class MetroMapRenderer:
     # Drawing
     # ------------------------------------------------------------------
     def _draw_all(self) -> None:
-        """Clear axes and redraw everything."""
+        """Clear axes and redraw everything, adapting colours to mode."""
         self._ax.clear()
         self._ax.set_aspect("equal")
-        self._ax.set_facecolor("#1A1A1A" if self._dark_mode else "#FFFFFF")
-        self._fg = (255, 255, 255) if self._dark_mode else (0, 0, 0)
+
+        if self._dark_mode:
+            self._ax.set_facecolor("#000000")
+            self._fig.set_facecolor("#1A1A1A")
+            self._fg = (255, 255, 255)
+        else:
+            self._ax.set_facecolor("#FFFFFF")
+            self._fig.set_facecolor("#F0F0F0")
+            self._fg = (0, 0, 0)
 
         # Draw lines first, then stations on top
         for ln in self._lines:

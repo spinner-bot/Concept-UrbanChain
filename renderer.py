@@ -13,7 +13,8 @@ import matplotlib.pyplot as plt
 from matplotlib.backend_bases import MouseButton
 
 from matplotlib.patches import (Polygon as MplPolygon, Wedge,
-                                 Circle as MplCircle, Rectangle as MplRectangle)
+                                 Circle as MplCircle, Rectangle as MplRectangle,
+                                 FancyBboxPatch)
 
 from spline import catmull_rom_spline, build_key_points
 
@@ -204,6 +205,8 @@ class MetroMapRenderer:
                 else:
                     self._draw_regular_station(st, s_lines[0])
 
+        for ln in self._lines:
+            self._draw_line_labels(ln)
         self._draw_legend()
         self._fig.canvas.draw_idle()
 
@@ -381,6 +384,81 @@ class MetroMapRenderer:
                 0.06, y_pos + 0.015, label,
                 transform=self._ax.transAxes,
                 fontsize=9, color=fg_01, va="center", zorder=10,
+            )
+
+    # ------------------------------------------------------------------
+    # Line labels
+    # ------------------------------------------------------------------
+    def _draw_line_labels(self, ln) -> None:
+        """Draw a rounded-rectangle label at each terminal station."""
+        # Identify terminal stations (first and last in the route)
+        terminals = [
+            (ln.route[0], 0),
+            (ln.route[-1], len(ln.route) - 1),
+        ]
+
+        label_text = ln.name if ln.name else f"地铁{ln.id}号线"
+
+        for st, idx in terminals:
+            pts = self._spline_data[ln.id]
+            if len(pts) < 2:
+                continue
+            # Find the closest spline sample to the station
+            sx, sy = st.position[0], st.position[1]
+            best_i = 0
+            best_d2 = float("inf")
+            for i, (px, py) in enumerate(pts):
+                d2 = (px - sx) ** 2 + (py - sy) ** 2
+                if d2 < best_d2:
+                    best_d2 = d2
+                    best_i = i
+            # Tangent at the terminal
+            if best_i == 0:
+                dx, dy = pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]
+                sign = -1  # place label before the start
+            else:
+                dx, dy = pts[-1][0] - pts[-2][0], pts[-1][1] - pts[-2][1]
+                sign = 1  # place label after the end
+
+            length = math.sqrt(dx * dx + dy * dy)
+            if length < 1e-10:
+                nx, ny = 0.0, 1.0
+            else:
+                nx = -dy / length
+                ny = dx / length
+
+            # Offset position
+            offset_dist = REGULAR_STATION_RADIUS + RING_GAP + RING_WIDTH + 6
+            label_x = sx + nx * offset_dist * sign
+            label_y = sy + ny * offset_dist * sign
+
+            # Estimate text dimensions
+            font_size = 8
+            text_width = len(label_text) * font_size * 0.55
+            text_height = font_size * 1.4
+            pad = 4
+            box_w = text_width + pad * 2
+            box_h = text_height + pad * 2
+
+            # Draw rounded rectangle
+            rect = FancyBboxPatch(
+                (label_x - box_w / 2, label_y - box_h / 2),
+                box_w, box_h,
+                boxstyle="round,pad=0.2",
+                facecolor=_rgb_01(ln.color),
+                edgecolor="none",
+                alpha=0.92,
+                zorder=8,
+            )
+            self._ax.add_patch(rect)
+
+            # Draw text
+            txt_colour_01 = _rgb_01(_fg_for_bg(ln.color))
+            self._ax.text(
+                label_x, label_y, label_text,
+                fontsize=font_size, color=txt_colour_01,
+                ha="center", va="center", zorder=9,
+                weight="bold",
             )
 
     # ------------------------------------------------------------------

@@ -154,6 +154,100 @@ def build_key_points(
     return keys
 
 
+def line_length(route: list, fine_trajectory: list | None = None) -> float:
+    """Calculate total length of a metro line.
+
+    Length is computed from station positions and fine-trajectory waypoints
+    between consecutive stations.  The spline is NOT used — this is the
+    direct polyline distance through the key points.
+
+    Args:
+        route: List of Station objects.
+        fine_trajectory: Optional per-segment waypoint lists.
+
+    Returns:
+        Total length in data-coordinate units.
+    """
+    keys = build_key_points(route, fine_trajectory)
+    total = 0.0
+    for i in range(len(keys) - 1):
+        dx = keys[i + 1][0] - keys[i][0]
+        dy = keys[i + 1][1] - keys[i][1]
+        total += math.sqrt(dx * dx + dy * dy)
+    return total
+
+
+def segment_length(route: list,
+                   fine_trajectory: list | None,
+                   from_station_id: int,
+                   to_station_id: int) -> float | None:
+    """Calculate the length between two stations on a line.
+
+    Handles circular lines by considering both directions and returning
+    the shorter distance (the "small ring").
+
+    Args:
+        route: List of Station objects.
+        fine_trajectory: Optional per-segment waypoint lists.
+        from_station_id: Starting station id.
+        to_station_id: Ending station id.
+
+    Returns:
+        Distance in data-coordinate units, or None if a station is not
+        found on this line.
+    """
+    # Build flat key-point list WITH station id markers
+    keys: list[tuple[float, float]] = []
+    key_station_ids: list[int] = []  # station id at each key point (repeated)
+    for i, station in enumerate(route):
+        keys.append((station.position[0], station.position[1]))
+        key_station_ids.append(station.id)
+        if fine_trajectory is not None and i < len(fine_trajectory):
+            for wp in fine_trajectory[i]:
+                keys.append((float(wp[0]), float(wp[1])))
+                key_station_ids.append(-1)  # waypoint marker
+
+    # Find indices of from/to stations
+    from_indices = [j for j, sid in enumerate(key_station_ids)
+                    if sid == from_station_id]
+    to_indices = [j for j, sid in enumerate(key_station_ids)
+                  if sid == to_station_id]
+    if not from_indices or not to_indices:
+        return None
+
+    from_idx = from_indices[0]
+    to_idx = to_indices[0]
+
+    # Forward distance (following route order)
+    fwd = 0.0
+    i = from_idx
+    n = len(keys)
+    is_circular = (len(route) >= 2 and route[0].id == route[-1].id)
+
+    while i != to_idx:
+        j = (i + 1) % n if is_circular else i + 1
+        if not is_circular and j <= i:
+            break
+        dx = keys[j][0] - keys[i][0]
+        dy = keys[j][1] - keys[i][1]
+        fwd += math.sqrt(dx * dx + dy * dy)
+        i = j
+
+    # Backward distance (reverse direction) — only meaningful for circular
+    bwd = float("inf")
+    if is_circular:
+        bwd = 0.0
+        i = from_idx
+        while i != to_idx:
+            j = (i - 1) % n
+            dx = keys[j][0] - keys[i][0]
+            dy = keys[j][1] - keys[i][1]
+            bwd += math.sqrt(dx * dx + dy * dy)
+            i = j
+
+    return min(fwd, bwd)
+
+
 def line_identifier(line_id: int, line_name: str | None) -> str:
     """Return the standard identifier string for a line.
 

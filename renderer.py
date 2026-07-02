@@ -488,6 +488,18 @@ class MetroMapRenderer:
                 "line_id": ln.id,
             })
 
+        # Network list link
+        net_y = y_base - len(self._lines) * 32 - 24
+        t_net = gfx.Text(text="▾ Net", font_size=13, screen_space=True,
+                          anchor="middle-left",
+                          material=gfx.TextMaterial(color=icon_colour))
+        t_net.local.position = (30, net_y, 0)
+        self._ui_scene.add(t_net)
+        self._legend_icon_spots.append({
+            "x": 30, "y": net_y - 10, "w": 55, "h": 20,
+            "action": "network_page",
+        })
+
         # Fold icon (bottom of legend)
         icon_y = y_base - len(self._lines) * 32 - 5
         fold_text = "—" if self._legend_mode == "full_show" else "◧"
@@ -537,6 +549,8 @@ class MetroMapRenderer:
             self._draw_station_detail(page, fg, accent, w, h)
         elif pg_type == "line_detail":
             self._draw_line_detail(page, fg, accent, w, h)
+        elif pg_type == "network_list":
+            self._draw_network_list(page, fg, accent, w, h)
 
     def _draw_station_detail(self, page, fg, accent, w, h) -> None:
         st = page["station"]
@@ -640,6 +654,43 @@ class MetroMapRenderer:
                 },
             })
             y -= 24
+
+        self._add_nav_buttons(fg, accent, w, h)
+
+    def _draw_network_list(self, page, fg, accent, w, h) -> None:
+        from spline import line_length
+        title = "Line Network"
+        t = gfx.Text(text=title, font_size=22, screen_space=True,
+                      anchor="top-left", material=gfx.TextMaterial(color=fg))
+        t.local.position = (30, h - 40, 0)
+        self._ui_scene.add(t)
+
+        y = h - 80
+        for ln in self._lines:
+            is_circ = (len(ln.route) >= 2 and ln.route[0].id == ln.route[-1].id)
+            length = line_length(ln.route, ln.fine_trajectory)
+
+            if is_circ:
+                mid = f"(circular) terminal: {ln.route[0].name}"
+            else:
+                mid = f"{ln.route[0].name} — {ln.route[-1].name}"
+
+            left = line_identifier(ln.id, ln.name)
+            right = f"{len(ln.route)} stns | {length:.1f} u"
+            display = f"▸ {left}  {mid}  [{right}]"
+
+            t = gfx.Text(text=display, font_size=14, screen_space=True,
+                          anchor="top-left",
+                          material=gfx.TextMaterial(color="#6af"))
+            t.local.position = (40, y, 0)
+            self._ui_scene.add(t)
+            tw = len(display) * 14 * 0.55
+            self._detail_hotspots.append({
+                "x": 40, "y": y - 20, "w": tw, "h": 22,
+                "action": "push_page",
+                "page": {"type": "line_detail", "line": ln},
+            })
+            y -= 26
 
         self._add_nav_buttons(fg, accent, w, h)
 
@@ -868,6 +919,8 @@ class MetroMapRenderer:
                         self._legend_mode = "full_hide"
                     elif action == "full_show":
                         self._legend_mode = "full_show"
+                    elif action == "network_page":
+                        self._page_stack.append({"type": "network_list"})
                     self._build_ui()
                     self._canvas.request_draw()
                     return

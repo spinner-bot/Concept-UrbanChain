@@ -105,6 +105,12 @@ class MetroMapRenderer:
         self._renderer = gfx.renderers.WgpuRenderer(self._canvas)
 
         # ---- Scene & camera ----
+        # UI overlay (pixel-space)
+        self._ui_scene = gfx.Scene()
+        self._ui_camera = gfx.OrthographicCamera(1280, 900)
+        self._ui_camera.maintain_aspect = False
+        self._ui_camera.local.position = (640, 450, 10)
+
         self._scene = gfx.Scene()
         self._camera = gfx.OrthographicCamera(20, 15)
         self._camera.maintain_aspect = True
@@ -125,10 +131,18 @@ class MetroMapRenderer:
     # ------------------------------------------------------------------
     def show(self):
         self._auto_fit()
-        self._rebuild()
+        self._rebuild_map()
+        self._rebuild_ui()
 
         def draw():
-            self._renderer.render(self._scene, self._camera)
+            # Update UI camera to match canvas size
+            lw, lh = self._canvas.get_logical_size()
+            if lw and lh:
+                self._ui_camera.width = lw
+                self._ui_camera.height = lh
+                self._ui_camera.local.position = (lw / 2, lh / 2, 10)
+            self._renderer.render(self._scene, self._camera, flush=False)
+            self._renderer.render(self._ui_scene, self._ui_camera, flush=True)
 
         self._canvas.request_draw(draw)
         loop.run()
@@ -153,7 +167,7 @@ class MetroMapRenderer:
         )
 
     # ------------------------------------------------------------------
-    def _rebuild(self):
+    def _rebuild_map(self):
         self._scene.clear()
         bg = (0.06, 0.06, 0.06, 1) if self._dark_mode else (0.94, 0.94, 0.94, 1)
         self._scene.add(gfx.Background(
@@ -175,8 +189,11 @@ class MetroMapRenderer:
                     self._add_station(st, vis)
 
         self._draw_labels()
-        self._draw_legend()
         self._built = True
+
+    def _rebuild_ui(self):
+        self._ui_scene.clear()
+        self._draw_legend()
 
     # ------------------------------------------------------------------
     def _add_line(self, ln):
@@ -208,24 +225,21 @@ class MetroMapRenderer:
         if hovered:
             ring_sz += 3 * self._scale_factor
 
-        # ring
+        # ring (z above lines which are at 0.01)
         self._scene.add(gfx.Points(
-            gfx.Geometry(positions=np.float32([(x, y, 0.003)])),
+            gfx.Geometry(positions=np.float32([(x, y, 0.02)])),
             gfx.PointsMaterial(size=ring_sz, size_space="screen", color=fg),
         ))
-        # centre
-        if is_xfer:
-            c = _rgba(slines[0].color)  # simplified
-        else:
-            c = _rgba(slines[0].color)
+        # centre (z above ring)
         self._scene.add(gfx.Points(
-            gfx.Geometry(positions=np.float32([(x, y, 0.004)])),
-            gfx.PointsMaterial(size=size, size_space="screen", color=c),
+            gfx.Geometry(positions=np.float32([(x, y, 0.03)])),
+            gfx.PointsMaterial(size=size, size_space="screen",
+                               color=_rgba(slines[0].color)),
         ))
 
     # ------------------------------------------------------------------
     def _draw_labels(self):
-        font_sz = max(self._camera.width / 75, 5)
+        font_sz = 11  # screen pixels — consistent size
         for ln in self._lines:
             if ln.hide_terminal_label or ln.id in self._hidden_lines:
                 continue
@@ -235,28 +249,45 @@ class MetroMapRenderer:
             label = line_identifier(ln.id, ln.name)
             for st, is_first in [(ln.route[0], True), (ln.route[-1], False)]:
                 sx, sy = st.position[0], st.position[1]
+                # Project world → screen
+                spx, spy = self._world_to_screen(sx, sy)
+                # Tangent in screen space for offset direction
                 bi = int(np.argmin(np.sum((pts[:, :2] - (sx, sy))**2, axis=1)))
                 if bi <= 0:
-                    dx, dy = float(pts[1, 0] - pts[0, 0]), float(pts[1, 1] - pts[0, 1])
+                    dx = float(pts[min(1, len(pts)-1), 0] - pts[0, 0])
+                    dy = float(pts[min(1, len(pts)-1), 1] - pts[0, 1])
                 else:
                     dx = float(pts[-1, 0] - pts[-2, 0])
                     dy = float(pts[-1, 1] - pts[-2, 1])
                 mag = math.sqrt(dx*dx + dy*dy) or 1e-10
                 nx, ny = -dy/mag, dx/mag
                 sign = -1 if is_first else 1
-                offset = font_sz * 1.8 * sign
-                lx, ly = sx + nx * offset, sy + ny * offset
+                offset = (STATION_SIZE * self._scale_factor + font_sz) * sign
+                spx += nx * offset
+                spy += ny * offset
                 fg_c = "#fff" if self._dark_mode else "#111"
                 t = gfx.Text(text=label, font_size=font_sz,
-                              screen_space=False, anchor="middle-center",
+                              screen_space=True, anchor="middle-center",
                               material=gfx.TextMaterial(color=fg_c))
-                t.local.position = (lx, ly, 0.006)
+                t.local.position = (spx, spy, 0)
                 self._scene.add(t)
+
+    def _world_to_screen(self, wx, wy):
+        """Convert world coords to screen pixel coords."""
+        cw, ch = self._camera.width, self._camera.height
+        cx, cy, _ = self._camera.local.position
+        lw, lh = self._canvas.get_logical_size()
+        lw, lh = lw or 1280, lh or 900
+        sx = (wx - cx) / cw * lw + lw / 2
+        sy = (wy - cy) / ch * lh + lh / 2
+        return sx, sy
 
     # ------------------------------------------------------------------
     def _draw_legend(self):
         fg = "#ddd" if self._dark_mode else "#222"
-        y0 = self._canvas.get_logical_size()[1] - 40
+        lw = self._ui_camera.width or 1280
+        lh = self._ui_camera.height or 900
+        y0 = lh - 40
         for i, ln in enumerate(self._lines):
             y = y0 - i * 32
             hidden = ln.id in self._hidden_lines
@@ -265,17 +296,19 @@ class MetroMapRenderer:
                 c = (c[0]*0.3, c[1]*0.3, c[2]*0.3, 0.5)
             label = line_identifier(ln.id, ln.name)
             lc = "#555" if hidden else fg
-            # swatch
-            self._scene.add(gfx.Points(
-                gfx.Geometry(positions=np.float32([(30, y, 0)])),
-                gfx.PointsMaterial(size=14, color=c),
-            ))
+            # swatch rectangle
+            geo = gfx.Geometry(
+                positions=np.float32([(30, y, 0), (50, y, 0),
+                                      (50, y + 14, 0), (30, y + 14, 0)]),
+                indices=np.int32([[0, 1, 2], [0, 2, 3]]),
+            )
+            self._ui_scene.add(gfx.Mesh(geo, gfx.MeshBasicMaterial(color=c)))
             # text
             t = gfx.Text(text=label, font_size=14, screen_space=True,
                           anchor="middle-left",
                           material=gfx.TextMaterial(color=lc))
-            t.local.position = (42, y, 0)
-            self._scene.add(t)
+            t.local.position = (58, y + 7, 0)
+            self._ui_scene.add(t)
 
     # ------------------------------------------------------------------
     # Input
@@ -284,15 +317,18 @@ class MetroMapRenderer:
         k = event.get("key", "")
         if k in ("b", "B"):
             self._dark_mode = not self._dark_mode
-            self._rebuild()
+            self._rebuild_map()
+            self._rebuild_ui()
             self._canvas.request_draw(self._render_frame)
         elif k == "[":
             self._scale_factor = max(0.3, self._scale_factor - 0.1)
-            self._rebuild()
+            self._rebuild_map()
+            self._rebuild_ui()
             self._canvas.request_draw(self._render_frame)
         elif k == "]":
             self._scale_factor = min(3.0, self._scale_factor + 0.1)
-            self._rebuild()
+            self._rebuild_map()
+            self._rebuild_ui()
             self._canvas.request_draw(self._render_frame)
 
     def _render_frame(self):
@@ -306,25 +342,24 @@ class MetroMapRenderer:
         return cx + (sx / lw - 0.5) * cw, cy + (sy / lh - 0.5) * ch
 
     def _hit_test(self, wx, wy):
-        threshold = self._camera.width / 30
-        # stations
+        line_threshold = self._camera.width / 35
+        station_threshold = self._camera.width / 20  # larger = easier to select
+        # Check stations FIRST (higher priority)
         for st_id, slines in self._station_lines.items():
-            st = slines[0].route[0]
-            for ln in self._lines:
-                for s in ln.route:
-                    if s.id == st_id:
-                        st = s
-                        break
-            if math.hypot(wx - st.position[0], wy - st.position[1]) < threshold:
+            st = next((s for ln in self._lines for s in ln.route
+                       if s.id == st_id), None)
+            if st is None:
+                continue
+            if math.hypot(wx - st.position[0], wy - st.position[1]) < station_threshold:
                 return {"type": "station", "station": st, "lines": slines}
-        # lines
+        # Then lines
         for ln in self._lines:
             if ln.id in self._hidden_lines:
                 continue
             pts = self._spline_data[ln.id]
             for i in range(len(pts) - 1):
                 if _point_seg_dist(wx, wy, float(pts[i, 0]), float(pts[i, 1]),
-                                   float(pts[i+1, 0]), float(pts[i+1, 1])) < threshold:
+                                   float(pts[i+1, 0]), float(pts[i+1, 1])) < line_threshold:
                     return {"type": "line", "line": ln}
         return None
 
@@ -335,7 +370,8 @@ class MetroMapRenderer:
         prev = self._hovered
         self._hovered = hit
         if prev != hit:
-            self._rebuild()
+            self._rebuild_map()
+            self._rebuild_ui()
             self._canvas.request_draw(self._render_frame)
 
     def _on_ptr_down(self, event):
@@ -359,7 +395,8 @@ class MetroMapRenderer:
                     self._hidden_lines.discard(ln.id)
                 else:
                     self._hidden_lines.add(ln.id)
-                self._rebuild()
+                self._rebuild_map()
+                self._rebuild_ui()
                 self._canvas.request_draw(self._render_frame)
                 return
 

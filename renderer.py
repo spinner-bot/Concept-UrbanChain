@@ -91,6 +91,7 @@ class MetroMapRenderer:
         self._hovered = None
         self._mouse_screen = (0, 0)
         self._pointer_down_pos = None
+        self._page_stack = []          # detail page navigation stack
 
         # ---- Canvas & renderer ----
         self._canvas = RenderCanvas(size=(1280, 900),
@@ -198,7 +199,10 @@ class MetroMapRenderer:
 
     def _rebuild_ui(self):
         self._ui_scene.clear()
-        self._draw_legend()
+        if self._page_stack:
+            self._draw_detail_page()
+        else:
+            self._draw_legend()
 
     # ------------------------------------------------------------------
     def _add_line(self, ln):
@@ -317,6 +321,111 @@ class MetroMapRenderer:
             self._ui_scene.add(t)
 
     # ------------------------------------------------------------------
+    # Detail pages
+    # ------------------------------------------------------------------
+    def _draw_detail_page(self):
+        page = self._page_stack[-1]
+        pg = page["type"]
+        fg = "#ddd" if self._dark_mode else "#222"
+        bg = (0.10, 0.10, 0.12, 0.94) if self._dark_mode else (0.94, 0.94, 0.96, 0.94)
+        lw, lh = self._canvas.get_logical_size()
+        lw, lh = lw or 1280, lh or 900
+        # Full-screen bg
+        geo = gfx.Geometry(
+            positions=np.float32([(0,0,0),(lw,0,0),(lw,lh,0),(0,lh,0)]),
+            indices=np.int32([[0,1,2],[0,2,3]]))
+        self._ui_scene.add(gfx.Mesh(geo, gfx.MeshBasicMaterial(color=bg)))
+        if pg == "station":
+            self._draw_station_page(page, fg, lw, lh)
+        elif pg == "line":
+            self._draw_line_page(page, fg, lw, lh)
+        elif pg == "network":
+            self._draw_network_page(fg, lw, lh)
+        # Nav buttons
+        self._detail_btns(fg, lw, lh)
+
+    def _draw_station_page(self, page, fg, lw, lh):
+        st = page["station"]
+        slines = page.get("lines", [])
+        y = lh - 40
+        # Title
+        t = gfx.Text(text=f"[{st.id:04d}] {st.name}", font_size=22,
+                      screen_space=True, anchor="top-left",
+                      material=gfx.TextMaterial(color=fg))
+        t.local.position = (30, y, 0); self._ui_scene.add(t)
+        y -= 40
+        for item in [
+            f"Type: {st.station_type.value}",
+            f"Position: ({st.position[0]:.1f}, {st.position[1]:.1f}, {st.position[2]:.1f})",
+            f"Lines: {len(slines)}",
+        ]:
+            t = gfx.Text(text=item, font_size=15, screen_space=True,
+                          anchor="top-left", material=gfx.TextMaterial(color=fg))
+            t.local.position = (40, y, 0); self._ui_scene.add(t); y -= 24
+        y -= 10
+        for ln in slines:
+            lid = line_identifier(ln.id, ln.name)
+            t = gfx.Text(text=f"  > {lid}", font_size=15, screen_space=True,
+                          anchor="top-left",
+                          material=gfx.TextMaterial(color="#6af"))
+            t.local.position = (50, y, 0); self._ui_scene.add(t); y -= 22
+
+    def _draw_line_page(self, page, fg, lw, lh):
+        ln = page["line"]
+        from spline import line_length
+        y = lh - 40
+        t = gfx.Text(text=line_identifier(ln.id, ln.name), font_size=22,
+                      screen_space=True, anchor="top-left",
+                      material=gfx.TextMaterial(color=fg))
+        t.local.position = (30, y, 0); self._ui_scene.add(t)
+        y -= 40
+        length = line_length(ln.route, ln.fine_trajectory)
+        is_circ = len(ln.route) >= 2 and ln.route[0].id == ln.route[-1].id
+        for item in [
+            f"Stations: {len(ln.route)}{' (circular)' if is_circ else ''}",
+            f"Length: {length:.2f} units",
+            f"Max speed: {ln.max_speed} km/h",
+        ]:
+            t = gfx.Text(text=item, font_size=15, screen_space=True,
+                          anchor="top-left", material=gfx.TextMaterial(color=fg))
+            t.local.position = (40, y, 0); self._ui_scene.add(t); y -= 24
+        y -= 10
+        t = gfx.Text(text="Route:", font_size=15, screen_space=True,
+                      anchor="top-left", material=gfx.TextMaterial(color=fg))
+        t.local.position = (40, y, 0); self._ui_scene.add(t); y -= 22
+        for s in ln.route:
+            xfer = f" [T:{len(self._station_lines.get(s.id, []))}]" if len(self._station_lines.get(s.id, [])) >= 2 else ""
+            t = gfx.Text(text=f"  > {s.name}{xfer}", font_size=14,
+                          screen_space=True, anchor="top-left",
+                          material=gfx.TextMaterial(color="#6af"))
+            t.local.position = (50, y, 0); self._ui_scene.add(t); y -= 20
+
+    def _draw_network_page(self, fg, lw, lh):
+        from spline import line_length
+        y = lh - 40
+        t = gfx.Text(text="Line Network", font_size=22, screen_space=True,
+                      anchor="top-left", material=gfx.TextMaterial(color=fg))
+        t.local.position = (30, y, 0); self._ui_scene.add(t)
+        y -= 40
+        for ln in self._lines:
+            is_circ = len(ln.route) >= 2 and ln.route[0].id == ln.route[-1].id
+            length = line_length(ln.route, ln.fine_trajectory)
+            mid = f"(circ) term: {ln.route[0].name}" if is_circ else f"{ln.route[0].name} - {ln.route[-1].name}"
+            txt = f"{line_identifier(ln.id, ln.name)}  {mid}  [{len(ln.route)} stn | {length:.1f} u]"
+            t = gfx.Text(text=txt, font_size=14, screen_space=True,
+                          anchor="top-left", material=gfx.TextMaterial(color="#6af"))
+            t.local.position = (40, y, 0); self._ui_scene.add(t); y -= 22
+
+    def _detail_btns(self, fg, lw, lh):
+        """Back and close buttons."""
+        t = gfx.Text(text="< Back", font_size=15, screen_space=True,
+                      anchor="top-left", material=gfx.TextMaterial(color="#6af"))
+        t.local.position = (30, lh - 10, 0); self._ui_scene.add(t)
+        t = gfx.Text(text="X Close", font_size=15, screen_space=True,
+                      anchor="top-right", material=gfx.TextMaterial(color="#f66"))
+        t.local.position = (lw - 30, lh - 10, 0); self._ui_scene.add(t)
+
+    # ------------------------------------------------------------------
     # Input
     # ------------------------------------------------------------------
 
@@ -424,11 +533,41 @@ class MetroMapRenderer:
                 self._canvas.request_draw(self._render_frame)
                 return
 
+        # Detail page click
+        if self._page_stack:
+            lw, lh = self._canvas.get_logical_size()
+            lw, lh = lw or 1280, lh or 900
+            sx, sy = event["x"], event["y"]
+            # Back button (top-left)
+            if sx < 80 and sy > lh - 30:
+                self._page_stack.pop()
+                self._rebuild_ui()
+                self._canvas.request_draw(self._render_frame)
+                return
+            # Close button (top-right)
+            if sx > lw - 80 and sy > lh - 30:
+                self._page_stack.clear()
+                self._rebuild_ui()
+                self._canvas.request_draw(self._render_frame)
+                return
+            # Cross-nav: clicking line/station text in detail page
+            # (simplified — click anywhere in detail page body for now)
+            return
+
         # Map click
         wx, wy = self._screen_to_world(event["x"], event["y"])
         hit = self._hit_test(wx, wy)
         if hit:
-            t = hit["type"]
-            name = hit.get("station", hit.get("line")).name
-            lid = getattr(hit.get("line"), "id", "")
-            print(f"[click] {t}: {name or lid}")
+            if hit["type"] == "station":
+                self._page_stack.append({
+                    "type": "station",
+                    "station": hit["station"],
+                    "lines": hit["lines"],
+                })
+            elif hit["type"] == "line":
+                self._page_stack.append({
+                    "type": "line",
+                    "line": hit["line"],
+                })
+            self._rebuild_ui()
+            self._canvas.request_draw(self._render_frame)

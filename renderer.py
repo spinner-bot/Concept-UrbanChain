@@ -415,6 +415,8 @@ class MetroMapRenderer:
     # Terminal labels
     # ------------------------------------------------------------------
     def _add_terminal_label(self, ln) -> None:
+        if ln.hide_terminal_label:
+            return
         pts = self._spline_data[ln.id]
         if len(pts) < 2:
             return

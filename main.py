@@ -36,7 +36,8 @@ class Line:
     def __init__(self, id: int, name: str, route: list, max_speed: float,
                  color: tuple = (255, 0, 0),
                  fine_trajectory: list = None,
-                 smooth_tension: float = 0.5):
+                 smooth_tension: float = 0.5,
+                 hide_terminal_label: bool = False):
         self.id = id
         self.name = name
         self.route = route
@@ -44,6 +45,7 @@ class Line:
         self.color = color  # RGB tuple (0-255)
         # Catmull-Rom alpha: 0=uniform, 0.5=centripetal (default), 1=chordal
         self.smooth_tension = smooth_tension
+        self.hide_terminal_label = hide_terminal_label
         # fine_trajectory[i] = list of (x, y) waypoints between route[i] and route[i+1]
         # len(fine_trajectory) == len(route) - 1
         if fine_trajectory is None:

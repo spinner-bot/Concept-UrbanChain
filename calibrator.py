@@ -150,18 +150,18 @@ class Calibrator:
 # ---------------------------------------------------------------------------
 # Reticle drawing
 # ---------------------------------------------------------------------------
-def add_crosshair_to_scene(scene, sx, sy, color=(0, 1, 1, 1), size=12):
+def add_crosshair_to_scene(scene, sx, sy, color=(0, 1, 1, 1), size=24):
     """Draw a screen-space crosshair (+) at pixel position (sx, sy)."""
     import pygfx as gfx
     h = size
-    # horizontal
-    hpts = np.float32([(sx - h, sy, 0), (sx + h, sy, 0)])
-    scene.add(gfx.Line(gfx.Geometry(positions=hpts),
-                gfx.LineMaterial(thickness=2, color=color)))
-    # vertical
-    vpts = np.float32([(sx, sy - h, 0), (sx, sy + h, 0)])
-    scene.add(gfx.Line(gfx.Geometry(positions=vpts),
-                gfx.LineMaterial(thickness=2, color=color)))
+    gap = 5  # center gap for precision placement
+    mat = gfx.LineMaterial(thickness=3, color=color)
+    # horizontal (two parts with gap)
+    scene.add(gfx.Line(gfx.Geometry(positions=np.float32([(sx - h, sy, 0), (sx - gap, sy, 0)])), mat))
+    scene.add(gfx.Line(gfx.Geometry(positions=np.float32([(sx + gap, sy, 0), (sx + h, sy, 0)])), mat))
+    # vertical (two parts with gap)
+    scene.add(gfx.Line(gfx.Geometry(positions=np.float32([(sx, sy - h, 0), (sx, sy - gap, 0)])), mat))
+    scene.add(gfx.Line(gfx.Geometry(positions=np.float32([(sx, sy + gap, 0), (sx, sy + h, 0)])), mat))
 
 
 def add_reticle_to_scene(scene, x, y, base_r, highlight=False):

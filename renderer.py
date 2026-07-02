@@ -436,6 +436,7 @@ class MetroMapRenderer:
         """Start manual cursor-alignment calibration."""
         mx, my = self._mouse_screen
         self._manual_cal.start(mx, my)
+        self._rebuild_map()
         self._rebuild_ui()
         self._canvas.request_draw(self._render_frame)
 
@@ -490,7 +491,13 @@ class MetroMapRenderer:
                 self._start_manual_calibration()
 
     def _render_frame(self):
-        self._renderer.render(self._scene, self._camera)
+        lw, lh = self._canvas.get_logical_size()
+        if lw and lh:
+            self._ui_camera.width = lw
+            self._ui_camera.height = lh
+            self._ui_camera.local.position = (lw / 2, lh / 2, 10)
+        self._renderer.render(self._scene, self._camera, flush=False)
+        self._renderer.render(self._ui_scene, self._ui_camera, flush=True)
 
     def _screen_to_world(self, sx, sy):
         # Apply calibration correction first

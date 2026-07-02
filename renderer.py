@@ -191,12 +191,13 @@ class MetroMapRenderer:
         self._ui_camera.height = 900
         self._ui_camera.local.position = (640, 450, 10)
 
-        # ---- Viewport (must exist before controller) ----
-        self._viewport = gfx.Viewport(self._renderer)
+        # ---- Viewports (map + UI overlay) ----
+        self._map_viewport = gfx.Viewport(self._renderer)
+        self._ui_viewport = gfx.Viewport(self._renderer)
 
         # ---- Controller (pan + zoom) ----
         self._controller = gfx.PanZoomController(self._camera)
-        self._controller.register_events(self._viewport)
+        self._controller.register_events(self._map_viewport)
 
         # ---- Keyboard ----
         self._canvas.add_event_handler(self._on_key, "key_down")
@@ -221,9 +222,8 @@ class MetroMapRenderer:
                 self._build_scene()
                 self._build_ui()
                 self._built = True
-            self._viewport.render(self._scene, self._camera)
-            self._viewport.render(self._ui_scene, self._ui_camera,
-                                  clear_color=False)
+            self._map_viewport.render(self._scene, self._camera, flush=False)
+            self._ui_viewport.render(self._ui_scene, self._ui_camera, flush=True)
 
         self._canvas.request_draw()
         loop.run()

@@ -110,17 +110,19 @@ class MetroMapRenderer:
         self._ui_camera.height = 900
         self._ui_camera.local.position = (640, 450, 0)
 
+        # ---- Viewport (must exist before controller) ----
+        self._viewport = gfx.Viewport(self._renderer)
+
         # ---- Controller (pan + zoom) ----
         self._controller = gfx.PanZoomController(self._camera)
-        self._controller.add_default_event_handlers(
-            self._canvas, self._camera,
-        )
+        self._controller.register_events(self._viewport)
 
         # ---- Keyboard ----
         self._canvas.add_event_handler(self._on_key, "key_down")
 
         # ---- Pointer ----
-        self._hovered = None          # currently hovered object: (type, obj)
+        self._hovered = None          # currently hovered object
+        self._mouse_screen = (0, 0)   # last mouse screen position
         self._canvas.add_event_handler(self._on_pointer_move, "pointer_move")
         self._canvas.add_event_handler(self._on_click, "click")
 
@@ -407,6 +409,7 @@ class MetroMapRenderer:
     def _build_ui(self) -> None:
         self._ui_scene.clear()
         self._draw_legend()
+        self._draw_tooltip()
 
     def _draw_legend(self) -> None:
         fg = "#ddd" if self._dark_mode else "#222"
@@ -433,6 +436,57 @@ class MetroMapRenderer:
             )
             text.local.position = (62, y + 8, 0)
             self._ui_scene.add(text)
+
+    # ------------------------------------------------------------------
+    # Tooltip
+    # ------------------------------------------------------------------
+    def _draw_tooltip(self) -> None:
+        if not self._hovered:
+            return
+        mx, my = self._mouse_screen
+        fg = "#eee" if self._dark_mode else "#111"
+        bg = (0.15, 0.15, 0.15, 0.88) if self._dark_mode else (0.96, 0.96, 0.96, 0.92)
+
+        if self._hovered["type"] == "station":
+            st = self._hovered["station"]
+            slines = self._hovered["lines"]
+            title = f"{st.name}"
+            lines_text = " | ".join(line_identifier(l.id, l.name) for l in slines)
+            text = f"{title}\n{lines_text}"
+        elif self._hovered["type"] == "line":
+            ln = self._hovered["line"]
+            text = line_identifier(ln.id, ln.name)
+        else:
+            return
+
+        # Background rect
+        lines = text.split("\n")
+        font_size = 13
+        line_h = font_size * 1.5
+        pad = 8
+        max_w = max(len(l) * font_size * 0.6 for l in lines) + pad * 2
+        box_h = len(lines) * line_h + pad * 2
+        bx = mx + 14
+        by = my - box_h - 8
+
+        geo = gfx.Geometry(
+            positions=np.float32([(bx, by, 0), (bx + max_w, by, 0),
+                                  (bx + max_w, by + box_h, 0), (bx, by + box_h, 0)]),
+            indices=np.int32([[0, 1, 2], [0, 2, 3]]),
+        )
+        mat = gfx.MeshBasicMaterial(color=bg)
+        self._ui_scene.add(gfx.Mesh(geo, mat))
+
+        for i, line_text in enumerate(lines):
+            t = gfx.Text(
+                text=line_text,
+                font_size=font_size,
+                screen_space=True,
+                anchor="top-left",
+                material=gfx.TextMaterial(color=fg),
+            )
+            t.local.position = (bx + pad, by + box_h - pad - i * line_h, 0)
+            self._ui_scene.add(t)
 
     # ------------------------------------------------------------------
     # Terminal labels
@@ -532,15 +586,24 @@ class MetroMapRenderer:
         return None
 
     def _on_pointer_move(self, event) -> None:
+        self._mouse_screen = (event["x"], event["y"])
         wx, wy = self._screen_to_world(event["x"], event["y"])
         hit = self._hit_test(wx, wy)
         prev = self._hovered
         self._hovered = hit
-        # Rebuild if hover state changed
+        # Rebuild scene if hover target changed; always update tooltip
         if (prev is None) != (hit is None) or (
-            prev and hit and prev.get("type") != hit.get("type")
+            prev and hit and (
+                prev.get("type") != hit.get("type")
+                or prev.get("station", None) is not hit.get("station", None)
+                or prev.get("line", None) is not hit.get("line", None)
+            )
         ):
             self._build_scene()
+            self._build_ui()
+            self._canvas.request_draw()
+        elif hit is not None:
+            # Mouse moved but same object — update tooltip position only
             self._build_ui()
             self._canvas.request_draw()
 

@@ -95,6 +95,7 @@ class MetroMapRenderer:
         self._offsets_applied = False
         self._page_stack: list[dict] = []  # navigation stack for detail pages
         self._detail_hotspots: list[dict] = []  # clickable zones in detail pages
+        self._hidden_lines: set[int] = set()    # ids of lines hidden via legend
 
         # ---- Canvas, renderer, scene, camera ----
         self._canvas = RenderCanvas(size=(1280, 900), title="Concept UrbanChain")
@@ -238,6 +239,15 @@ class MetroMapRenderer:
                     self._spline_data[ln.id] = pts
 
     # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+    def _visible_lines(self):
+        """Yield lines that are not hidden."""
+        for ln in self._lines:
+            if ln.id not in self._hidden_lines:
+                yield ln
+
+    # ------------------------------------------------------------------
     # Scaled sizes (secondary zoom)
     # ------------------------------------------------------------------
     def _line_thickness(self) -> float:
@@ -287,20 +297,24 @@ class MetroMapRenderer:
         )
 
         # Lines (bottom layer)
-        for ln in self._lines:
+        for ln in self._visible_lines():
             self._add_line(ln)
 
-        # Stations (top layer — deduplicated)
+        # Stations (top layer — show if at least one line is visible)
         drawn: set[int] = set()
         for ln in self._lines:
             for st in ln.route:
                 if st.id in drawn:
                     continue
                 drawn.add(st.id)
-                self._add_station(st, self._station_lines[st.id])
+                visible_lines = [l for l in self._station_lines[st.id]
+                                 if l.id not in self._hidden_lines]
+                if not visible_lines:
+                    continue
+                self._add_station(st, visible_lines)
 
         # Terminal labels
-        for ln in self._lines:
+        for ln in self._visible_lines():
             self._add_terminal_label(ln)
 
     # ------------------------------------------------------------------
@@ -418,29 +432,43 @@ class MetroMapRenderer:
 
     def _draw_legend(self) -> None:
         fg = "#ddd" if self._dark_mode else "#222"
+        dim = "#555" if self._dark_mode else "#999"
         y_base = self._ui_camera.height - 40
+        self._legend_hotspots = []
         for i, ln in enumerate(self._lines):
             y = y_base - i * 32
+            hidden = ln.id in self._hidden_lines
+
             # Swatch
+            color = _rgba(ln.color)
+            if hidden:
+                color = (color[0]*0.3, color[1]*0.3, color[2]*0.3, 0.5)
             geo = gfx.Geometry(
                 positions=np.float32([(30, y, 0), (55, y, 0),
                                       (55, y + 16, 0), (30, y + 16, 0)]),
                 indices=np.int32([[0, 1, 2], [0, 2, 3]]),
             )
-            mat = gfx.MeshBasicMaterial(color=_rgba(ln.color))
+            mat = gfx.MeshBasicMaterial(color=color)
             self._ui_scene.add(gfx.Mesh(geo, mat))
 
             # Label
             label = line_identifier(ln.id, ln.name)
+            label_fg = dim if hidden else fg
             text = gfx.Text(
                 text=label,
                 font_size=14,
                 screen_space=True,
                 anchor="middle-left",
-                material=gfx.TextMaterial(color=fg),
+                material=gfx.TextMaterial(color=label_fg),
             )
             text.local.position = (62, y + 8, 0)
             self._ui_scene.add(text)
+
+            # Record hotspot
+            self._legend_hotspots.append({
+                "x": 30, "y": y, "w": 200, "h": 18,
+                "line_id": ln.id,
+            })
 
     # ------------------------------------------------------------------
     # Detail pages
@@ -785,6 +813,21 @@ class MetroMapRenderer:
                 self._canvas.request_draw()
                 return
             return  # in detail page, ignore other clicks for now
+
+        # Check legend clicks first (screen-space, bottom-left origin)
+        if hasattr(self, "_legend_hotspots"):
+            for hs in self._legend_hotspots:
+                if (hs["x"] <= sx <= hs["x"] + hs["w"]
+                        and hs["y"] <= sy <= hs["y"] + hs["h"]):
+                    lid = hs["line_id"]
+                    if lid in self._hidden_lines:
+                        self._hidden_lines.discard(lid)
+                    else:
+                        self._hidden_lines.add(lid)
+                    self._build_scene()
+                    self._build_ui()
+                    self._canvas.request_draw()
+                    return
 
         wx, wy = self._screen_to_world(event["x"], event["y"])
         hit = self._hit_test(wx, wy)

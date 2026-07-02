@@ -12,7 +12,59 @@ matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 from matplotlib.backend_bases import MouseButton
 
+from matplotlib.patches import Polygon as MplPolygon
+
 from spline import catmull_rom_spline, build_key_points
+
+
+# ---------------------------------------------------------------------------
+# Geometry helpers
+# ---------------------------------------------------------------------------
+def _build_line_polygon(
+    points: list[tuple[float, float]],
+    half_width: float,
+) -> list[tuple[float, float]] | None:
+    """Build a closed polygon that represents a thick line through *points*.
+
+    For each point a normal direction is estimated via central finite
+    differences and the point is offset by ±*half_width* along the normal.
+    The left-side offsets are chained, then the right-side offsets are
+    chained in reverse to form a closed polygon.
+
+    Returns ``None`` when the point list is too short to form a polygon.
+    """
+    n = len(points)
+    if n < 2:
+        return None
+
+    left: list[tuple[float, float]] = []
+    right: list[tuple[float, float]] = []
+
+    for i in range(n):
+        if i == 0:
+            dx = points[1][0] - points[0][0]
+            dy = points[1][1] - points[0][1]
+        elif i == n - 1:
+            dx = points[-1][0] - points[-2][0]
+            dy = points[-1][1] - points[-2][1]
+        else:
+            dx = points[i + 1][0] - points[i - 1][0]
+            dy = points[i + 1][1] - points[i - 1][1]
+
+        length = math.sqrt(dx * dx + dy * dy)
+        if length < 1e-10:
+            nx, ny = 0.0, 1.0
+        else:
+            nx = -dy / length
+            ny = dx / length
+
+        left.append((points[i][0] + nx * half_width,
+                      points[i][1] + ny * half_width))
+        right.append((points[i][0] - nx * half_width,
+                       points[i][1] - ny * half_width))
+
+    # Closed polygon: left chain + reversed right chain
+    return left + right[::-1]
 
 
 # ---------------------------------------------------------------------------
@@ -136,13 +188,21 @@ class MetroMapRenderer:
         self._fig.canvas.draw_idle()
 
     def _draw_line_stroke(self, ln) -> None:
-        """Draw a single line as a simple matplotlib plot."""
+        """Draw a line as a filled polygon with data-coordinate width.
+
+        The polygon has no edge (no border) and its width equals the
+        diameter of a regular station centre circle (LINE_WIDTH).
+        """
         pts = self._spline_data[ln.id]
         if len(pts) < 2:
             return
-        xs, ys = zip(*pts)
+        poly_verts = _build_line_polygon(pts, LINE_WIDTH / 2.0)
+        if poly_verts is None:
+            return
         colour_01 = _rgb_01(ln.color)
-        self._ax.plot(xs, ys, color=colour_01, linewidth=2, zorder=2)
+        patch = MplPolygon(poly_verts, facecolor=colour_01, edgecolor="none",
+                           zorder=2, closed=True)
+        self._ax.add_patch(patch)
 
     def _draw_station(self, st, ln) -> None:
         """Draw a station as a simple filled circle."""

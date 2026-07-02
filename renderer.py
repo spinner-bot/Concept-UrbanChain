@@ -13,8 +13,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backend_bases import MouseButton
 
 from matplotlib.patches import (Polygon as MplPolygon, Wedge,
-                                 Circle as MplCircle, Rectangle as MplRectangle,
-                                 FancyBboxPatch)
+                                 Circle as MplCircle, Rectangle as MplRectangle)
 
 from spline import catmull_rom_spline, build_key_points
 
@@ -70,17 +69,11 @@ def _build_line_polygon(
 
 
 # ---------------------------------------------------------------------------
-# Constants
+# Constants (ratios / tuning knobs — NOT data-coordinate sizes)
 # ---------------------------------------------------------------------------
-REGULAR_STATION_RADIUS = 5.0   # base centre-circle radius in data coords
-RING_GAP = 2.0                 # radial gap between centre and outer ring
-RING_WIDTH = 1.5               # thickness of outer ring stroke
-TRANSFER_MULTIPLIER = 1.65     # centre-circle radius multiplier for transfers
-LINE_WIDTH = REGULAR_STATION_RADIUS * 2  # line thickness = diameter of regular centre
-GRADIENT_STEPS = 12            # number of thin wedges per gradient band
-GRADIENT_ANGLE = 12.0          # degrees of each gradient transition band
-ZOOM_FACTOR = 1.2              # scroll-wheel zoom multiplier
-NUM_SPLINE_SAMPLES = 30        # spline sample points per key-point segment
+TRANSFER_MULTIPLIER = 1.65   # centre-circle radius multiplier for transfer stations
+ZOOM_FACTOR = 1.2             # scroll-wheel zoom multiplier
+NUM_SPLINE_SAMPLES = 30       # spline sample points per key-point segment
 
 
 # ---------------------------------------------------------------------------
@@ -133,6 +126,9 @@ class MetroMapRenderer:
                 if st.id not in seen:
                     self._station_lines[st.id].append(ln)
                     seen.add(st.id)
+
+        # ---- Compute dynamic sizes from data extent ----
+        self._compute_sizes()
 
         # ---- Precompute spline data for each line ----
         self._spline_data: dict[int, list[tuple[float, float]]] = {}
@@ -222,7 +218,7 @@ class MetroMapRenderer:
         pts = self._spline_data[ln.id]
         if len(pts) < 2:
             return
-        poly_verts = _build_line_polygon(pts, LINE_WIDTH / 2.0)
+        poly_verts = _build_line_polygon(pts, self._line_half_width)
         if poly_verts is None:
             return
         colour_01 = _rgb_01(ln.color)
@@ -234,19 +230,19 @@ class MetroMapRenderer:
     # Station drawing
     # ------------------------------------------------------------------
     def _station_outer_radius(self, is_transfer: bool) -> float:
-        centre = (REGULAR_STATION_RADIUS * TRANSFER_MULTIPLIER
-                  if is_transfer else REGULAR_STATION_RADIUS)
-        return centre + RING_GAP
+        centre = (self._station_r * TRANSFER_MULTIPLIER
+                  if is_transfer else self._station_r)
+        return centre + self._ring_gap
 
     def _draw_regular_station(self, st, ln) -> None:
         """Draw a non-transfer station: solid centre + outer ring."""
         x, y = st.position[0], st.position[1]
-        r = REGULAR_STATION_RADIUS
-        ring_r = r + RING_GAP
+        r = self._station_r
+        ring_r = r + self._ring_gap
 
         # Outer ring
         ring = MplCircle((x, y), ring_r, facecolor="none",
-                         edgecolor=_rgb_01(self._fg), linewidth=RING_WIDTH,
+                         edgecolor=_rgb_01(self._fg), linewidth=self._ring_width,
                          zorder=4)
         self._ax.add_patch(ring)
         # Centre
@@ -262,12 +258,12 @@ class MetroMapRenderer:
         by each line's approach angle.
         """
         x, y = st.position[0], st.position[1]
-        r = REGULAR_STATION_RADIUS * TRANSFER_MULTIPLIER
-        ring_r = r + RING_GAP
+        r = self._station_r * TRANSFER_MULTIPLIER
+        ring_r = r + self._ring_gap
 
         # Outer ring
         ring = MplCircle((x, y), ring_r, facecolor="none",
-                         edgecolor=_rgb_01(self._fg), linewidth=RING_WIDTH,
+                         edgecolor=_rgb_01(self._fg), linewidth=self._ring_width,
                          zorder=4)
         self._ax.add_patch(ring)
 
@@ -282,11 +278,11 @@ class MetroMapRenderer:
         colours = [ln.color for _, ln in angled_lines]
         angles = [a for a, _ in angled_lines]
 
-        # Draw 360 1-degree wedges with softmax colour blending
-        for deg in range(360):
+        # Draw 5-degree wedges with softmax colour blending
+        for deg in range(0, 360, 5):
             theta = float(deg)
             blended = self._blend_colours(theta, angles, colours)
-            wedge = Wedge((x, y), r, theta, theta + 1.0,
+            wedge = Wedge((x, y), r, theta, theta + 5.0,
                           facecolor=_rgb_01(blended), edgecolor="none",
                           zorder=5)
             self._ax.add_patch(wedge)
@@ -391,20 +387,15 @@ class MetroMapRenderer:
     # ------------------------------------------------------------------
     def _draw_line_labels(self, ln) -> None:
         """Draw a rounded-rectangle label at each terminal station."""
-        # Identify terminal stations (first and last in the route)
-        terminals = [
-            (ln.route[0], 0),
-            (ln.route[-1], len(ln.route) - 1),
-        ]
-
         label_text = ln.name if ln.name else f"地铁{ln.id}号线"
 
-        for st, idx in terminals:
+        for st, idx in [(ln.route[0], 0), (ln.route[-1], len(ln.route) - 1)]:
             pts = self._spline_data[ln.id]
             if len(pts) < 2:
                 continue
-            # Find the closest spline sample to the station
             sx, sy = st.position[0], st.position[1]
+
+            # Find closest spline sample to determine tangent direction
             best_i = 0
             best_d2 = float("inf")
             for i, (px, py) in enumerate(pts):
@@ -412,13 +403,14 @@ class MetroMapRenderer:
                 if d2 < best_d2:
                     best_d2 = d2
                     best_i = i
+
             # Tangent at the terminal
             if best_i == 0:
                 dx, dy = pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]
-                sign = -1  # place label before the start
+                sign = -1
             else:
                 dx, dy = pts[-1][0] - pts[-2][0], pts[-1][1] - pts[-2][1]
-                sign = 1  # place label after the end
+                sign = 1
 
             length = math.sqrt(dx * dx + dy * dy)
             if length < 1e-10:
@@ -427,43 +419,53 @@ class MetroMapRenderer:
                 nx = -dy / length
                 ny = dx / length
 
-            # Offset position
-            offset_dist = REGULAR_STATION_RADIUS + RING_GAP + RING_WIDTH + 6
+            # Offset distance (data coords)
+            offset_dist = (self._station_r * TRANSFER_MULTIPLIER
+                           + self._ring_gap + self._ring_width
+                           + self._station_r * 1.2)
             label_x = sx + nx * offset_dist * sign
             label_y = sy + ny * offset_dist * sign
 
-            # Estimate text dimensions
-            font_size = 8
-            text_width = len(label_text) * font_size * 0.55
-            text_height = font_size * 1.4
-            pad = 4
-            box_w = text_width + pad * 2
-            box_h = text_height + pad * 2
-
-            # Draw rounded rectangle
-            rect = FancyBboxPatch(
-                (label_x - box_w / 2, label_y - box_h / 2),
-                box_w, box_h,
-                boxstyle="round,pad=0.2",
-                facecolor=_rgb_01(ln.color),
-                edgecolor="none",
-                alpha=0.92,
-                zorder=8,
-            )
-            self._ax.add_patch(rect)
-
-            # Draw text
+            # Use bbox dict — matplotlib auto-sizes to fit the text
             txt_colour_01 = _rgb_01(_fg_for_bg(ln.color))
             self._ax.text(
                 label_x, label_y, label_text,
-                fontsize=font_size, color=txt_colour_01,
+                fontsize=self._label_font_size,
+                color=txt_colour_01,
                 ha="center", va="center", zorder=9,
                 weight="bold",
+                bbox=dict(
+                    boxstyle="round,pad=0.35",
+                    facecolor=_rgb_01(ln.color),
+                    edgecolor="none",
+                    alpha=0.92,
+                ),
             )
 
     # ------------------------------------------------------------------
-    # Viewport
+    # Viewport & sizing
     # ------------------------------------------------------------------
+    def _compute_sizes(self) -> None:
+        """Compute station radius and derived sizes from data extent.
+
+        All visual sizes scale proportionally so the map looks correct
+        regardless of the coordinate range used in the input data.
+        """
+        xs, ys = [], []
+        for ln in self._lines:
+            for st in ln.route:
+                xs.append(st.position[0])
+                ys.append(st.position[1])
+        if not xs:
+            extent = 10.0
+        else:
+            extent = max(max(xs) - min(xs), max(ys) - min(ys), 1.0)
+        self._station_r = max(extent * 0.028, 0.15)
+        self._ring_gap = self._station_r * 0.45
+        self._ring_width = max(self._station_r * 0.32, 0.3)
+        self._line_half_width = self._station_r  # line full width = 2 * station_r
+        self._label_font_size = max(self._station_r * 2.5, 6.5)
+
     def _auto_fit(self) -> None:
         """Set initial axis limits to enclose all stations with padding."""
         xs, ys = [], []
@@ -475,10 +477,11 @@ class MetroMapRenderer:
             self._ax.set_xlim(-10, 10)
             self._ax.set_ylim(-10, 10)
             return
-        pad_x = max((max(xs) - min(xs)) * 0.15, 2)
-        pad_y = max((max(ys) - min(ys)) * 0.15, 2)
-        self._ax.set_xlim(min(xs) - pad_x, max(xs) + pad_x)
-        self._ax.set_ylim(min(ys) - pad_y, max(ys) + pad_y)
+        pad = max((max(xs) - min(xs)) * 0.15,
+                  (max(ys) - min(ys)) * 0.15,
+                  self._station_r * 8)
+        self._ax.set_xlim(min(xs) - pad, max(xs) + pad)
+        self._ax.set_ylim(min(ys) - pad, max(ys) + pad)
 
     # ------------------------------------------------------------------
     # Interaction handlers

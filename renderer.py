@@ -371,8 +371,9 @@ class MetroMapRenderer:
         cx, cy, _ = self._camera.local.position
         lw, lh = self._canvas.get_logical_size()
         lw, lh = lw or 1280, lh or 900
+        # Camera Y from bottom; screen Y from top → flip
         return ((wx - cx) / cw * lw + lw / 2,
-                (wy - cy) / ch * lh + lh / 2)
+                lh - ((wy - cy) / ch * lh + lh / 2))
 
     def _world_to_screen(self, wx, wy):
         """Convert world coords to screen pixel coords."""

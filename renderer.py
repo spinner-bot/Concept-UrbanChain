@@ -127,8 +127,10 @@ class MetroMapRenderer:
         # ---- Pointer ----
         self._hovered = None          # currently hovered object
         self._mouse_screen = (0, 0)   # last mouse screen position
+        self._pointer_down_pos = None # for click-vs-drag detection
         self._canvas.add_event_handler(self._on_pointer_move, "pointer_move")
-        self._canvas.add_event_handler(self._on_click, "click")
+        self._canvas.add_event_handler(self._on_pointer_down, "pointer_down")
+        self._canvas.add_event_handler(self._on_pointer_up, "pointer_up")
 
         # Defer build until first frame (canvas size is known)
         self._built = False
@@ -911,11 +913,25 @@ class MetroMapRenderer:
             self._build_ui()
             self._canvas.request_draw()
 
-    def _on_click(self, event) -> None:
+    def _on_pointer_down(self, event) -> None:
+        self._pointer_down_pos = (event["x"], event["y"])
+
+    def _on_pointer_up(self, event) -> None:
+        """Handle click (distinguished from drag by minimal movement)."""
+        if self._pointer_down_pos is None:
+            return
+        dx = event["x"] - self._pointer_down_pos[0]
+        dy = event["y"] - self._pointer_down_pos[1]
+        dist = (dx * dx + dy * dy) ** 0.5
+        self._pointer_down_pos = None
+        if dist > 5:  # more than 5 px → drag, not click
+            return
+
         sx, sy = event["x"], event["y"]
 
         # If a detail page is open, handle nav button clicks first
         if self._page_stack:
+            page = self._page_stack[-1]
             w, h = self._canvas.get_logical_size()
             w, h = w or 1280, h or 900
             # Check hotspots first (clickable lines/stations in detail)
@@ -944,7 +960,7 @@ class MetroMapRenderer:
                 self._build_ui()
                 self._canvas.request_draw()
                 return
-            return  # in detail page, ignore other clicks for now
+            return
 
         # Check legend icon clicks first
         if hasattr(self, "_legend_icon_spots"):

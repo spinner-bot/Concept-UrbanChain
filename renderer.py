@@ -113,7 +113,7 @@ class MetroMapRenderer:
 
         self._scene = gfx.Scene()
         self._camera = gfx.OrthographicCamera(20, 15)
-        self._camera.maintain_aspect = True
+        self._camera.maintain_aspect = False
         self._camera.local.position = (0, 0, 10)
 
         # ---- Controller ----
@@ -158,8 +158,20 @@ class MetroMapRenderer:
             return
         ex, ey = max(xs) - min(xs) or 1, max(ys) - min(ys) or 1
         pad = max(ex, ey) * 0.18
-        self._camera.width = ex + pad * 2
-        self._camera.height = ey + pad * 2
+        # Match viewport aspect ratio
+        lw, lh = self._canvas.get_logical_size()
+        lw, lh = lw or 1280, lh or 900
+        view_aspect = lw / lh
+        world_w = ex + pad * 2
+        world_h = ey + pad * 2
+        world_aspect = world_w / world_h
+        if world_aspect > view_aspect:
+            # World is wider — expand height
+            world_h = world_w / view_aspect
+        else:
+            world_w = world_h * view_aspect
+        self._camera.width = world_w
+        self._camera.height = world_h
         self._camera.local.position = (
             (min(xs) + max(xs)) / 2,
             (min(ys) + max(ys)) / 2,
@@ -335,23 +347,20 @@ class MetroMapRenderer:
         self._renderer.render(self._scene, self._camera)
 
     def _screen_to_world(self, sx, sy):
-        """Convert screen pixel coords to world coords, accounting for maintain_aspect."""
         cw, ch = self._camera.width, self._camera.height
         cx, cy, _ = self._camera.local.position
         lw, lh = self._canvas.get_logical_size()
         lw, lh = lw or 1280, lh or 900
-        # Account for maintain_aspect: compute effective visible area
-        view_aspect = lw / lh
-        cam_aspect = cw / ch if ch > 0 else 1.0
-        if view_aspect > cam_aspect:
-            eff_w = ch * view_aspect
-            eff_h = ch
-        else:
-            eff_w = cw
-            eff_h = cw / view_aspect
-        wx = cx + (sx / lw - 0.5) * eff_w
-        wy = cy + (sy / lh - 0.5) * eff_h
-        return wx, wy
+        return cx + (sx / lw - 0.5) * cw, cy + (sy / lh - 0.5) * ch
+
+    def _world_to_screen(self, wx, wy):
+        cw, ch = self._camera.width, self._camera.height
+        cx, cy, _ = self._camera.local.position
+        lw, lh = self._canvas.get_logical_size()
+        lw, lh = lw or 1280, lh or 900
+        return ((wx - cx) / cw * lw + lw / 2,
+                (wy - cy) / ch * lh + lh / 2)
+
 
     def _hit_test(self, wx, wy):
         line_threshold = self._camera.width / 35

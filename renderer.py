@@ -10,6 +10,83 @@ from rendercanvas.auto import RenderCanvas, loop
 from spline import catmull_rom_spline, build_key_points, line_identifier
 
 
+# ---------------------------------------------------------------------------
+# Icon drawing helpers (screen-space meshes)
+# ---------------------------------------------------------------------------
+def _add_icon_hamburger(ui_scene, x, y, size, color) -> None:
+    """Three horizontal lines (hamburger menu icon ☰)."""
+    w = size * 1.2
+    gap = size * 0.35
+    for row in range(3):
+        py = y + gap * (2 - row)
+        geo = gfx.Geometry(
+            positions=np.float32([(x, py, 0), (x + w, py, 0),
+                                  (x + w, py + gap * 0.4, 0), (x, py + gap * 0.4, 0)]),
+            indices=np.int32([[0, 1, 2], [0, 2, 3]]),
+        )
+        ui_scene.add(gfx.Mesh(geo, gfx.MeshBasicMaterial(color=color)))
+
+
+def _add_icon_triangle_down(ui_scene, x, y, size, color) -> None:
+    """Down-pointing triangle (▾)."""
+    h = size * 0.8
+    w = size * 1.0
+    geo = gfx.Geometry(
+        positions=np.float32([(x, y - h, 0), (x + w, y - h, 0), (x + w / 2, y, 0)]),
+        indices=np.int32([[0, 1, 2]]),
+    )
+    ui_scene.add(gfx.Mesh(geo, gfx.MeshBasicMaterial(color=color)))
+
+
+def _add_icon_triangle_right(ui_scene, x, y, size, color) -> None:
+    """Right-pointing triangle (▸)."""
+    h = size * 0.9
+    w = size * 0.7
+    geo = gfx.Geometry(
+        positions=np.float32([(x, y + h / 2, 0), (x, y - h / 2, 0), (x + w, y, 0)]),
+        indices=np.int32([[0, 1, 2]]),
+    )
+    ui_scene.add(gfx.Mesh(geo, gfx.MeshBasicMaterial(color=color)))
+
+
+def _add_icon_fold(ui_scene, x, y, size, color) -> None:
+    """Half-filled square (◧) — fold icon."""
+    s = size * 0.8
+    # Outline square
+    o = np.float32([(x, y, 0), (x + s, y, 0), (x + s, y + s, 0), (x, y + s, 0)])
+    geo = gfx.Geometry(positions=o, indices=np.int32([[0, 1, 2], [0, 2, 3]]))
+    ui_scene.add(gfx.Mesh(geo, gfx.MeshBasicMaterial(color=color)))
+    # Lower filled half
+    h2 = s / 2
+    lo = np.float32([(x, y, 0), (x + s, y, 0), (x + s, y + h2, 0), (x, y + h2, 0)])
+    geo2 = gfx.Geometry(positions=lo, indices=np.int32([[0, 1, 2], [0, 2, 3]]))
+    mat2 = gfx.MeshBasicMaterial(color=(color[0], color[1], color[2], 0.6))
+    ui_scene.add(gfx.Mesh(geo2, mat2))
+
+
+def _add_icon_arrow_left(ui_scene, x, y, size, color) -> None:
+    """Left-pointing arrow (←)."""
+    s = size * 0.7
+    pts = np.float32([
+        (x + s, y + s, 0), (x, y, 0), (x + s, y - s, 0),
+    ])
+    geo = gfx.Geometry(positions=pts, indices=np.int32([[0, 1, 2]]))
+    ui_scene.add(gfx.Mesh(geo, gfx.MeshBasicMaterial(color=color)))
+
+
+def _add_icon_x(ui_scene, x, y, size, color) -> None:
+    """X mark (✕) — two crossed lines."""
+    s = size * 0.6
+    # Line 1: top-left to bottom-right
+    pts1 = np.float32([(x - s, y + s, 0.001), (x + s, y - s, 0.001)])
+    geo1 = gfx.Geometry(positions=pts1)
+    ui_scene.add(gfx.Line(geo1, gfx.LineMaterial(thickness=2.5, color=color)))
+    # Line 2: top-right to bottom-left
+    pts2 = np.float32([(x + s, y + s, 0.001), (x - s, y - s, 0.001)])
+    geo2 = gfx.Geometry(positions=pts2)
+    ui_scene.add(gfx.Line(geo2, gfx.LineMaterial(thickness=2.5, color=color)))
+
+
 def _point_seg_dist(px: float, py: float,
                     x1: float, y1: float,
                     x2: float, y2: float) -> float:
@@ -146,8 +223,9 @@ class MetroMapRenderer:
                 self._built = True
             self._renderer.render(self._scene, self._camera)
             self._renderer.render(self._ui_scene, self._ui_camera,
-                                  clear_color=False, clear_depth=True)
+                                  clear_color=False)
 
+        self._canvas.request_draw()
         loop.run()
 
     # ------------------------------------------------------------------

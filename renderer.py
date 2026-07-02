@@ -12,7 +12,8 @@ matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 from matplotlib.backend_bases import MouseButton
 
-from matplotlib.patches import Polygon as MplPolygon, Wedge, Circle as MplCircle
+from matplotlib.patches import (Polygon as MplPolygon, Wedge,
+                                 Circle as MplCircle, Rectangle as MplRectangle)
 
 from spline import catmull_rom_spline, build_key_points
 
@@ -196,6 +197,7 @@ class MetroMapRenderer:
                 else:
                     self._draw_regular_station(st, s_lines[0])
 
+        self._draw_legend()
         self._fig.canvas.draw_idle()
 
     # ------------------------------------------------------------------
@@ -349,6 +351,34 @@ class MetroMapRenderer:
 
         return (int(round(r)), int(round(g)), int(round(b)))
 
+    # ------------------------------------------------------------------
+    # Legend
+    # ------------------------------------------------------------------
+    def _draw_legend(self) -> None:
+        """Draw a colour legend in the bottom-left corner."""
+        fg_01 = _rgb_01(self._fg)
+        for i, ln in enumerate(self._lines):
+            y_pos = 0.04 + i * 0.05
+            # Colour swatch (rectangle in axes coords)
+            swatch = MplRectangle(
+                (0.02, y_pos), 0.03, 0.03,
+                transform=self._ax.transAxes,
+                facecolor=_rgb_01(ln.color),
+                edgecolor="none",
+                zorder=10,
+            )
+            self._ax.add_patch(swatch)
+            # Label text
+            label = ln.name if ln.name else f"地铁{ln.id}号线"
+            self._ax.text(
+                0.06, y_pos + 0.015, label,
+                transform=self._ax.transAxes,
+                fontsize=9, color=fg_01, va="center", zorder=10,
+            )
+
+    # ------------------------------------------------------------------
+    # Viewport
+    # ------------------------------------------------------------------
     def _auto_fit(self) -> None:
         """Set initial axis limits to enclose all stations with padding."""
         xs, ys = [], []

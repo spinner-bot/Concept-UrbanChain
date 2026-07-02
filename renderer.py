@@ -12,6 +12,7 @@ import pygfx as gfx
 from rendercanvas.auto import RenderCanvas, loop
 
 from spline import catmull_rom_spline, build_key_points, line_identifier
+from calibrator import Calibrator, add_reticle_to_scene
 
 # ---------------------------------------------------------------------------
 # Style
@@ -127,6 +128,8 @@ class MetroMapRenderer:
         self._canvas.add_event_handler(self._on_ptr_up, "pointer_up")
 
         self._built = False
+        self._calibrator = Calibrator()
+        self._calibration_targets = []  # world coords of 3x3 grid
 
     # ------------------------------------------------------------------
     def show(self):
@@ -201,7 +204,16 @@ class MetroMapRenderer:
                     self._add_station(st, vis)
 
         self._draw_labels()
+        if self._calibrator.active:
+            self._draw_calibration_reticles()
         self._built = True
+
+    def _draw_calibration_reticles(self):
+        """Draw calibration targets on the map."""
+        base_r = self._camera.width / 30
+        for i, (wx, wy) in enumerate(self._calibration_targets):
+            highlight = (i == self._calibrator.step())
+            add_reticle_to_scene(self._scene, wx, wy, base_r, highlight)
 
     def _rebuild_ui(self):
         self._ui_scene.clear()
@@ -325,6 +337,23 @@ class MetroMapRenderer:
     # ------------------------------------------------------------------
     # Input
     # ------------------------------------------------------------------
+    def _start_calibration(self):
+        """Set up a 3x3 calibration grid and enter calibration mode."""
+        cw, ch = self._camera.width, self._camera.height
+        cx, cy, _ = self._camera.local.position
+        # 3x3 grid: 20%, 50%, 80% of visible area
+        fracs = [0.2, 0.5, 0.8]
+        targets = []
+        for fy in fracs:
+            for fx in fracs:
+                wx = cx + (fx - 0.5) * cw
+                wy = cy + (fy - 0.5) * ch
+                targets.append((wx, wy))
+        self._calibration_targets = targets
+        self._calibrator.start(targets)
+        self._rebuild_map()
+        self._canvas.request_draw(self._render_frame)
+
     def _on_key(self, event):
         k = event.get("key", "")
         if k in ("b", "B"):
@@ -342,16 +371,25 @@ class MetroMapRenderer:
             self._rebuild_map()
             self._rebuild_ui()
             self._canvas.request_draw(self._render_frame)
+        elif k in ("f", "F"):
+            if self._calibrator.active:
+                self._calibrator.cancel()
+                self._rebuild_map()
+                self._canvas.request_draw(self._render_frame)
+            else:
+                self._start_calibration()
 
     def _render_frame(self):
         self._renderer.render(self._scene, self._camera)
 
     def _screen_to_world(self, sx, sy):
+        # Apply calibration correction first
+        csx, csy = self._calibrator.apply(sx, sy)
         cw, ch = self._camera.width, self._camera.height
         cx, cy, _ = self._camera.local.position
         lw, lh = self._canvas.get_logical_size()
         lw, lh = lw or 1280, lh or 900
-        return cx + (sx / lw - 0.5) * cw, cy + (sy / lh - 0.5) * ch
+        return cx + (csx / lw - 0.5) * cw, cy + (csy / lh - 0.5) * ch
 
     def _world_to_screen(self, wx, wy):
         cw, ch = self._camera.width, self._camera.height
@@ -420,6 +458,17 @@ class MetroMapRenderer:
                 self._rebuild_ui()
                 self._canvas.request_draw(self._render_frame)
                 return
+
+        # Calibration click
+        if self._calibrator.active:
+            self._calibrator.register_click((event["x"], event["y"]))
+            if self._calibrator.active:
+                self._rebuild_map()
+            else:
+                self._rebuild_map()
+                self._rebuild_ui()
+            self._canvas.request_draw(self._render_frame)
+            return
 
         # Map click
         wx, wy = self._screen_to_world(event["x"], event["y"])

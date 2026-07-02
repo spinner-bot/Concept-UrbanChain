@@ -66,6 +66,15 @@ class MetroMapRenderer:
         self._camera = gfx.OrthographicCamera()
         self._camera.maintain_aspect = True
 
+        # UI overlay scene (screen-space pixels)
+        self._ui_scene = gfx.Scene()
+        self._ui_camera = gfx.OrthographicCamera()
+        self._ui_camera.maintain_aspect = False
+        # Position at (w/2, h/2) so that pixel (0,0) is bottom-left
+        self._ui_camera.width = 1280
+        self._ui_camera.height = 900
+        self._ui_camera.local.position = (640, 450, 0)
+
         # ---- Controller (pan + zoom) ----
         self._controller = gfx.PanZoomController(self._camera)
         self._controller.add_default_event_handlers(
@@ -85,8 +94,11 @@ class MetroMapRenderer:
             if not self._built:
                 self._auto_fit()
                 self._build_scene()
+                self._build_ui()
                 self._built = True
             self._renderer.render(self._scene, self._camera)
+            self._renderer.render(self._ui_scene, self._ui_camera,
+                                  clear_color=False, clear_depth=True)
 
         loop.run()
 
@@ -187,6 +199,39 @@ class MetroMapRenderer:
             gfx.PointsMaterial(size=size, size_space="screen", color=blended),
         )
         self._scene.add(centre)
+
+    # ------------------------------------------------------------------
+    # UI overlay
+    # ------------------------------------------------------------------
+    def _build_ui(self) -> None:
+        self._ui_scene.clear()
+        self._draw_legend()
+
+    def _draw_legend(self) -> None:
+        fg = "#ddd" if self._dark_mode else "#222"
+        y_base = self._ui_camera.height - 40
+        for i, ln in enumerate(self._lines):
+            y = y_base - i * 32
+            # Swatch
+            geo = gfx.Geometry(
+                positions=np.float32([(30, y, 0), (55, y, 0),
+                                      (55, y + 16, 0), (30, y + 16, 0)]),
+                indices=np.int32([[0, 1, 2], [0, 2, 3]]),
+            )
+            mat = gfx.MeshBasicMaterial(color=_rgba(ln.color))
+            self._ui_scene.add(gfx.Mesh(geo, mat))
+
+            # Label
+            label = ln.name or f"地铁{ln.id}号线"
+            text = gfx.Text(
+                text=label,
+                font_size=14,
+                screen_space=True,
+                anchor="middle-left",
+                material=gfx.TextMaterial(color=fg),
+            )
+            text.local.position = (62, y + 8, 0)
+            self._ui_scene.add(text)
 
     # ------------------------------------------------------------------
     # Terminal labels

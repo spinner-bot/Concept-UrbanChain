@@ -6,11 +6,13 @@ class Station:
 
 class Line:
     def __init__(self, id: int, name: str, route: list, max_speed: float,
+                 color: tuple = (255, 0, 0),
                  fine_trajectory: list = None):
         self.id = id
         self.name = name
         self.route = route
         self.max_speed = max_speed
+        self.color = color  # RGB tuple (0-255)
         # fine_trajectory[i] = list of (x, y) waypoints between route[i] and route[i+1]
         # len(fine_trajectory) == len(route) - 1
         if fine_trajectory is None:

@@ -76,6 +76,7 @@ class MetroMapRenderer:
 
         # State
         self._dark_mode = False
+        self._scale_factor = 1.0   # secondary zoom: 0.3–3.0
 
         # ---- Canvas, renderer, scene, camera ----
         self._canvas = RenderCanvas(size=(1280, 900), title="Concept UrbanChain")
@@ -119,6 +120,18 @@ class MetroMapRenderer:
                                   clear_color=False, clear_depth=True)
 
         loop.run()
+
+    # ------------------------------------------------------------------
+    # Scaled sizes (secondary zoom)
+    # ------------------------------------------------------------------
+    def _line_thickness(self) -> float:
+        return LINE_THICKNESS * self._scale_factor
+
+    def _station_size(self) -> float:
+        return STATION_SIZE * self._scale_factor
+
+    def _transfer_size(self) -> float:
+        return TRANSFER_SIZE * self._scale_factor
 
     # ------------------------------------------------------------------
     # Camera
@@ -181,7 +194,7 @@ class MetroMapRenderer:
         self._scene.add(gfx.Line(
             gfx.Geometry(positions=pts),
             gfx.LineMaterial(
-                thickness=LINE_THICKNESS,
+                thickness=self._line_thickness(),
                 thickness_space="screen",
                 color=_rgba(ln.color),
             ),
@@ -193,11 +206,11 @@ class MetroMapRenderer:
     def _add_station(self, st, slines: list) -> None:
         x, y = st.position[0], st.position[1]
         is_transfer = len(slines) >= 2
-        size = TRANSFER_SIZE if is_transfer else STATION_SIZE
+        size = self._transfer_size() if is_transfer else self._station_size()
 
         # Outer ring (fg colour = black or white depending on mode)
         fg = (1, 1, 1, 1) if self._dark_mode else (0, 0, 0, 1)
-        ring_size = size + 5
+        ring_size = size + 5 * self._scale_factor
         ring = gfx.Points(
             gfx.Geometry(positions=np.float32([(x, y, 0.002)])),
             gfx.PointsMaterial(size=ring_size, size_space="screen", color=fg),
@@ -240,9 +253,9 @@ class MetroMapRenderer:
         colours = [p[1] for p in paired]
 
         # Build fan geometry — radius in world units matching screen px
-        canvas_w = self._canvas.get_logical_size()[0]
+        canvas_w = self._canvas.get_logical_size()[0] or 1280
         px_per_unit = canvas_w / self._camera.width if self._camera.width > 0 else 70
-        r = (TRANSFER_SIZE / 2) / px_per_unit
+        r = (self._transfer_size() / 2) / px_per_unit
         n_seg = 64
         verts = [(x, y, 0.003)]
         vert_colors = [_rgba(_blend_colours(0, angles, colours))]
@@ -341,7 +354,16 @@ class MetroMapRenderer:
     # Keyboard
     # ------------------------------------------------------------------
     def _on_key(self, event) -> None:
-        if event.get("key", "") in ("b", "B"):
+        key = event.get("key", "")
+        if key in ("b", "B"):
             self._dark_mode = not self._dark_mode
+            self._build_scene()
+            self._canvas.request_draw()
+        elif key == "[":
+            self._scale_factor = max(0.3, self._scale_factor - 0.1)
+            self._build_scene()
+            self._canvas.request_draw()
+        elif key == "]":
+            self._scale_factor = min(3.0, self._scale_factor + 0.1)
             self._build_scene()
             self._canvas.request_draw()

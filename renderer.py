@@ -520,12 +520,9 @@ class MetroMapRenderer:
         self._legend_icon_spots = []
 
         if self._legend_mode == "full_hide":
-            # Only show a small collapsed icon
-            t = gfx.Text(text="☰", font_size=18, screen_space=True,
-                          anchor="middle-left",
-                          material=gfx.TextMaterial(color=icon_colour))
-            t.local.position = (30, y_base, 0)
-            self._ui_scene.add(t)
+            # Only show a small hamburger icon
+            icon_c = (0.5, 0.5, 0.5, 1) if self._dark_mode else (0.4, 0.4, 0.4, 1)
+            _add_icon_hamburger(self._ui_scene, 30, y_base, 14, icon_c)
             self._legend_icon_spots.append({
                 "x": 30, "y": y_base - 12, "w": 30, "h": 24,
                 "action": "expand",
@@ -570,35 +567,37 @@ class MetroMapRenderer:
 
         # Network list link
         net_y = y_base - len(self._lines) * 32 - 24
-        t_net = gfx.Text(text="▾ Net", font_size=13, screen_space=True,
+        icon_c = (0.5, 0.5, 0.5, 1) if self._dark_mode else (0.4, 0.4, 0.4, 1)
+        _add_icon_triangle_down(self._ui_scene, 30, net_y + 4, 10, icon_c)
+        t_net = gfx.Text(text="Net", font_size=13, screen_space=True,
                           anchor="middle-left",
                           material=gfx.TextMaterial(color=icon_colour))
-        t_net.local.position = (30, net_y, 0)
+        t_net.local.position = (44, net_y, 0)
         self._ui_scene.add(t_net)
         self._legend_icon_spots.append({
-            "x": 30, "y": net_y - 10, "w": 55, "h": 20,
+            "x": 30, "y": net_y - 10, "w": 60, "h": 20,
             "action": "network_page",
         })
 
         # Fold icon (bottom of legend)
         icon_y = y_base - len(self._lines) * 32 - 5
-        fold_text = "—" if self._legend_mode == "full_show" else "◧"
-        t = gfx.Text(text=fold_text, font_size=14, screen_space=True,
-                      anchor="middle-left",
-                      material=gfx.TextMaterial(color=icon_colour))
-        t.local.position = (30, icon_y, 0)
-        self._ui_scene.add(t)
+        icon_c = (0.5, 0.5, 0.5, 1) if self._dark_mode else (0.4, 0.4, 0.4, 1)
+        if self._legend_mode == "full_show":
+            # Draw a simple minus/dash icon
+            geo_dash = gfx.Geometry(
+                positions=np.float32([(30, icon_y, 0), (50, icon_y, 0)]),
+            )
+            self._ui_scene.add(gfx.Line(geo_dash,
+                gfx.LineMaterial(thickness=2.5, color=icon_c)))
+        else:
+            _add_icon_fold(self._ui_scene, 30, icon_y, 14, icon_c)
         self._legend_icon_spots.append({
             "x": 30, "y": icon_y - 10, "w": 30, "h": 20,
             "action": "fold",
         })
         # Expand icon (only in partial mode)
         if self._legend_mode == "partial":
-            t2 = gfx.Text(text="☰", font_size=14, screen_space=True,
-                           anchor="middle-left",
-                           material=gfx.TextMaterial(color=icon_colour))
-            t2.local.position = (62, icon_y, 0)
-            self._ui_scene.add(t2)
+            _add_icon_hamburger(self._ui_scene, 62, icon_y, 14, icon_c)
             self._legend_icon_spots.append({
                 "x": 62, "y": icon_y - 10, "w": 30, "h": 20,
                 "action": "full_show",
@@ -663,13 +662,15 @@ class MetroMapRenderer:
         y -= 10
         for ln in slines:
             label = line_identifier(ln.id, ln.name)
-            display = f"  ▸ {label}"
+            # Draw triangle icon
+            _add_icon_triangle_right(self._ui_scene, 50, y - 5, 12, (0.4, 0.6, 1.0, 1))
+            display = f" {label}"
             t = gfx.Text(text=display, font_size=font, screen_space=True,
                           anchor="top-left",
                           material=gfx.TextMaterial(color="#6af"))
-            t.local.position = (50, y, 0)
+            t.local.position = (62, y, 0)
             self._ui_scene.add(t)
-            tw = len(display) * font * 0.6
+            tw = len(display) * font * 0.6 + 12
             self._detail_hotspots.append({
                 "x": 50, "y": y - 22, "w": tw, "h": 24,
                 "action": "push_page",
@@ -752,12 +753,13 @@ class MetroMapRenderer:
         for s in ln.route:
             t_count = len(self._station_lines.get(s.id, [ln]))
             xfer = f" [transfer: {t_count} lines]" if t_count >= 2 else ""
-            display = f"  ▸ {s.name}{xfer}"
+            _add_icon_triangle_right(self._ui_scene, 50, y - 4, 11, (0.4, 0.6, 1.0, 1))
+            display = f" {s.name}{xfer}"
             t = gfx.Text(text=display, font_size=14, screen_space=True,
                           anchor="top-left", material=gfx.TextMaterial(color="#6af"))
-            t.local.position = (50, y, 0)
+            t.local.position = (62, y, 0)
             self._ui_scene.add(t)
-            tw = len(display) * 14 * 0.6
+            tw = len(display) * 14 * 0.6 + 12
             self._detail_hotspots.append({
                 "x": 50, "y": y - 20, "w": tw, "h": 22,
                 "action": "push_page",
@@ -791,14 +793,15 @@ class MetroMapRenderer:
 
             left = line_identifier(ln.id, ln.name)
             right = f"{len(ln.route)} stns | {length:.1f} u"
-            display = f"▸ {left}  {mid}  [{right}]"
+            _add_icon_triangle_right(self._ui_scene, 40, y - 4, 11, (0.4, 0.6, 1.0, 1))
+            display = f" {left}  {mid}  [{right}]"
 
             t = gfx.Text(text=display, font_size=14, screen_space=True,
                           anchor="top-left",
                           material=gfx.TextMaterial(color="#6af"))
-            t.local.position = (40, y, 0)
+            t.local.position = (52, y, 0)
             self._ui_scene.add(t)
-            tw = len(display) * 14 * 0.55
+            tw = len(display) * 14 * 0.55 + 12
             self._detail_hotspots.append({
                 "x": 40, "y": y - 20, "w": tw, "h": 22,
                 "action": "push_page",
@@ -809,14 +812,18 @@ class MetroMapRenderer:
         self._add_nav_buttons(fg, accent, w, h)
 
     def _add_nav_buttons(self, fg, accent, w, h) -> None:
-        """Back (←) and close (✕) buttons."""
+        """Back (arrow) and close (X) buttons."""
+        btn_c = (0.4, 0.6, 1.0, 1)  # blue
+        close_c = (1.0, 0.4, 0.4, 1)  # red
         # Back button
-        t = gfx.Text(text="← Back", font_size=15, screen_space=True,
+        _add_icon_arrow_left(self._ui_scene, 35, h - 18, 14, btn_c)
+        t = gfx.Text(text="Back", font_size=15, screen_space=True,
                       anchor="top-left", material=gfx.TextMaterial(color="#6af"))
-        t.local.position = (30, h - 10, 0)
+        t.local.position = (50, h - 10, 0)
         self._ui_scene.add(t)
         # Close button
-        t = gfx.Text(text="✕ Close", font_size=15, screen_space=True,
+        _add_icon_x(self._ui_scene, w - 45, h - 18, 14, close_c)
+        t = gfx.Text(text="Close", font_size=15, screen_space=True,
                       anchor="top-right", material=gfx.TextMaterial(color="#f66"))
         t.local.position = (w - 30, h - 10, 0)
         self._ui_scene.add(t)

@@ -320,9 +320,52 @@ class MetroMapRenderer:
             t.local.position = (58, y + 7, 0)
             self._ui_scene.add(t)
 
+        # "Net" button at bottom of legend
+        ny = y0 - len(self._lines) * 32 - 10
+        tn = gfx.Text(text="Net >", font_size=12, screen_space=True,
+                       anchor="middle-left",
+                       material=gfx.TextMaterial(color="#888"))
+        tn.local.position = (30, ny, 0)
+        self._ui_scene.add(tn)
+
     # ------------------------------------------------------------------
     # Detail pages
     # ------------------------------------------------------------------
+    def _detail_hotspots(self):
+        """Return list of clickable zones in current detail page."""
+        hs = []
+        page = self._page_stack[-1] if self._page_stack else None
+        if not page:
+            return hs
+        pg = page["type"]
+        lw, lh = self._canvas.get_logical_size()
+        lw, lh = lw or 1280, lh or 900
+        y = lh - 80
+        if pg == "station":
+            y -= 70  # skip header + info
+            for ln in page.get("lines", []):
+                hs.append({"x": 50, "y": y, "w": 300, "h": 22,
+                           "action": "push",
+                           "page": {"type": "line", "line": ln}})
+                y -= 22
+        elif pg == "line":
+            ln = page["line"]
+            y -= 70
+            y -= 34  # skip route header
+            for s in ln.route:
+                hs.append({"x": 50, "y": y, "w": 300, "h": 20,
+                           "action": "push",
+                           "page": {"type": "station", "station": s,
+                                    "lines": self._station_lines.get(s.id, [ln])}})
+                y -= 20
+        elif pg == "network":
+            y -= 40
+            for ln in self._lines:
+                hs.append({"x": 40, "y": y, "w": 600, "h": 22,
+                           "action": "push",
+                           "page": {"type": "line", "line": ln}})
+                y -= 22
+        return hs
     def _draw_detail_page(self):
         page = self._page_stack[-1]
         pg = page["type"]
@@ -550,8 +593,24 @@ class MetroMapRenderer:
                 self._rebuild_ui()
                 self._canvas.request_draw(self._render_frame)
                 return
-            # Cross-nav: clicking line/station text in detail page
-            # (simplified — click anywhere in detail page body for now)
+            # Hotspot navigation (screen Y from bottom, hotspot Y from top)
+            for hs in self._detail_hotspots():
+                if (hs["x"] <= sx <= hs["x"] + hs["w"]
+                        and hs["y"] <= (lh - sy) <= hs["y"] + hs["h"]):
+                    if hs["action"] == "push":
+                        self._page_stack.append(hs["page"])
+                        self._rebuild_ui()
+                        self._canvas.request_draw(self._render_frame)
+                        return
+            return
+
+        # Legend "Net" button click
+        lh = self._canvas.get_logical_size()[1] or 900
+        ny = lh - 40 - len(self._lines) * 32 - 10
+        if 25 <= event["x"] <= 80 and ny - 8 <= event["y"] <= ny + 10:
+            self._page_stack.append({"type": "network"})
+            self._rebuild_ui()
+            self._canvas.request_draw(self._render_frame)
             return
 
         # Map click

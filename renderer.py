@@ -12,7 +12,6 @@ import pygfx as gfx
 from rendercanvas.auto import RenderCanvas, loop
 
 from spline import catmull_rom_spline, build_key_points, line_identifier
-from calibrator import (Calibrator, ManualCalibrator, add_reticle_to_scene, add_crosshair_to_scene)
 
 # ---------------------------------------------------------------------------
 # Style
@@ -21,7 +20,6 @@ LINE_THICKNESS = 8.0
 STATION_SIZE = 14.0
 TRANSFER_SIZE = 23.0
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -29,19 +27,15 @@ def _rgba(rgb, a=1.0):
     r, g, b = rgb[:3]
     return (r / 255, g / 255, b / 255, a)
 
-
 def _hex(rgb):
     r, g, b = rgb[:3]
     return f"#{r:02x}{g:02x}{b:02x}"
 
-
 def _luminance(rgb):
     return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
 
-
 def _fg_for(rgb):
     return "#000" if _luminance(rgb) > 128 else "#fff"
-
 
 def _blend_colours(deg, angles, colours):
     if len(colours) == 1:
@@ -58,14 +52,12 @@ def _blend_colours(deg, angles, colours):
     b = sum(colours[i][2] * weights[i] / t for i in range(len(colours)))
     return (int(r), int(g), int(b))
 
-
 def _point_seg_dist(px, py, x1, y1, x2, y2):
     dx, dy = x2 - x1, y2 - y1
     if dx == 0 and dy == 0:
         return math.hypot(px - x1, py - y1)
     t = max(0, min(1, ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy)))
     return math.hypot(px - (x1 + t * dx), py - (y1 + t * dy))
-
 
 # ---------------------------------------------------------------------------
 # MetroMapRenderer
@@ -128,9 +120,6 @@ class MetroMapRenderer:
         self._canvas.add_event_handler(self._on_ptr_up, "pointer_up")
 
         self._built = False
-        self._calibrator = Calibrator()
-        self._manual_cal = ManualCalibrator()
-        self._calibration_targets = []  # world coords of 3x3 grid
 
     # ------------------------------------------------------------------
     def show(self):
@@ -185,46 +174,31 @@ class MetroMapRenderer:
     # ------------------------------------------------------------------
     def _rebuild_map(self):
         self._scene.clear()
-        if self._calibrator.active or self._manual_cal.active:
-            bg = (0, 0, 0, 1)
-        else:
-            bg = (0.06, 0.06, 0.06, 1) if self._dark_mode else (0.94, 0.94, 0.94, 1)
+        bg = (0.06, 0.06, 0.06, 1) if self._dark_mode else (0.94, 0.94, 0.94, 1)
         self._scene.add(gfx.Background(
-            None, gfx.BackgroundMaterial(bg, bg, bg, bg)))
+        None, gfx.BackgroundMaterial(bg, bg, bg, bg)))
 
-        if not self._calibrator.active and not self._manual_cal.active:
-            for ln in self._lines:
-                if ln.id not in self._hidden_lines:
-                    self._add_line(ln)
+        for ln in self._lines:
+            if ln.id not in self._hidden_lines:
+                self._add_line(ln)
 
-            drawn = set()
-            for ln in self._lines:
-                for st in ln.route:
-                    if st.id in drawn:
-                        continue
-                    drawn.add(st.id)
-                    vis = [l for l in self._station_lines[st.id]
-                           if l.id not in self._hidden_lines]
-                    if vis:
-                        self._add_station(st, vis)
+        drawn = set()
+        for ln in self._lines:
+            for st in ln.route:
+                if st.id in drawn:
+                    continue
+                drawn.add(st.id)
+                vis = [l for l in self._station_lines[st.id]
+                       if l.id not in self._hidden_lines]
+                if vis:
+                    self._add_station(st, vis)
 
-            self._draw_labels()
-        else:
-            self._draw_calibration_reticles()
+        self._draw_labels()
         self._built = True
-
-    def _draw_calibration_reticles(self):
-        """Draw calibration targets on the map."""
-        base_r = self._camera.width / 30
-        for i, (wx, wy) in enumerate(self._calibration_targets):
-            highlight = (i == self._calibrator.step())
-            add_reticle_to_scene(self._scene, wx, wy, base_r, highlight)
 
     def _rebuild_ui(self):
         self._ui_scene.clear()
         self._draw_legend()
-        if self._manual_cal.active:
-            self._draw_manual_cal_ui()
 
     # ------------------------------------------------------------------
     def _add_line(self, ln):
@@ -269,67 +243,6 @@ class MetroMapRenderer:
         ))
 
     # ------------------------------------------------------------------
-    def _draw_manual_cal_ui(self):
-        """Draw crosshair, coords, and sample count."""
-        import pygfx as gfx
-        lw = self._ui_camera.width or 1280
-        lh = self._ui_camera.height or 900
-        cx, cy = self._manual_cal.cursor_pos()
-
-        # Determine if cursor is on-screen
-        margin = 30
-        on_screen = (margin <= cx <= lw - margin and margin <= cy <= lh - margin)
-
-        if on_screen:
-            add_crosshair_to_scene(self._ui_scene, cx, cy)
-            # Show coords near crosshair
-            coord_text = f'({cx:.0f}, {cy:.0f})'
-            t = gfx.Text(text=coord_text, font_size=13, screen_space=True,
-                          anchor='top-left',
-                          material=gfx.TextMaterial(color='#0ff'))
-            t.local.position = (cx + 16, cy - 6, 0)
-            self._ui_scene.add(t)
-        else:
-            # Clamp to nearest edge and draw arrow
-            ex = max(margin, min(cx, lw - margin))
-            ey = max(margin, min(cy, lh - margin))
-            # Arrow direction
-            dx = cx - ex
-            dy = cy - ey
-            mag = (dx*dx + dy*dy)**0.5 or 1
-            ndx, ndy = dx/mag, dy/mag
-            # Draw arrow at edge pointing outward
-            import math
-            tip_x = ex + ndx * 15
-            tip_y = ey + ndy * 15
-            base_x = ex - ndx * 8
-            base_y = ey - ndy * 8
-            perp_x = -ndy * 6
-            perp_y = ndx * 6
-            pts = np.float32([
-                (tip_x, tip_y, 0),
-                (base_x + perp_x, base_y + perp_y, 0),
-                (base_x - perp_x, base_y - perp_y, 0),
-            ])
-            self._ui_scene.add(gfx.Mesh(
-                gfx.Geometry(positions=pts, indices=np.int32([[0,1,2]])),
-                gfx.MeshBasicMaterial(color=(0,1,1,1)),
-            ))
-            # Coords text
-            coord_text = f'({cx:.0f}, {cy:.0f})'
-            t = gfx.Text(text=coord_text, font_size=13, screen_space=True,
-                          anchor='top-left',
-                          material=gfx.TextMaterial(color='#ff0'))
-            t.local.position = (ex + 18, ey - 4, 0)
-            self._ui_scene.add(t)
-
-        # Sample count (top-right)
-        n = self._manual_cal.sample_count()
-        t = gfx.Text(text=f'Cal samples: {n}', font_size=16, screen_space=True,
-                      anchor='top-right',
-                      material=gfx.TextMaterial(color='#0ff'))
-        t.local.position = (lw - 180, lh - 10, 0)
-        self._ui_scene.add(t)
 
     def _draw_labels(self):
         font_sz = 11  # screen pixels — consistent size
@@ -364,16 +277,6 @@ class MetroMapRenderer:
                               material=gfx.TextMaterial(color=fg_c))
                 t.local.position = (spx, spy, 0)
                 self._scene.add(t)
-
-    def _world_to_screen_raw(self, wx, wy):
-        """World to screen WITHOUT calibration correction."""
-        cw, ch = self._camera.width, self._camera.height
-        cx, cy, _ = self._camera.local.position
-        lw, lh = self._canvas.get_logical_size()
-        lw, lh = lw or 1280, lh or 900
-        # Camera Y from bottom; screen Y from top → flip
-        return ((wx - cx) / cw * lw + lw / 2,
-                lh - ((wy - cy) / ch * lh + lh / 2))
 
     def _world_to_screen(self, wx, wy):
         """Convert world coords to screen pixel coords."""
@@ -416,30 +319,6 @@ class MetroMapRenderer:
     # ------------------------------------------------------------------
     # Input
     # ------------------------------------------------------------------
-    def _start_calibration(self):
-        """Set up a 3x3 calibration grid and enter calibration mode."""
-        cw, ch = self._camera.width, self._camera.height
-        cx, cy, _ = self._camera.local.position
-        # 3x3 grid: 20%, 50%, 80% of visible area
-        fracs = [0.2, 0.5, 0.8]
-        targets = []
-        for fy in fracs:
-            for fx in fracs:
-                wx = cx + (fx - 0.5) * cw
-                wy = cy + (fy - 0.5) * ch
-                targets.append((wx, wy))
-        self._calibration_targets = targets
-        self._calibrator.start(targets)
-        self._rebuild_map()
-        self._canvas.request_draw(self._render_frame)
-
-    def _start_manual_calibration(self):
-        """Start manual cursor-alignment calibration."""
-        mx, my = self._mouse_screen
-        self._manual_cal.start(mx, my)
-        self._rebuild_map()
-        self._rebuild_ui()
-        self._canvas.request_draw(self._render_frame)
 
     def _on_key(self, event):
         k = event.get("key", "")
@@ -453,44 +332,12 @@ class MetroMapRenderer:
             self._rebuild_map()
             self._rebuild_ui()
             self._canvas.request_draw(self._render_frame)
-        elif self._manual_cal.active:
-            step = self._manual_cal._fine_step
-            if k == "a":     self._manual_cal.move(-step, 0); self._manual_cal._adjusted = True
-            elif k == "d":   self._manual_cal.move(step, 0); self._manual_cal._adjusted = True
-            elif k == "w":   self._manual_cal.move(0, step); self._manual_cal._adjusted = True
-            elif k == "s":   self._manual_cal.move(0, -step); self._manual_cal._adjusted = True
-            elif k == "ArrowLeft":  self._manual_cal.move(-step*10, 0); self._manual_cal._adjusted = True
-            elif k == "ArrowRight": self._manual_cal.move(step*10, 0); self._manual_cal._adjusted = True
-            elif k == "ArrowUp":    self._manual_cal.move(0, step*10); self._manual_cal._adjusted = True
-            elif k == "ArrowDown":  self._manual_cal.move(0, -step*10); self._manual_cal._adjusted = True
-            elif k in (" ", "Space"):
-                mx, my = self._mouse_screen
-                n = self._manual_cal.submit(mx, my)
-                self._manual_cal._adjusted = False  # reset for next sample
-                print(f'Calibration sample {n}: offset=({self._manual_cal._offset_x:.1f},{self._manual_cal._offset_y:.1f})')
-            if k in ('a','d','w','s','ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' ','Space'):
-                self._rebuild_ui()
-                self._canvas.request_draw(self._render_frame)
+
         elif k == "]":
             self._scale_factor = min(3.0, self._scale_factor + 0.1)
             self._rebuild_map()
             self._rebuild_ui()
             self._canvas.request_draw(self._render_frame)
-        elif k in ("f", "F"):
-            if self._calibrator.active:
-                self._calibrator.cancel()
-                self._rebuild_map()
-                self._canvas.request_draw(self._render_frame)
-            else:
-                self._start_calibration()
-        elif k in ("g", "G"):
-            if self._manual_cal.active:
-                self._manual_cal.cancel()
-                self._rebuild_map()
-                self._rebuild_ui()
-                self._canvas.request_draw(self._render_frame)
-            else:
-                self._start_manual_calibration()
 
     def _render_frame(self):
         lw, lh = self._canvas.get_logical_size()
@@ -502,15 +349,22 @@ class MetroMapRenderer:
         self._renderer.render(self._ui_scene, self._ui_camera, flush=True)
 
     def _screen_to_world(self, sx, sy):
-        # Apply calibration correction first
-        # Apply both calibrators
-        csx, csy = self._manual_cal.apply(sx, sy)
-        csx, csy = self._calibrator.apply(csx, csy)
         cw, ch = self._camera.width, self._camera.height
         cx, cy, _ = self._camera.local.position
         lw, lh = self._canvas.get_logical_size()
         lw, lh = lw or 1280, lh or 900
-        return cx + (csx / lw - 0.5) * cw, cy + (csy / lh - 0.5) * ch
+        # Mouse Y is from top; camera Y is from bottom → flip
+        return cx + (sx / lw - 0.5) * cw, cy + (0.5 - sy / lh) * ch
+
+    def _world_to_screen(self, wx, wy):
+        cw, ch = self._camera.width, self._camera.height
+        cx, cy, _ = self._camera.local.position
+        lw, lh = self._canvas.get_logical_size()
+        lw, lh = lw or 1280, lh or 900
+        # Camera Y from bottom; screen Y from top → flip
+        return ((wx - cx) / cw * lw + lw / 2,
+                lh - ((wy - cy) / ch * lh + lh / 2))
+
     def _hit_test(self, wx, wy):
         line_threshold = self._camera.width / 35
         station_threshold = self._camera.width / 20  # larger = easier to select
@@ -535,11 +389,6 @@ class MetroMapRenderer:
 
     def _on_ptr_move(self, event):
         self._mouse_screen = (event["x"], event["y"])
-        # During manual cal, update crosshair to follow mouse until user adjusts
-        if self._manual_cal.active and not self._manual_cal._adjusted:
-            self._manual_cal.set_cursor(event["x"], event["y"])
-            self._rebuild_ui()
-            self._canvas.request_draw(self._render_frame)
         wx, wy = self._screen_to_world(event["x"], event["y"])
         hit = self._hit_test(wx, wy)
         prev = self._hovered
@@ -574,21 +423,6 @@ class MetroMapRenderer:
                 self._rebuild_ui()
                 self._canvas.request_draw(self._render_frame)
                 return
-
-        # Calibration click
-        if self._calibrator.active:
-            self._calibrator.register_click((event["x"], event["y"]))
-            if not self._calibrator.active:
-                # Just finished — compute ideal screen positions
-                ideal = []
-                for wx, wy in self._calibration_targets:
-                    sx, sy = self._world_to_screen_raw(wx, wy)
-                    ideal.append((sx, sy))
-                self._calibrator.compute_offset(ideal)
-                self._rebuild_ui()
-            self._rebuild_map()
-            self._canvas.request_draw(self._render_frame)
-            return
 
         # Map click
         wx, wy = self._screen_to_world(event["x"], event["y"])

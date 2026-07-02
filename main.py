@@ -32,6 +32,9 @@ class Station:
         else:
             self.position = tuple(position)
 
+from spline import line_identifier  # noqa: E402 — used by renderer via spline
+
+
 class Line:
     def __init__(self, id: int, name: str, route: list, max_speed: float,
                  color: tuple = (255, 0, 0),

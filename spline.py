@@ -1,4 +1,4 @@
-"""Catmull-Rom spline with configurable tension parameter.
+"""Catmull-Rom spline with configurable tension parameter, and line-id utility.
 
 Generalized Catmull-Rom using alpha parameterization:
   alpha=0   : uniform (equal parameter spacing per segment)
@@ -152,3 +152,14 @@ def build_key_points(
             for wp in fine_trajectory[i]:
                 keys.append((float(wp[0]), float(wp[1])))
     return keys
+
+
+def line_identifier(line_id: int, line_name: str | None) -> str:
+    """Return the standard identifier string for a line.
+
+    Named line:   "name（id）"    e.g. "Urban Line（1）"
+    Unnamed line:  "地铁id号线"   e.g. "地铁2号线"
+    """
+    if line_name:
+        return f"{line_name}（{line_id}）"
+    return f"地铁{line_id}号线"

@@ -7,7 +7,7 @@ import numpy as np
 import pygfx as gfx
 from rendercanvas.auto import RenderCanvas, loop
 
-from spline import catmull_rom_spline, build_key_points
+from spline import catmull_rom_spline, build_key_points, line_identifier
 
 
 def _point_seg_dist(px: float, py: float,
@@ -417,7 +417,7 @@ class MetroMapRenderer:
             self._ui_scene.add(gfx.Mesh(geo, mat))
 
             # Label
-            label = ln.name or f"地铁{ln.id}号线"
+            label = line_identifier(ln.id, ln.name)
             text = gfx.Text(
                 text=label,
                 font_size=14,
@@ -437,7 +437,7 @@ class MetroMapRenderer:
         pts = self._spline_data[ln.id]
         if len(pts) < 2:
             return
-        text_str = ln.name or f"地铁{ln.id}号线"
+        text_str = line_identifier(ln.id, ln.name)
         font_size = self._camera.width / 75
 
         # Determine which stations get labels

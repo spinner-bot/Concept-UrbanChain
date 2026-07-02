@@ -66,17 +66,21 @@ class MetroMapRenderer:
                     seen.add(st.id)
 
         # Precompute splines as N×3 numpy arrays
+        self._spline_original: dict[int, np.ndarray] = {}
         self._spline_data: dict[int, np.ndarray] = {}
         for ln in lines:
             keys = build_key_points(ln.route, ln.fine_trajectory)
             pts = catmull_rom_spline(keys, 30, ln.smooth_tension)
-            self._spline_data[ln.id] = np.array(
-                [(x, y, 0.0) for x, y in pts], dtype=np.float32,
-            )
+            arr = np.array([(x, y, 0.0) for x, y in pts], dtype=np.float32)
+            self._spline_original[ln.id] = arr.copy()
+            self._spline_data[ln.id] = arr
+
+        # (collinear offsets applied later in _build_scene after camera setup)
 
         # State
         self._dark_mode = False
         self._scale_factor = 1.0   # secondary zoom: 0.3–3.0
+        self._offsets_applied = False
 
         # ---- Canvas, renderer, scene, camera ----
         self._canvas = RenderCanvas(size=(1280, 900), title="Concept UrbanChain")
@@ -122,6 +126,97 @@ class MetroMapRenderer:
         loop.run()
 
     # ------------------------------------------------------------------
+    # Collinear offset at transfer stations
+    # ------------------------------------------------------------------
+    def _apply_collinear_offsets(self) -> None:
+        """Offset splines of collinear lines at transfer stations.
+
+        When multiple lines approach a station from similar directions,
+        their spline points near the station are shifted perpendicular
+        to the approach so they appear bundled instead of overlapping.
+        """
+        # Reset to original spline data
+        for lid, orig in self._spline_original.items():
+            self._spline_data[lid] = orig.copy()
+
+        angle_threshold = 22.0  # degrees — lines within this are "collinear"
+        sigma = 3.0             # world units — decay distance of the offset
+
+        for st_id, slines in self._station_lines.items():
+            if len(slines) < 2:
+                continue
+
+            # Find the station object
+            st_obj = next((s for ln in self._lines for s in ln.route
+                           if s.id == st_id), None)
+            if st_obj is None:
+                continue
+            sx, sy = st_obj.position[0], st_obj.position[1]
+
+            # Compute approach angles
+            line_angles = []
+            for ln in slines:
+                pts = self._spline_data[ln.id]
+                best_i = int(np.argmin(np.sum((pts[:, :2] - (sx, sy)) ** 2,
+                                              axis=1)))
+                if best_i <= 0:
+                    dx = float(pts[1, 0] - pts[0, 0])
+                    dy = float(pts[1, 1] - pts[0, 1])
+                else:
+                    dx = float(pts[best_i, 0] - pts[best_i - 1, 0])
+                    dy = float(pts[best_i, 1] - pts[best_i - 1, 1])
+                ang = math.degrees(math.atan2(dy, dx)) % 360
+                line_angles.append((ang, ln))
+
+            # Group by angular proximity
+            line_angles.sort(key=lambda x: x[0])
+            groups: list[list] = []
+            used = [False] * len(line_angles)
+            for i in range(len(line_angles)):
+                if used[i]:
+                    continue
+                group = [line_angles[i]]
+                used[i] = True
+                for j in range(i + 1, len(line_angles)):
+                    if used[j]:
+                        continue
+                    diff = abs(line_angles[j][0] - line_angles[i][0])
+                    if diff > 180:
+                        diff = 360 - diff
+                    if diff < angle_threshold:
+                        group.append(line_angles[j])
+                        used[j] = True
+                groups.append(group)
+
+            # Apply offset for each group with ≥ 2 lines
+            for group in groups:
+                if len(group) < 2:
+                    continue
+                # Perpendicular direction
+                mid_angle = sum(a for a, _ in group) / len(group)
+                rad = math.radians(mid_angle)
+                px, py = -math.sin(rad), math.cos(rad)  # perpendicular
+
+                # Spread lines evenly
+                step = self._line_thickness() * 1.5
+                canvas_w = self._canvas.get_logical_size()[0] or 1280
+                pu = canvas_w / max(self._camera.width, 0.01)
+                offset_step_world = step / pu  # world units
+
+                for k, (ang, ln) in enumerate(group):
+                    offset_amt = (k - (len(group) - 1) / 2) * offset_step_world
+                    pts = self._spline_data[ln.id]
+                    # Apply Gaussian-weighted offset near the station
+                    for j in range(len(pts)):
+                        dx_w = pts[j, 0] - sx
+                        dy_w = pts[j, 1] - sy
+                        dist = math.sqrt(dx_w * dx_w + dy_w * dy_w)
+                        weight = math.exp(-0.5 * (dist / sigma) ** 2)
+                        pts[j, 0] += px * offset_amt * weight
+                        pts[j, 1] += py * offset_amt * weight
+                    self._spline_data[ln.id] = pts
+
+    # ------------------------------------------------------------------
     # Scaled sizes (secondary zoom)
     # ------------------------------------------------------------------
     def _line_thickness(self) -> float:
@@ -159,6 +254,9 @@ class MetroMapRenderer:
     # Scene construction
     # ------------------------------------------------------------------
     def _build_scene(self) -> None:
+        if not self._offsets_applied:
+            self._apply_collinear_offsets()
+            self._offsets_applied = True
         self._scene.clear()
 
         # Background
@@ -361,9 +459,11 @@ class MetroMapRenderer:
             self._canvas.request_draw()
         elif key == "[":
             self._scale_factor = max(0.3, self._scale_factor - 0.1)
+            self._offsets_applied = False  # re-offset with new thickness
             self._build_scene()
             self._canvas.request_draw()
         elif key == "]":
             self._scale_factor = min(3.0, self._scale_factor + 0.1)
+            self._offsets_applied = False
             self._build_scene()
             self._canvas.request_draw()

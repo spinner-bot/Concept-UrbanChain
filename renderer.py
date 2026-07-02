@@ -96,6 +96,7 @@ class MetroMapRenderer:
         self._page_stack: list[dict] = []  # navigation stack for detail pages
         self._detail_hotspots: list[dict] = []  # clickable zones in detail pages
         self._hidden_lines: set[int] = set()    # ids of lines hidden via legend
+        self._legend_mode = "partial"  # "partial" | "full_show" | "full_hide"
 
         # ---- Canvas, renderer, scene, camera ----
         self._canvas = RenderCanvas(size=(1280, 900), title="Concept UrbanChain")
@@ -433,8 +434,25 @@ class MetroMapRenderer:
     def _draw_legend(self) -> None:
         fg = "#ddd" if self._dark_mode else "#222"
         dim = "#555" if self._dark_mode else "#999"
+        icon_colour = "#888" if self._dark_mode else "#666"
         y_base = self._ui_camera.height - 40
         self._legend_hotspots = []
+        self._legend_icon_spots = []
+
+        if self._legend_mode == "full_hide":
+            # Only show a small collapsed icon
+            t = gfx.Text(text="☰", font_size=18, screen_space=True,
+                          anchor="middle-left",
+                          material=gfx.TextMaterial(color=icon_colour))
+            t.local.position = (30, y_base, 0)
+            self._ui_scene.add(t)
+            self._legend_icon_spots.append({
+                "x": 30, "y": y_base - 12, "w": 30, "h": 24,
+                "action": "expand",
+            })
+            return
+
+        # Normal legend (partial or full_show)
         for i, ln in enumerate(self._lines):
             y = y_base - i * 32
             hidden = ln.id in self._hidden_lines
@@ -468,6 +486,30 @@ class MetroMapRenderer:
             self._legend_hotspots.append({
                 "x": 30, "y": y, "w": 200, "h": 18,
                 "line_id": ln.id,
+            })
+
+        # Fold icon (bottom of legend)
+        icon_y = y_base - len(self._lines) * 32 - 5
+        fold_text = "—" if self._legend_mode == "full_show" else "◧"
+        t = gfx.Text(text=fold_text, font_size=14, screen_space=True,
+                      anchor="middle-left",
+                      material=gfx.TextMaterial(color=icon_colour))
+        t.local.position = (30, icon_y, 0)
+        self._ui_scene.add(t)
+        self._legend_icon_spots.append({
+            "x": 30, "y": icon_y - 10, "w": 30, "h": 20,
+            "action": "fold",
+        })
+        # Expand icon (only in partial mode)
+        if self._legend_mode == "partial":
+            t2 = gfx.Text(text="☰", font_size=14, screen_space=True,
+                           anchor="middle-left",
+                           material=gfx.TextMaterial(color=icon_colour))
+            t2.local.position = (62, icon_y, 0)
+            self._ui_scene.add(t2)
+            self._legend_icon_spots.append({
+                "x": 62, "y": icon_y - 10, "w": 30, "h": 20,
+                "action": "full_show",
             })
 
     # ------------------------------------------------------------------
@@ -814,7 +856,23 @@ class MetroMapRenderer:
                 return
             return  # in detail page, ignore other clicks for now
 
-        # Check legend clicks first (screen-space, bottom-left origin)
+        # Check legend icon clicks first
+        if hasattr(self, "_legend_icon_spots"):
+            for hs in self._legend_icon_spots:
+                if (hs["x"] <= sx <= hs["x"] + hs["w"]
+                        and hs["y"] <= sy <= hs["y"] + hs["h"]):
+                    action = hs["action"]
+                    if action == "expand":
+                        self._legend_mode = "partial"
+                    elif action == "fold":
+                        self._legend_mode = "full_hide"
+                    elif action == "full_show":
+                        self._legend_mode = "full_show"
+                    self._build_ui()
+                    self._canvas.request_draw()
+                    return
+
+        # Check legend item clicks
         if hasattr(self, "_legend_hotspots"):
             for hs in self._legend_hotspots:
                 if (hs["x"] <= sx <= hs["x"] + hs["w"]

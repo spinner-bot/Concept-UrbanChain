@@ -23,15 +23,22 @@ class ManualCalibrator:
         self._coarse_step = 5.0      # arrow key step
         self._offset_x = 0.0
         self._offset_y = 0.0
+        self._adjusted = False       # True once user has moved cursor
 
     def start(self, init_sx, init_sy):
         self.active = True
         self._cursor_x = init_sx
         self._cursor_y = init_sy
         self._samples = []
+        self._adjusted = False
 
     def cancel(self):
         self.active = False
+
+    def set_cursor(self, x, y):
+        """Update cursor to follow mouse (before user starts adjusting)."""
+        self._cursor_x = x
+        self._cursor_y = y
 
     def move(self, dx, dy):
         self._cursor_x += dx

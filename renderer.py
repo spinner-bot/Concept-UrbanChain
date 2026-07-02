@@ -454,19 +454,20 @@ class MetroMapRenderer:
             self._canvas.request_draw(self._render_frame)
         elif self._manual_cal.active:
             step = self._manual_cal._fine_step
-            if k == "a":     self._manual_cal.move(-step, 0)
-            elif k == "d":   self._manual_cal.move(step, 0)
-            elif k == "w":   self._manual_cal.move(0, step)
-            elif k == "s":   self._manual_cal.move(0, -step)
-            elif k == "ArrowLeft":  self._manual_cal.move(-step*10, 0)
-            elif k == "ArrowRight": self._manual_cal.move(step*10, 0)
-            elif k == "ArrowUp":    self._manual_cal.move(0, step*10)
-            elif k == "ArrowDown":  self._manual_cal.move(0, -step*10)
-            elif k == " ":
+            if k == "a":     self._manual_cal.move(-step, 0); self._manual_cal._adjusted = True
+            elif k == "d":   self._manual_cal.move(step, 0); self._manual_cal._adjusted = True
+            elif k == "w":   self._manual_cal.move(0, step); self._manual_cal._adjusted = True
+            elif k == "s":   self._manual_cal.move(0, -step); self._manual_cal._adjusted = True
+            elif k == "ArrowLeft":  self._manual_cal.move(-step*10, 0); self._manual_cal._adjusted = True
+            elif k == "ArrowRight": self._manual_cal.move(step*10, 0); self._manual_cal._adjusted = True
+            elif k == "ArrowUp":    self._manual_cal.move(0, step*10); self._manual_cal._adjusted = True
+            elif k == "ArrowDown":  self._manual_cal.move(0, -step*10); self._manual_cal._adjusted = True
+            elif k in (" ", "Space"):
                 mx, my = self._mouse_screen
                 n = self._manual_cal.submit(mx, my)
+                self._manual_cal._adjusted = False  # reset for next sample
                 print(f'Calibration sample {n}: offset=({self._manual_cal._offset_x:.1f},{self._manual_cal._offset_y:.1f})')
-            if k in ('a','d','w','s','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'):
+            if k in ('a','d','w','s','ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' ','Space'):
                 self._rebuild_ui()
                 self._canvas.request_draw(self._render_frame)
         elif k == "]":
@@ -533,6 +534,11 @@ class MetroMapRenderer:
 
     def _on_ptr_move(self, event):
         self._mouse_screen = (event["x"], event["y"])
+        # During manual cal, update crosshair to follow mouse until user adjusts
+        if self._manual_cal.active and not self._manual_cal._adjusted:
+            self._manual_cal.set_cursor(event["x"], event["y"])
+            self._rebuild_ui()
+            self._canvas.request_draw(self._render_frame)
         wx, wy = self._screen_to_world(event["x"], event["y"])
         hit = self._hit_test(wx, wy)
         prev = self._hovered

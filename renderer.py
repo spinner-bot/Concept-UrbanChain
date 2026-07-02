@@ -189,7 +189,7 @@ class MetroMapRenderer:
         # Position at (w/2, h/2) so that pixel (0,0) is bottom-left
         self._ui_camera.width = 1280
         self._ui_camera.height = 900
-        self._ui_camera.local.position = (640, 450, 0)
+        self._ui_camera.local.position = (640, 450, 10)
 
         # ---- Viewport (must exist before controller) ----
         self._viewport = gfx.Viewport(self._renderer)
@@ -221,8 +221,8 @@ class MetroMapRenderer:
                 self._build_scene()
                 self._build_ui()
                 self._built = True
-            self._renderer.render(self._scene, self._camera)
-            self._renderer.render(self._ui_scene, self._ui_camera,
+            self._viewport.render(self._scene, self._camera)
+            self._viewport.render(self._ui_scene, self._ui_camera,
                                   clear_color=False)
 
         self._canvas.request_draw()
@@ -359,7 +359,7 @@ class MetroMapRenderer:
         self._camera.local.position = (
             (min(xs) + max(xs)) / 2,
             (min(ys) + max(ys)) / 2,
-            0,
+            10,  # above the scene so ortho camera can see it
         )
 
     # ------------------------------------------------------------------

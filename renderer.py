@@ -306,10 +306,13 @@ class MetroMapRenderer:
         pts = self._spline_data[ln.id]
         if len(pts) < 2:
             return
+        hovered = (self._hovered and self._hovered.get("type") == "line"
+                   and self._hovered.get("line", None) is ln)
+        thickness = self._line_thickness() * 1.5 if hovered else self._line_thickness()
         self._scene.add(gfx.Line(
             gfx.Geometry(positions=pts),
             gfx.LineMaterial(
-                thickness=self._line_thickness(),
+                thickness=thickness,
                 thickness_space="screen",
                 color=_rgba(ln.color),
             ),
@@ -325,7 +328,10 @@ class MetroMapRenderer:
 
         # Outer ring (fg colour = black or white depending on mode)
         fg = (1, 1, 1, 1) if self._dark_mode else (0, 0, 0, 1)
-        ring_size = size + 5 * self._scale_factor
+        # Highlight if hovered
+        hovered = (self._hovered and self._hovered.get("type") == "station"
+                   and self._hovered.get("station", None) is st)
+        ring_size = (size + 8 * self._scale_factor) if hovered else (size + 5 * self._scale_factor)
         ring = gfx.Points(
             gfx.Geometry(positions=np.float32([(x, y, 0.002)])),
             gfx.PointsMaterial(size=ring_size, size_space="screen", color=fg),
@@ -528,9 +534,14 @@ class MetroMapRenderer:
     def _on_pointer_move(self, event) -> None:
         wx, wy = self._screen_to_world(event["x"], event["y"])
         hit = self._hit_test(wx, wy)
-        # Simple highlight: print to console for now
-        if hit != self._hovered:
-            self._hovered = hit
+        prev = self._hovered
+        self._hovered = hit
+        # Rebuild if hover state changed
+        if (prev is None) != (hit is None) or (
+            prev and hit and prev.get("type") != hit.get("type")
+        ):
+            self._build_scene()
+            self._build_ui()
             self._canvas.request_draw()
 
     def _on_click(self, event) -> None:
@@ -542,7 +553,7 @@ class MetroMapRenderer:
                 print(f"[click] station: {st.name} (id={st.id})")
             else:
                 ln = hit["line"]
-                tag = ln.name or f"Line {ln.id}"
+                tag = line_identifier(ln.id, ln.name)
                 print(f"[click] line: {tag}")
 
     # ------------------------------------------------------------------

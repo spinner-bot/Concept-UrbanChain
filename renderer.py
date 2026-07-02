@@ -94,6 +94,7 @@ class MetroMapRenderer:
         self._scale_factor = 1.0   # secondary zoom: 0.3–3.0
         self._offsets_applied = False
         self._page_stack: list[dict] = []  # navigation stack for detail pages
+        self._detail_hotspots: list[dict] = []  # clickable zones in detail pages
 
         # ---- Canvas, renderer, scene, camera ----
         self._canvas = RenderCanvas(size=(1280, 900), title="Concept UrbanChain")
@@ -445,6 +446,7 @@ class MetroMapRenderer:
     # Detail pages
     # ------------------------------------------------------------------
     def _draw_detail_page(self) -> None:
+        self._detail_hotspots.clear()
         page = self._page_stack[-1]
         pg_type = page["type"]
         fg = "#ddd" if self._dark_mode else "#222"
@@ -493,15 +495,23 @@ class MetroMapRenderer:
             self._ui_scene.add(t)
             y -= 28
 
-        # Line list
+        # Line list (clickable)
         y -= 10
         for ln in slines:
             label = line_identifier(ln.id, ln.name)
-            t = gfx.Text(text=f"  • {label}", font_size=font, screen_space=True,
+            display = f"  ▸ {label}"
+            t = gfx.Text(text=display, font_size=font, screen_space=True,
                           anchor="top-left",
                           material=gfx.TextMaterial(color="#6af"))
             t.local.position = (50, y, 0)
             self._ui_scene.add(t)
+            # Record hotspot for click detection
+            tw = len(display) * font * 0.6
+            self._detail_hotspots.append({
+                "x": 50, "y": y - 22, "w": tw, "h": 24,
+                "action": "push_page",
+                "page": {"type": "line_detail", "line": ln},
+            })
             y -= 26
 
         # Back button (top-left)
@@ -536,15 +546,30 @@ class MetroMapRenderer:
             self._ui_scene.add(t)
             y -= 28
 
-        # Route summary
+        # Route stations (clickable)
         y -= 10
-        route_names = " → ".join(s.name for s in ln.route)
-        if len(route_names) > 50:
-            route_names = route_names[:47] + "..."
-        t = gfx.Text(text=f"Route: {route_names}", font_size=13, screen_space=True,
-                      anchor="top-left", material=gfx.TextMaterial(color=fg))
-        t.local.position = (40, y, 0)
-        self._ui_scene.add(t)
+        header = gfx.Text(text="Route stations:", font_size=font, screen_space=True,
+                           anchor="top-left", material=gfx.TextMaterial(color=fg))
+        header.local.position = (40, y, 0)
+        self._ui_scene.add(header)
+        y -= 26
+        for s in ln.route:
+            display = f"  ▸ {s.name}"
+            t = gfx.Text(text=display, font_size=14, screen_space=True,
+                          anchor="top-left", material=gfx.TextMaterial(color="#6af"))
+            t.local.position = (50, y, 0)
+            self._ui_scene.add(t)
+            tw = len(display) * 14 * 0.6
+            self._detail_hotspots.append({
+                "x": 50, "y": y - 20, "w": tw, "h": 22,
+                "action": "push_page",
+                "page": {
+                    "type": "station_detail",
+                    "station": s,
+                    "lines": self._station_lines.get(s.id, [ln]),
+                },
+            })
+            y -= 24
 
         self._add_nav_buttons(fg, accent, w, h)
 
@@ -738,6 +763,15 @@ class MetroMapRenderer:
         if self._page_stack:
             w, h = self._canvas.get_logical_size()
             w, h = w or 1280, h or 900
+            # Check hotspots first (clickable lines/stations in detail)
+            for hs in self._detail_hotspots:
+                if (hs["x"] <= sx <= hs["x"] + hs["w"]
+                        and hs["y"] <= (h - sy) <= hs["y"] + hs["h"]):
+                    if hs["action"] == "push_page":
+                        self._page_stack.append(hs["page"])
+                        self._build_ui()
+                        self._canvas.request_draw()
+                        return
             # Back button (top-left corner)
             if sx < 80 and sy > h - 30:
                 self._page_stack.pop()

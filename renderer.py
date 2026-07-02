@@ -12,7 +12,7 @@ import pygfx as gfx
 from rendercanvas.auto import RenderCanvas, loop
 
 from spline import catmull_rom_spline, build_key_points, line_identifier
-from calibrator import Calibrator, add_reticle_to_scene
+from calibrator import (Calibrator, ManualCalibrator, add_reticle_to_scene, add_crosshair_to_scene)
 
 # ---------------------------------------------------------------------------
 # Style
@@ -129,6 +129,7 @@ class MetroMapRenderer:
 
         self._built = False
         self._calibrator = Calibrator()
+        self._manual_cal = ManualCalibrator()
         self._calibration_targets = []  # world coords of 3x3 grid
 
     # ------------------------------------------------------------------
@@ -222,6 +223,8 @@ class MetroMapRenderer:
     def _rebuild_ui(self):
         self._ui_scene.clear()
         self._draw_legend()
+        if self._manual_cal.active:
+            self._draw_manual_cal_ui()
 
     # ------------------------------------------------------------------
     def _add_line(self, ln):
@@ -266,6 +269,19 @@ class MetroMapRenderer:
         ))
 
     # ------------------------------------------------------------------
+    def _draw_manual_cal_ui(self):
+        """Draw crosshair cursor and calibration count."""
+        cx, cy = self._manual_cal.cursor_pos()
+        add_crosshair_to_scene(self._ui_scene, cx, cy)
+        n = self._manual_cal.sample_count()
+        t = gfx.Text(text=f'Cal samples: {n}', font_size=16, screen_space=True,
+                      anchor='top-right',
+                      material=gfx.TextMaterial(color='#0ff'))
+        lw = self._ui_camera.width or 1280
+        lh = self._ui_camera.height or 900
+        t.local.position = (lw - 180, lh - 10, 0)
+        self._ui_scene.add(t)
+
     def _draw_labels(self):
         font_sz = 11  # screen pixels — consistent size
         for ln in self._lines:
@@ -367,6 +383,13 @@ class MetroMapRenderer:
         self._rebuild_map()
         self._canvas.request_draw(self._render_frame)
 
+    def _start_manual_calibration(self):
+        """Start manual cursor-alignment calibration."""
+        mx, my = self._mouse_screen
+        self._manual_cal.start(mx, my)
+        self._rebuild_ui()
+        self._canvas.request_draw(self._render_frame)
+
     def _on_key(self, event):
         k = event.get("key", "")
         if k in ("b", "B"):
@@ -379,6 +402,23 @@ class MetroMapRenderer:
             self._rebuild_map()
             self._rebuild_ui()
             self._canvas.request_draw(self._render_frame)
+        elif self._manual_cal.active:
+            step = self._manual_cal._fine_step
+            if k == "a":     self._manual_cal.move(-step, 0)
+            elif k == "d":   self._manual_cal.move(step, 0)
+            elif k == "w":   self._manual_cal.move(0, step)
+            elif k == "s":   self._manual_cal.move(0, -step)
+            elif k == "ArrowLeft":  self._manual_cal.move(-step*10, 0)
+            elif k == "ArrowRight": self._manual_cal.move(step*10, 0)
+            elif k == "ArrowUp":    self._manual_cal.move(0, step*10)
+            elif k == "ArrowDown":  self._manual_cal.move(0, -step*10)
+            elif k == " ":
+                mx, my = self._mouse_screen
+                n = self._manual_cal.submit(mx, my)
+                print(f'Calibration sample {n}: offset=({self._manual_cal._offset_x:.1f},{self._manual_cal._offset_y:.1f})')
+            if k in ('a','d','w','s','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'):
+                self._rebuild_ui()
+                self._canvas.request_draw(self._render_frame)
         elif k == "]":
             self._scale_factor = min(3.0, self._scale_factor + 0.1)
             self._rebuild_map()
@@ -391,13 +431,23 @@ class MetroMapRenderer:
                 self._canvas.request_draw(self._render_frame)
             else:
                 self._start_calibration()
+        elif k in ("g", "G"):
+            if self._manual_cal.active:
+                self._manual_cal.cancel()
+                self._rebuild_map()
+                self._rebuild_ui()
+                self._canvas.request_draw(self._render_frame)
+            else:
+                self._start_manual_calibration()
 
     def _render_frame(self):
         self._renderer.render(self._scene, self._camera)
 
     def _screen_to_world(self, sx, sy):
         # Apply calibration correction first
-        csx, csy = self._calibrator.apply(sx, sy)
+        # Apply both calibrators
+        csx, csy = self._manual_cal.apply(sx, sy)
+        csx, csy = self._calibrator.apply(csx, csy)
         cw, ch = self._camera.width, self._camera.height
         cx, cy, _ = self._camera.local.position
         lw, lh = self._canvas.get_logical_size()

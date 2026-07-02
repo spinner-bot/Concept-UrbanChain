@@ -1,10 +1,68 @@
-"""Screen-to-world coordinate calibration via 9-point user click grid.
+"""Screen-to-world coordinate calibration.
 
-Press F to enter/exit calibration mode.
+F key — 9-point click grid.
+G key — manual cursor alignment (WASD/arrows + Space).
 """
 
 import math
 import numpy as np
+
+
+# ===================================================================
+# Manual calibration (G key)
+# ===================================================================
+class ManualCalibrator:
+    """Move a crosshair to align with the real cursor, submit offsets."""
+
+    def __init__(self):
+        self.active = False
+        self._samples = []           # (dx, dy) offsets collected
+        self._cursor_x = 640.0       # crosshair screen position
+        self._cursor_y = 450.0
+        self._fine_step = 0.5        # WASD step (pixels)
+        self._coarse_step = 5.0      # arrow key step
+        self._offset_x = 0.0
+        self._offset_y = 0.0
+
+    def start(self, init_sx, init_sy):
+        self.active = True
+        self._cursor_x = init_sx
+        self._cursor_y = init_sy
+        self._samples = []
+
+    def cancel(self):
+        self.active = False
+
+    def move(self, dx, dy):
+        self._cursor_x += dx
+        self._cursor_y += dy
+
+    def submit(self, mouse_sx, mouse_sy):
+        """Record offset: how far the aligned crosshair is from theoretical."""
+        # theoretical = where system thinks mouse is (before user moves)
+        # actual = where crosshair ended up (aligned with real mouse)
+        offset_dx = self._cursor_x - mouse_sx
+        offset_dy = self._cursor_y - mouse_sy
+        self._samples.append((offset_dx, offset_dy))
+        # Recompute average offset
+        if self._samples:
+            self._offset_x = sum(s[0] for s in self._samples) / len(self._samples)
+            self._offset_y = sum(s[1] for s in self._samples) / len(self._samples)
+        return len(self._samples)
+
+    def sample_count(self):
+        return len(self._samples)
+
+    def cursor_pos(self):
+        return (self._cursor_x, self._cursor_y)
+
+    def apply(self, sx, sy):
+        return (sx + self._offset_x, sy + self._offset_y)
+
+
+# ===================================================================
+# Grid calibration (F key)
+# ===================================================================
 
 
 class Calibrator:
@@ -92,6 +150,20 @@ class Calibrator:
 # ---------------------------------------------------------------------------
 # Reticle drawing
 # ---------------------------------------------------------------------------
+def add_crosshair_to_scene(scene, sx, sy, color=(0, 1, 1, 1), size=12):
+    """Draw a screen-space crosshair (+) at pixel position (sx, sy)."""
+    import pygfx as gfx
+    h = size
+    # horizontal
+    hpts = np.float32([(sx - h, sy, 0), (sx + h, sy, 0)])
+    scene.add(gfx.Line(gfx.Geometry(positions=hpts),
+                gfx.LineMaterial(thickness=2, color=color)))
+    # vertical
+    vpts = np.float32([(sx, sy - h, 0), (sx, sy + h, 0)])
+    scene.add(gfx.Line(gfx.Geometry(positions=vpts),
+                gfx.LineMaterial(thickness=2, color=color)))
+
+
 def add_reticle_to_scene(scene, x, y, base_r, highlight=False):
     """Draw a calibration target reticle in world space."""
     import pygfx as gfx

@@ -29,6 +29,24 @@ def _luminance(rgb: tuple) -> float:
     return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
 
 
+def _blend_colours(deg: float, angles: list, colours: list) -> tuple:
+    """Softmax colour blend at a given angle (degrees)."""
+    if len(colours) == 1:
+        return colours[0]
+    weights = []
+    for a in angles:
+        diff = abs(deg - a)
+        if diff > 180:
+            diff = 360 - diff
+        w = math.exp(-0.5 * (diff / 25.0) ** 2)
+        weights.append(w)
+    total = sum(weights) or 1e-10
+    r = sum(colours[i][0] * weights[i] / total for i in range(len(colours)))
+    g = sum(colours[i][1] * weights[i] / total for i in range(len(colours)))
+    b = sum(colours[i][2] * weights[i] / total for i in range(len(colours)))
+    return (int(r), int(g), int(b))
+
+
 # ===================================================================
 # MetroMapRenderer
 # ===================================================================
@@ -186,19 +204,68 @@ class MetroMapRenderer:
         )
         self._scene.add(ring)
 
-        # Centre — for transfer stations use blended colour
-        if is_transfer:
-            colours = [_rgba(l.color) for l in slines]
-            blended = tuple(sum(c[i] for c in colours) / len(colours)
-                            for i in range(4))
+        # Centre
+        if is_transfer and len(slines) >= 2:
+            self._add_transfer_gradient(x, y, slines)
         else:
-            blended = _rgba(slines[0].color)
+            centre = gfx.Points(
+                gfx.Geometry(positions=np.float32([(x, y, 0.003)])),
+                gfx.PointsMaterial(size=size, size_space="screen",
+                                   color=_rgba(slines[0].color)),
+            )
+            self._scene.add(centre)
 
-        centre = gfx.Points(
-            gfx.Geometry(positions=np.float32([(x, y, 0.003)])),
-            gfx.PointsMaterial(size=size, size_space="screen", color=blended),
+    def _add_transfer_gradient(self, x, y, slines: list) -> None:
+        """Draw a gradient circle for a transfer station using vertex colours."""
+        # Approach angles for each line
+        angles = []
+        colours = []
+        for ln in slines:
+            pts = self._spline_data[ln.id]
+            best_i = int(np.argmin(np.sum((pts[:, :2] - (x, y)) ** 2, axis=1)))
+            if best_i == 0:
+                dx, dy = float(pts[1, 0] - pts[0, 0]), float(pts[1, 1] - pts[0, 1])
+            elif best_i == len(pts) - 1:
+                dx, dy = float(pts[-1, 0] - pts[-2, 0]), float(pts[-1, 1] - pts[-2, 1])
+            else:
+                dx = float(pts[best_i + 1, 0] - pts[best_i - 1, 0])
+                dy = float(pts[best_i + 1, 1] - pts[best_i - 1, 1])
+            ang = math.degrees(math.atan2(dy, dx)) % 360
+            angles.append(ang)
+            colours.append(ln.color)
+
+        # Sort by angle
+        paired = sorted(zip(angles, colours), key=lambda p: p[0])
+        angles = [p[0] for p in paired]
+        colours = [p[1] for p in paired]
+
+        # Build fan geometry — radius in world units matching screen px
+        canvas_w = self._canvas.get_logical_size()[0]
+        px_per_unit = canvas_w / self._camera.width if self._camera.width > 0 else 70
+        r = (TRANSFER_SIZE / 2) / px_per_unit
+        n_seg = 64
+        verts = [(x, y, 0.003)]
+        vert_colors = [_rgba(_blend_colours(0, angles, colours))]
+        for i in range(n_seg):
+            theta = 2 * math.pi * i / n_seg
+            deg = math.degrees(theta) % 360
+            px = x + math.cos(theta) * r
+            py = y + math.sin(theta) * r
+            verts.append((px, py, 0.003))
+            vert_colors.append(_rgba(_blend_colours(deg, angles, colours)))
+
+        indices = []
+        for i in range(1, n_seg):
+            indices.append([0, i, i + 1])
+        indices.append([0, n_seg, 1])
+
+        geo = gfx.Geometry(
+            positions=np.array(verts, dtype=np.float32),
+            indices=np.array(indices, dtype=np.int32).reshape(-1, 3),
+            colors=np.array(vert_colors, dtype=np.float32),
         )
-        self._scene.add(centre)
+        mat = gfx.MeshBasicMaterial(color_mode="vertex")
+        self._scene.add(gfx.Mesh(geo, mat))
 
     # ------------------------------------------------------------------
     # UI overlay

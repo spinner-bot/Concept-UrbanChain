@@ -12,7 +12,7 @@ matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 from matplotlib.backend_bases import MouseButton
 
-from matplotlib.patches import Polygon as MplPolygon
+from matplotlib.patches import Polygon as MplPolygon, Wedge, Circle as MplCircle
 
 from spline import catmull_rom_spline, build_key_points
 
@@ -179,14 +179,28 @@ class MetroMapRenderer:
         self._ax.set_facecolor("#1A1A1A" if self._dark_mode else "#FFFFFF")
         self._fg = (255, 255, 255) if self._dark_mode else (0, 0, 0)
 
+        # Draw lines first, then stations on top
         for ln in self._lines:
             self._draw_line_stroke(ln)
+
+        # Collect unique stations and draw each once
+        drawn: set[int] = set()
         for ln in self._lines:
             for st in ln.route:
-                self._draw_station(st, ln)
+                if st.id in drawn:
+                    continue
+                drawn.add(st.id)
+                s_lines = self._station_lines[st.id]
+                if len(s_lines) >= 2:
+                    self._draw_transfer_station(st, s_lines)
+                else:
+                    self._draw_regular_station(st, s_lines[0])
 
         self._fig.canvas.draw_idle()
 
+    # ------------------------------------------------------------------
+    # Line drawing
+    # ------------------------------------------------------------------
     def _draw_line_stroke(self, ln) -> None:
         """Draw a line as a filled polygon with data-coordinate width.
 
@@ -204,13 +218,136 @@ class MetroMapRenderer:
                            zorder=2, closed=True)
         self._ax.add_patch(patch)
 
-    def _draw_station(self, st, ln) -> None:
-        """Draw a station as a simple filled circle."""
+    # ------------------------------------------------------------------
+    # Station drawing
+    # ------------------------------------------------------------------
+    def _station_outer_radius(self, is_transfer: bool) -> float:
+        centre = (REGULAR_STATION_RADIUS * TRANSFER_MULTIPLIER
+                  if is_transfer else REGULAR_STATION_RADIUS)
+        return centre + RING_GAP
+
+    def _draw_regular_station(self, st, ln) -> None:
+        """Draw a non-transfer station: solid centre + outer ring."""
         x, y = st.position[0], st.position[1]
-        colour_01 = _rgb_01(ln.color)
-        circle = plt.Circle((x, y), REGULAR_STATION_RADIUS,
-                            facecolor=colour_01, edgecolor="none", zorder=5)
-        self._ax.add_patch(circle)
+        r = REGULAR_STATION_RADIUS
+        ring_r = r + RING_GAP
+
+        # Outer ring
+        ring = MplCircle((x, y), ring_r, facecolor="none",
+                         edgecolor=_rgb_01(self._fg), linewidth=RING_WIDTH,
+                         zorder=4)
+        self._ax.add_patch(ring)
+        # Centre
+        centre = MplCircle((x, y), r, facecolor=_rgb_01(ln.color),
+                           edgecolor="none", zorder=5)
+        self._ax.add_patch(centre)
+
+    def _draw_transfer_station(self, st, lines: list) -> None:
+        """Draw a transfer station with angular gradient centre.
+
+        The centre radius is 165 % of a regular station.  The gradient
+        transitions between line colours at sector boundaries determined
+        by each line's approach angle.
+        """
+        x, y = st.position[0], st.position[1]
+        r = REGULAR_STATION_RADIUS * TRANSFER_MULTIPLIER
+        ring_r = r + RING_GAP
+
+        # Outer ring
+        ring = MplCircle((x, y), ring_r, facecolor="none",
+                         edgecolor=_rgb_01(self._fg), linewidth=RING_WIDTH,
+                         zorder=4)
+        self._ax.add_patch(ring)
+
+        # Compute approach angles and sort lines by angle
+        angled_lines: list[tuple[float, object]] = []
+        for ln in lines:
+            angle = self._approach_angle(st, ln)
+            angled_lines.append((angle, ln))
+        angled_lines.sort(key=lambda item: item[0])
+
+        n = len(angled_lines)
+        colours = [ln.color for _, ln in angled_lines]
+        angles = [a for a, _ in angled_lines]
+
+        # Draw 360 1-degree wedges with softmax colour blending
+        for deg in range(360):
+            theta = float(deg)
+            blended = self._blend_colours(theta, angles, colours)
+            wedge = Wedge((x, y), r, theta, theta + 1.0,
+                          facecolor=_rgb_01(blended), edgecolor="none",
+                          zorder=5)
+            self._ax.add_patch(wedge)
+
+    # ------------------------------------------------------------------
+    # Gradient helpers
+    # ------------------------------------------------------------------
+    def _approach_angle(self, st, ln) -> float:
+        """Angle (degrees) at which *ln* approaches station *st*.
+
+        Uses the precomputed spline tangent at the sample point closest to
+        the station position.
+        """
+        pts = self._spline_data[ln.id]
+        sx, sy = st.position[0], st.position[1]
+
+        # Find closest spline sample
+        best_i = 0
+        best_d2 = float("inf")
+        for i, (px, py) in enumerate(pts):
+            d2 = (px - sx) ** 2 + (py - sy) ** 2
+            if d2 < best_d2:
+                best_d2 = d2
+                best_i = i
+
+        # Tangent at best_i
+        if best_i == 0:
+            dx = pts[1][0] - pts[0][0]
+            dy = pts[1][1] - pts[0][1]
+        elif best_i == len(pts) - 1:
+            dx = pts[-1][0] - pts[-2][0]
+            dy = pts[-1][1] - pts[-2][1]
+        else:
+            dx = pts[best_i + 1][0] - pts[best_i - 1][0]
+            dy = pts[best_i + 1][1] - pts[best_i - 1][1]
+
+        angle = math.degrees(math.atan2(dy, dx))
+        return angle % 360
+
+    def _blend_colours(
+        self,
+        theta: float,
+        angles: list[float],
+        colours: list[tuple[int, int, int]],
+    ) -> tuple[int, int, int]:
+        """Softmax colour blend at *theta* (degrees) given line angles."""
+        n = len(colours)
+        if n == 1:
+            return colours[0]
+
+        # Angular distance from theta to each line angle
+        weights: list[float] = []
+        for a in angles:
+            diff = abs(theta - a)
+            if diff > 180:
+                diff = 360 - diff
+            # Gaussian-like weight; sigma controls blend sharpness
+            sigma = 20.0
+            w = math.exp(-0.5 * (diff / sigma) ** 2)
+            weights.append(w)
+
+        total = sum(weights)
+        if total < 1e-10:
+            return colours[0]
+
+        r = g = b = 0.0
+        for i in range(n):
+            w = weights[i] / total
+            r += colours[i][0] * w
+            g += colours[i][1] * w
+            b += colours[i][2] * w
+
+        return (int(round(r)), int(round(g)), int(round(b)))
 
     def _auto_fit(self) -> None:
         """Set initial axis limits to enclose all stations with padding."""

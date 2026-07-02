@@ -1,8 +1,22 @@
+from enum import Enum
+
+
+class StationType(Enum):
+    """Station construction type."""
+    UNDERGROUND = "underground"   # 地下站
+    GROUND = "ground"             # 地面站
+    ELEVATED = "elevated"         # 地上站
+    BUILDING = "building"         # 建筑站（预留）
+    STRUCTURE = "structure"       # 结构站（预留）
+
+
 class Station:
-    def __init__(self, id: int, name: str, position: tuple):
+    def __init__(self, id: int, name: str, position: tuple,
+                 station_type: StationType = StationType.UNDERGROUND):
         self.id = id
         self.name = name
-        self.position = position # 3维坐标，兼容2维（第3维作为扩展功能）
+        self.position = position  # (x, y) or (x, y, z) — z auto-filled per task 5
+        self.station_type = station_type
 
 class Line:
     def __init__(self, id: int, name: str, route: list, max_speed: float,
@@ -73,14 +87,14 @@ def _create_test_network() -> MetroNetwork:
         S4 (West Lake)    — 2-line transfer (Lines 1, 2)
     """
     # -- Stations -----------------------------------------------------------
-    s0 = Station(0, "Central",      (2, 2))
-    s1 = Station(1, "North Park",   (2, 7))
-    s2 = Station(2, "East Market",  (7, 7))
-    s3 = Station(3, "South Gate",   (2, -3))
-    s4 = Station(4, "West Lake",    (-4, 2))
-    s5 = Station(5, "Hill View",    (-5, 6))
-    s6 = Station(6, "River East",   (8, 2))
-    s7 = Station(7, "Ocean Term.",  (8, -3))
+    s0 = Station(0, "Central",      (2, 2),   StationType.UNDERGROUND)
+    s1 = Station(1, "North Park",   (2, 7),   StationType.GROUND)
+    s2 = Station(2, "East Market",  (7, 7),   StationType.ELEVATED)
+    s3 = Station(3, "South Gate",   (2, -3),  StationType.UNDERGROUND)
+    s4 = Station(4, "West Lake",    (-4, 2),  StationType.GROUND)
+    s5 = Station(5, "Hill View",    (-5, 6),  StationType.ELEVATED)
+    s6 = Station(6, "River East",   (8, 2),   StationType.BUILDING)
+    s7 = Station(7, "Ocean Term.",  (8, -3),  StationType.STRUCTURE)
 
     # -- Line 1 (Red / named) -----------------------------------------------
     #  S4 → S0 → S1 → S2 → S6 → S7

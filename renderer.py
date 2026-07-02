@@ -184,27 +184,31 @@ class MetroMapRenderer:
     # ------------------------------------------------------------------
     def _rebuild_map(self):
         self._scene.clear()
-        bg = (0.06, 0.06, 0.06, 1) if self._dark_mode else (0.94, 0.94, 0.94, 1)
+        if self._calibrator.active:
+            bg = (0, 0, 0, 1)
+        else:
+            bg = (0.06, 0.06, 0.06, 1) if self._dark_mode else (0.94, 0.94, 0.94, 1)
         self._scene.add(gfx.Background(
             None, gfx.BackgroundMaterial(bg, bg, bg, bg)))
 
-        for ln in self._lines:
-            if ln.id not in self._hidden_lines:
-                self._add_line(ln)
+        if not self._calibrator.active:
+            for ln in self._lines:
+                if ln.id not in self._hidden_lines:
+                    self._add_line(ln)
 
-        drawn = set()
-        for ln in self._lines:
-            for st in ln.route:
-                if st.id in drawn:
-                    continue
-                drawn.add(st.id)
-                vis = [l for l in self._station_lines[st.id]
-                       if l.id not in self._hidden_lines]
-                if vis:
-                    self._add_station(st, vis)
+            drawn = set()
+            for ln in self._lines:
+                for st in ln.route:
+                    if st.id in drawn:
+                        continue
+                    drawn.add(st.id)
+                    vis = [l for l in self._station_lines[st.id]
+                           if l.id not in self._hidden_lines]
+                    if vis:
+                        self._add_station(st, vis)
 
-        self._draw_labels()
-        if self._calibrator.active:
+            self._draw_labels()
+        else:
             self._draw_calibration_reticles()
         self._built = True
 
@@ -295,6 +299,15 @@ class MetroMapRenderer:
                               material=gfx.TextMaterial(color=fg_c))
                 t.local.position = (spx, spy, 0)
                 self._scene.add(t)
+
+    def _world_to_screen_raw(self, wx, wy):
+        """World to screen WITHOUT calibration correction."""
+        cw, ch = self._camera.width, self._camera.height
+        cx, cy, _ = self._camera.local.position
+        lw, lh = self._canvas.get_logical_size()
+        lw, lh = lw or 1280, lh or 900
+        return ((wx - cx) / cw * lw + lw / 2,
+                (wy - cy) / ch * lh + lh / 2)
 
     def _world_to_screen(self, wx, wy):
         """Convert world coords to screen pixel coords."""
@@ -390,16 +403,6 @@ class MetroMapRenderer:
         lw, lh = self._canvas.get_logical_size()
         lw, lh = lw or 1280, lh or 900
         return cx + (csx / lw - 0.5) * cw, cy + (csy / lh - 0.5) * ch
-
-    def _world_to_screen(self, wx, wy):
-        cw, ch = self._camera.width, self._camera.height
-        cx, cy, _ = self._camera.local.position
-        lw, lh = self._canvas.get_logical_size()
-        lw, lh = lw or 1280, lh or 900
-        return ((wx - cx) / cw * lw + lw / 2,
-                (wy - cy) / ch * lh + lh / 2)
-
-
     def _hit_test(self, wx, wy):
         line_threshold = self._camera.width / 35
         station_threshold = self._camera.width / 20  # larger = easier to select
@@ -462,11 +465,15 @@ class MetroMapRenderer:
         # Calibration click
         if self._calibrator.active:
             self._calibrator.register_click((event["x"], event["y"]))
-            if self._calibrator.active:
-                self._rebuild_map()
-            else:
-                self._rebuild_map()
+            if not self._calibrator.active:
+                # Just finished — compute ideal screen positions
+                ideal = []
+                for wx, wy in self._calibration_targets:
+                    sx, sy = self._world_to_screen_raw(wx, wy)
+                    ideal.append((sx, sy))
+                self._calibrator.compute_offset(ideal)
                 self._rebuild_ui()
+            self._rebuild_map()
             self._canvas.request_draw(self._render_frame)
             return
 

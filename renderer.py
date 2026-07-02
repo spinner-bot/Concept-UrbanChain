@@ -9,6 +9,18 @@ from rendercanvas.auto import RenderCanvas, loop
 
 from spline import catmull_rom_spline, build_key_points
 
+
+def _point_seg_dist(px: float, py: float,
+                    x1: float, y1: float,
+                    x2: float, y2: float) -> float:
+    """Shortest distance from point (px,py) to segment (x1,y1)-(x2,y2)."""
+    dx, dy = x2 - x1, y2 - y1
+    if dx == 0 and dy == 0:
+        return math.hypot(px - x1, py - y1)
+    t = max(0, min(1, ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy)))
+    return math.hypot(px - (x1 + t * dx), py - (y1 + t * dy))
+
+
 # ---------------------------------------------------------------------------
 # Style (screen-space px — task 2 will add dynamic scaling)
 # ---------------------------------------------------------------------------
@@ -106,6 +118,11 @@ class MetroMapRenderer:
 
         # ---- Keyboard ----
         self._canvas.add_event_handler(self._on_key, "key_down")
+
+        # ---- Pointer ----
+        self._hovered = None          # currently hovered object: (type, obj)
+        self._canvas.add_event_handler(self._on_pointer_move, "pointer_move")
+        self._canvas.add_event_handler(self._on_click, "click")
 
         # Defer build until first frame (canvas size is known)
         self._built = False
@@ -449,6 +466,69 @@ class MetroMapRenderer:
             )
             text.local.position = (lx, ly, 0.005)
             self._scene.add(text)
+
+    # ------------------------------------------------------------------
+    # Pointer / hit-testing
+    # ------------------------------------------------------------------
+    def _screen_to_world(self, sx: float, sy: float) -> tuple[float, float]:
+        """Convert screen pixel coords to world (data) coords."""
+        cw = self._camera.width
+        ch = self._camera.height
+        cx, cy, _ = self._camera.local.position
+        lw, lh = self._canvas.get_logical_size()
+        lw = lw or 1280
+        lh = lh or 900
+        wx = cx + (sx / lw - 0.5) * cw
+        wy = cy + (sy / lh - 0.5) * ch
+        return wx, wy
+
+    def _hit_test(self, wx: float, wy: float) -> dict | None:
+        """Return the top-most hit object at world pos, or None."""
+        threshold = 1.0  # world units
+        # Check stations first (on top)
+        for st_id, slines in self._station_lines.items():
+            st = slines[0].route[0]
+            # Find actual station
+            for ln in self._lines:
+                for s in ln.route:
+                    if s.id == st_id:
+                        st = s
+                        break
+            sx, sy = st.position[0], st.position[1]
+            if math.hypot(wx - sx, wy - sy) < threshold:
+                return {"type": "station", "station": st, "lines": slines}
+        # Check lines
+        for ln in self._lines:
+            pts = self._spline_data[ln.id]
+            if len(pts) < 2:
+                continue
+            # Simple: check distance to each segment
+            for i in range(len(pts) - 1):
+                x1, y1 = float(pts[i, 0]), float(pts[i, 1])
+                x2, y2 = float(pts[i + 1, 0]), float(pts[i + 1, 1])
+                if _point_seg_dist(wx, wy, x1, y1, x2, y2) < threshold:
+                    return {"type": "line", "line": ln}
+        return None
+
+    def _on_pointer_move(self, event) -> None:
+        wx, wy = self._screen_to_world(event["x"], event["y"])
+        hit = self._hit_test(wx, wy)
+        # Simple highlight: print to console for now
+        if hit != self._hovered:
+            self._hovered = hit
+            self._canvas.request_draw()
+
+    def _on_click(self, event) -> None:
+        wx, wy = self._screen_to_world(event["x"], event["y"])
+        hit = self._hit_test(wx, wy)
+        if hit:
+            if hit["type"] == "station":
+                st = hit["station"]
+                print(f"[click] station: {st.name} (id={st.id})")
+            else:
+                ln = hit["line"]
+                tag = ln.name or f"Line {ln.id}"
+                print(f"[click] line: {tag}")
 
     # ------------------------------------------------------------------
     # Keyboard

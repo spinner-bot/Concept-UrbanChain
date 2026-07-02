@@ -11,12 +11,26 @@ class StationType(Enum):
 
 
 class Station:
+    # Z-coordinate defaults per station type
+    _Z_DEFAULTS = {
+        StationType.UNDERGROUND: -10,
+        StationType.GROUND: 1,
+        StationType.ELEVATED: 10,
+        StationType.BUILDING: 0,
+        StationType.STRUCTURE: 0,
+    }
+
     def __init__(self, id: int, name: str, position: tuple,
                  station_type: StationType = StationType.UNDERGROUND):
         self.id = id
         self.name = name
-        self.position = position  # (x, y) or (x, y, z) — z auto-filled per task 5
         self.station_type = station_type
+        # Auto-fill Z if position has only 2 components
+        if len(position) == 2:
+            z = self._Z_DEFAULTS.get(station_type, 0)
+            self.position = (position[0], position[1], z)
+        else:
+            self.position = tuple(position)
 
 class Line:
     def __init__(self, id: int, name: str, route: list, max_speed: float,

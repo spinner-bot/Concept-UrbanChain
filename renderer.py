@@ -93,6 +93,7 @@ class MetroMapRenderer:
         self._dark_mode = False
         self._scale_factor = 1.0   # secondary zoom: 0.3–3.0
         self._offsets_applied = False
+        self._page_stack: list[dict] = []  # navigation stack for detail pages
 
         # ---- Canvas, renderer, scene, camera ----
         self._canvas = RenderCanvas(size=(1280, 900), title="Concept UrbanChain")
@@ -408,8 +409,11 @@ class MetroMapRenderer:
     # ------------------------------------------------------------------
     def _build_ui(self) -> None:
         self._ui_scene.clear()
-        self._draw_legend()
-        self._draw_tooltip()
+        if self._page_stack:
+            self._draw_detail_page()
+        else:
+            self._draw_legend()
+            self._draw_tooltip()
 
     def _draw_legend(self) -> None:
         fg = "#ddd" if self._dark_mode else "#222"
@@ -436,6 +440,126 @@ class MetroMapRenderer:
             )
             text.local.position = (62, y + 8, 0)
             self._ui_scene.add(text)
+
+    # ------------------------------------------------------------------
+    # Detail pages
+    # ------------------------------------------------------------------
+    def _draw_detail_page(self) -> None:
+        page = self._page_stack[-1]
+        pg_type = page["type"]
+        fg = "#ddd" if self._dark_mode else "#222"
+        bg = (0.12, 0.12, 0.14, 0.95) if self._dark_mode else (0.94, 0.94, 0.96, 0.95)
+        accent = (0.2, 0.5, 0.9, 1.0)  # blue accent for buttons
+
+        w, h = self._canvas.get_logical_size()
+        w, h = w or 1280, h or 900
+
+        # Full-screen background
+        geo = gfx.Geometry(
+            positions=np.float32([(0, 0, 0), (w, 0, 0), (w, h, 0), (0, h, 0)]),
+            indices=np.int32([[0, 1, 2], [0, 2, 3]]),
+        )
+        self._ui_scene.add(gfx.Mesh(geo, gfx.MeshBasicMaterial(color=bg)))
+
+        if pg_type == "station_detail":
+            self._draw_station_detail(page, fg, accent, w, h)
+        elif pg_type == "line_detail":
+            self._draw_line_detail(page, fg, accent, w, h)
+
+    def _draw_station_detail(self, page, fg, accent, w, h) -> None:
+        st = page["station"]
+        slines = page["lines"]
+        font = 16
+        small = 13
+
+        # Title: [id] name
+        title = f"[{st.id:04d}] {st.name}"
+        t = gfx.Text(text=title, font_size=22, screen_space=True,
+                      anchor="top-left", material=gfx.TextMaterial(color=fg))
+        t.local.position = (30, h - 40, 0)
+        self._ui_scene.add(t)
+
+        # User-level data
+        y = h - 80
+        items = [
+            f"Station type: {st.station_type.value}",
+            f"Position: ({st.position[0]:.1f}, {st.position[1]:.1f}, {st.position[2]:.1f})",
+            f"Lines passing: {len(slines)}",
+        ]
+        for item in items:
+            t = gfx.Text(text=item, font_size=font, screen_space=True,
+                          anchor="top-left", material=gfx.TextMaterial(color=fg))
+            t.local.position = (40, y, 0)
+            self._ui_scene.add(t)
+            y -= 28
+
+        # Line list
+        y -= 10
+        for ln in slines:
+            label = line_identifier(ln.id, ln.name)
+            t = gfx.Text(text=f"  • {label}", font_size=font, screen_space=True,
+                          anchor="top-left",
+                          material=gfx.TextMaterial(color="#6af"))
+            t.local.position = (50, y, 0)
+            self._ui_scene.add(t)
+            y -= 26
+
+        # Back button (top-left)
+        self._add_nav_buttons(fg, accent, w, h)
+
+    def _draw_line_detail(self, page, fg, accent, w, h) -> None:
+        ln = page["line"]
+        font = 16
+
+        # Title
+        title = line_identifier(ln.id, ln.name)
+        t = gfx.Text(text=title, font_size=22, screen_space=True,
+                      anchor="top-left", material=gfx.TextMaterial(color=fg))
+        t.local.position = (30, h - 40, 0)
+        self._ui_scene.add(t)
+
+        from spline import line_length
+        length = line_length(ln.route, ln.fine_trajectory)
+        is_circ = (len(ln.route) >= 2 and ln.route[0].id == ln.route[-1].id)
+        circ_label = " (circular)" if is_circ else ""
+
+        y = h - 80
+        items = [
+            f"Stations: {len(ln.route)}{circ_label}",
+            f"Line length: {length:.2f} units",
+            f"Max speed: {ln.max_speed} km/h",
+        ]
+        for item in items:
+            t = gfx.Text(text=item, font_size=font, screen_space=True,
+                          anchor="top-left", material=gfx.TextMaterial(color=fg))
+            t.local.position = (40, y, 0)
+            self._ui_scene.add(t)
+            y -= 28
+
+        # Route summary
+        y -= 10
+        route_names = " → ".join(s.name for s in ln.route)
+        if len(route_names) > 50:
+            route_names = route_names[:47] + "..."
+        t = gfx.Text(text=f"Route: {route_names}", font_size=13, screen_space=True,
+                      anchor="top-left", material=gfx.TextMaterial(color=fg))
+        t.local.position = (40, y, 0)
+        self._ui_scene.add(t)
+
+        self._add_nav_buttons(fg, accent, w, h)
+
+    def _add_nav_buttons(self, fg, accent, w, h) -> None:
+        """Back (←) and close (✕) buttons."""
+        # Back button
+        t = gfx.Text(text="← Back", font_size=15, screen_space=True,
+                      anchor="top-left", material=gfx.TextMaterial(color="#6af"))
+        t.local.position = (30, h - 10, 0)
+        self._ui_scene.add(t)
+        # Close button
+        t = gfx.Text(text="✕ Close", font_size=15, screen_space=True,
+                      anchor="top-right", material=gfx.TextMaterial(color="#f66"))
+        t.local.position = (w - 30, h - 10, 0)
+        self._ui_scene.add(t)
 
     # ------------------------------------------------------------------
     # Tooltip
@@ -608,16 +732,42 @@ class MetroMapRenderer:
             self._canvas.request_draw()
 
     def _on_click(self, event) -> None:
+        sx, sy = event["x"], event["y"]
+
+        # If a detail page is open, handle nav button clicks first
+        if self._page_stack:
+            w, h = self._canvas.get_logical_size()
+            w, h = w or 1280, h or 900
+            # Back button (top-left corner)
+            if sx < 80 and sy > h - 30:
+                self._page_stack.pop()
+                self._build_ui()
+                self._canvas.request_draw()
+                return
+            # Close button (top-right corner)
+            if sx > w - 80 and sy > h - 30:
+                self._page_stack.clear()
+                self._build_ui()
+                self._canvas.request_draw()
+                return
+            return  # in detail page, ignore other clicks for now
+
         wx, wy = self._screen_to_world(event["x"], event["y"])
         hit = self._hit_test(wx, wy)
         if hit:
             if hit["type"] == "station":
-                st = hit["station"]
-                print(f"[click] station: {st.name} (id={st.id})")
-            else:
-                ln = hit["line"]
-                tag = line_identifier(ln.id, ln.name)
-                print(f"[click] line: {tag}")
+                self._page_stack.append({
+                    "type": "station_detail",
+                    "station": hit["station"],
+                    "lines": hit["lines"],
+                })
+            elif hit["type"] == "line":
+                self._page_stack.append({
+                    "type": "line_detail",
+                    "line": hit["line"],
+                })
+            self._build_ui()
+            self._canvas.request_draw()
 
     # ------------------------------------------------------------------
     # Keyboard

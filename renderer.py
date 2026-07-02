@@ -556,7 +556,7 @@ class MetroMapRenderer:
         st = page["station"]
         slines = page["lines"]
         font = 16
-        small = 13
+        show_dev = page.get("show_dev", False)
 
         # Title: [id] name
         title = f"[{st.id:04d}] {st.name}"
@@ -589,7 +589,6 @@ class MetroMapRenderer:
                           material=gfx.TextMaterial(color="#6af"))
             t.local.position = (50, y, 0)
             self._ui_scene.add(t)
-            # Record hotspot for click detection
             tw = len(display) * font * 0.6
             self._detail_hotspots.append({
                 "x": 50, "y": y - 22, "w": tw, "h": 24,
@@ -598,7 +597,40 @@ class MetroMapRenderer:
             })
             y -= 26
 
-        # Back button (top-left)
+        # Dev data toggle button
+        y -= 10
+        btn_text = "▼ Hide dev data" if show_dev else "▶ Show dev data"
+        t_btn = gfx.Text(text=btn_text, font_size=13, screen_space=True,
+                          anchor="top-left",
+                          material=gfx.TextMaterial(color="#aaa"))
+        t_btn.local.position = (40, y, 0)
+        self._ui_scene.add(t_btn)
+        self._detail_hotspots.append({
+            "x": 40, "y": y - 18, "w": 160, "h": 22,
+            "action": "toggle_dev",
+        })
+        y -= 22
+
+        # Dev data (if expanded)
+        if show_dev:
+            dev_items = [
+                f"Line colours: " + ", ".join(
+                    f"#{ln.color[0]:02x}{ln.color[1]:02x}{ln.color[2]:02x}"
+                    for ln in slines),
+                f"Terminal labels: "
+                + ", ".join("hidden" if ln.hide_terminal_label else "shown"
+                            for ln in slines),
+                f"Smooth tension: "
+                + ", ".join(str(ln.smooth_tension) for ln in slines),
+            ]
+            for item in dev_items:
+                t = gfx.Text(text=item, font_size=12, screen_space=True,
+                              anchor="top-left",
+                              material=gfx.TextMaterial(color="#888"))
+                t.local.position = (40, y, 0)
+                self._ui_scene.add(t)
+                y -= 20
+
         self._add_nav_buttons(fg, accent, w, h)
 
     def _draw_line_detail(self, page, fg, accent, w, h) -> None:
@@ -630,7 +662,7 @@ class MetroMapRenderer:
             self._ui_scene.add(t)
             y -= 28
 
-        # Route stations (clickable)
+        # Route stations with transfer info (clickable)
         y -= 10
         header = gfx.Text(text="Route stations:", font_size=font, screen_space=True,
                            anchor="top-left", material=gfx.TextMaterial(color=fg))
@@ -638,7 +670,9 @@ class MetroMapRenderer:
         self._ui_scene.add(header)
         y -= 26
         for s in ln.route:
-            display = f"  ▸ {s.name}"
+            t_count = len(self._station_lines.get(s.id, [ln]))
+            xfer = f" [transfer: {t_count} lines]" if t_count >= 2 else ""
+            display = f"  ▸ {s.name}{xfer}"
             t = gfx.Text(text=display, font_size=14, screen_space=True,
                           anchor="top-left", material=gfx.TextMaterial(color="#6af"))
             t.local.position = (50, y, 0)
@@ -890,6 +924,11 @@ class MetroMapRenderer:
                         and hs["y"] <= (h - sy) <= hs["y"] + hs["h"]):
                     if hs["action"] == "push_page":
                         self._page_stack.append(hs["page"])
+                        self._build_ui()
+                        self._canvas.request_draw()
+                        return
+                    elif hs["action"] == "toggle_dev":
+                        page["show_dev"] = not page.get("show_dev", False)
                         self._build_ui()
                         self._canvas.request_draw()
                         return

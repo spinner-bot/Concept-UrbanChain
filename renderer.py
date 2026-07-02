@@ -335,11 +335,23 @@ class MetroMapRenderer:
         self._renderer.render(self._scene, self._camera)
 
     def _screen_to_world(self, sx, sy):
+        """Convert screen pixel coords to world coords, accounting for maintain_aspect."""
         cw, ch = self._camera.width, self._camera.height
         cx, cy, _ = self._camera.local.position
         lw, lh = self._canvas.get_logical_size()
         lw, lh = lw or 1280, lh or 900
-        return cx + (sx / lw - 0.5) * cw, cy + (sy / lh - 0.5) * ch
+        # Account for maintain_aspect: compute effective visible area
+        view_aspect = lw / lh
+        cam_aspect = cw / ch if ch > 0 else 1.0
+        if view_aspect > cam_aspect:
+            eff_w = ch * view_aspect
+            eff_h = ch
+        else:
+            eff_w = cw
+            eff_h = cw / view_aspect
+        wx = cx + (sx / lw - 0.5) * eff_w
+        wy = cy + (sy / lh - 0.5) * eff_h
+        return wx, wy
 
     def _hit_test(self, wx, wy):
         line_threshold = self._camera.width / 35

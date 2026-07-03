@@ -339,7 +339,9 @@ class MetroMapRenderer:
     def _draw_tooltip(self):
         if not self._hovered:
             return
-        mx, my = self._mouse_screen
+        mx, my_raw = self._mouse_screen
+        lh = self._canvas.get_logical_size()[1] or 900
+        my = lh - my_raw  # flip: mouse Y is bottom-origin, UI is top-origin
         fg = "#ddd" if self._dark_mode else "#111"
         bg = (0.15, 0.15, 0.15, 0.85) if self._dark_mode else (0.96, 0.96, 0.96, 0.88)
 

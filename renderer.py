@@ -303,6 +303,19 @@ class MetroMapRenderer:
         lw = self._ui_camera.width or 1280
         lh = self._ui_camera.height or 900
         y0 = lh - 40
+        self._legend_items = []     # (x1, y1, x2, y2, line)
+        self._legend_btns = []      # (x1, y1, x2, y2, action)
+
+        if self._legend_mode == "full_hide":
+            # Just a small expand icon
+            t = gfx.Text(text="[+]", font_size=16, screen_space=True,
+                          anchor="middle-left",
+                          material=gfx.TextMaterial(color="#888"))
+            t.local.position = (30, y0, 0)
+            self._ui_scene.add(t)
+            self._legend_btns.append((25, y0 - 12, 60, y0 + 12, "expand"))
+            return
+
         for i, ln in enumerate(self._lines):
             y = y0 - i * 32
             hidden = ln.id in self._hidden_lines
@@ -311,27 +324,43 @@ class MetroMapRenderer:
                 c = (c[0]*0.3, c[1]*0.3, c[2]*0.3, 0.5)
             label = line_identifier(ln.id, ln.name)
             lc = "#555" if hidden else fg
-            # swatch rectangle
             geo = gfx.Geometry(
                 positions=np.float32([(30, y, 0), (50, y, 0),
                                       (50, y + 14, 0), (30, y + 14, 0)]),
                 indices=np.int32([[0, 1, 2], [0, 2, 3]]),
             )
             self._ui_scene.add(gfx.Mesh(geo, gfx.MeshBasicMaterial(color=c)))
-            # text
             t = gfx.Text(text=label, font_size=14, screen_space=True,
                           anchor="middle-left",
                           material=gfx.TextMaterial(color=lc))
             t.local.position = (58, y + 7, 0)
             self._ui_scene.add(t)
+            self._legend_items.append((25, y - 4, 200, y + 20, ln))
 
-        # "Net" button at bottom of legend
+        # Bottom buttons
         ny = y0 - len(self._lines) * 32 - 10
+        # Fold button
+        fold_txt = "[-]" if self._legend_mode == "full_show" else "[_]"
+        t = gfx.Text(text=fold_txt, font_size=12, screen_space=True,
+                      anchor="middle-left",
+                      material=gfx.TextMaterial(color="#888"))
+        t.local.position = (30, ny, 0)
+        self._ui_scene.add(t)
+        self._legend_btns.append((25, ny - 8, 55, ny + 10, "fold"))
+        # Expand/Net buttons
+        if self._legend_mode == "partial":
+            t2 = gfx.Text(text="[+]", font_size=12, screen_space=True,
+                           anchor="middle-left",
+                           material=gfx.TextMaterial(color="#888"))
+            t2.local.position = (62, ny, 0)
+            self._ui_scene.add(t2)
+            self._legend_btns.append((60, ny - 8, 85, ny + 10, "full_show"))
         tn = gfx.Text(text="Net >", font_size=12, screen_space=True,
                        anchor="middle-left",
                        material=gfx.TextMaterial(color="#888"))
-        tn.local.position = (30, ny, 0)
+        tn.local.position = (100, ny, 0)
         self._ui_scene.add(tn)
+        self._legend_btns.append((95, ny - 8, 145, ny + 10, "network"))
 
     # ------------------------------------------------------------------
     # Tooltip
@@ -653,14 +682,32 @@ class MetroMapRenderer:
                         return
             return
 
-        # Legend "Net" button click
-        lh = self._canvas.get_logical_size()[1] or 900
-        ny = lh - 40 - len(self._lines) * 32 - 10
-        if 25 <= event["x"] <= 80 and ny - 8 <= event["y"] <= ny + 10:
-            self._page_stack.append({"type": "network"})
-            self._rebuild_ui()
-            self._canvas.request_draw(self._render_frame)
-            return
+        # Legend button clicks
+        for x1, y1, x2, y2, action in getattr(self, "_legend_btns", []):
+            if x1 <= event["x"] <= x2 and y1 <= event["y"] <= y2:
+                if action == "expand":
+                    self._legend_mode = "partial"
+                elif action == "fold":
+                    self._legend_mode = "full_hide"
+                elif action == "full_show":
+                    self._legend_mode = "full_show"
+                elif action == "network":
+                    self._page_stack.append({"type": "network"})
+                self._rebuild_ui()
+                self._canvas.request_draw(self._render_frame)
+                return
+
+        # Legend line click → toggle hide
+        for x1, y1, x2, y2, ln in getattr(self, "_legend_items", []):
+            if x1 <= event["x"] <= x2 and y1 <= event["y"] <= y2:
+                if ln.id in self._hidden_lines:
+                    self._hidden_lines.discard(ln.id)
+                else:
+                    self._hidden_lines.add(ln.id)
+                self._rebuild_map()
+                self._rebuild_ui()
+                self._canvas.request_draw(self._render_frame)
+                return
 
         # Label click → hide terminal label
         for lx1, ly1, lx2, ly2, ln in self._label_positions:

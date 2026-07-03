@@ -12,6 +12,7 @@ import pygfx as gfx
 from rendercanvas.auto import RenderCanvas, loop
 
 from spline import catmull_rom_spline, build_key_points, line_identifier
+from lang import t, toggle_language
 
 # ---------------------------------------------------------------------------
 # Style
@@ -308,7 +309,7 @@ class MetroMapRenderer:
 
         if self._legend_mode == "full_hide":
             # Just a small expand icon
-            t = gfx.Text(text="[+]", font_size=16, screen_space=True,
+            t = gfx.Text(text=t("expand"), font_size=16, screen_space=True,
                           anchor="middle-left",
                           material=gfx.TextMaterial(color="#888"))
             t.local.position = (30, y0, 0)
@@ -340,7 +341,7 @@ class MetroMapRenderer:
         # Bottom buttons
         ny = y0 - len(self._lines) * 32 - 10
         # Fold button
-        fold_txt = "[-]" if self._legend_mode == "full_show" else "[_]"
+        fold_txt = t("full_fold") if self._legend_mode == "full_show" else t("fold")
         t = gfx.Text(text=fold_txt, font_size=12, screen_space=True,
                       anchor="middle-left",
                       material=gfx.TextMaterial(color="#888"))
@@ -349,13 +350,13 @@ class MetroMapRenderer:
         self._legend_btns.append((25, ny - 8, 55, ny + 10, "fold"))
         # Expand/Net buttons
         if self._legend_mode == "partial":
-            t2 = gfx.Text(text="[+]", font_size=12, screen_space=True,
+            t2 = gfx.Text(text=t("expand"), font_size=12, screen_space=True,
                            anchor="middle-left",
                            material=gfx.TextMaterial(color="#888"))
             t2.local.position = (62, ny, 0)
             self._ui_scene.add(t2)
             self._legend_btns.append((60, ny - 8, 85, ny + 10, "full_show"))
-        tn = gfx.Text(text="Net >", font_size=12, screen_space=True,
+        tn = gfx.Text(text=t("net_btn"), font_size=12, screen_space=True,
                        anchor="middle-left",
                        material=gfx.TextMaterial(color="#888"))
         tn.local.position = (100, ny, 0)
@@ -471,9 +472,9 @@ class MetroMapRenderer:
         t.local.position = (30, y, 0); self._ui_scene.add(t)
         y -= 40
         for item in [
-            f"Type: {st.station_type.value}",
+            f"Type: {st.station_type.display_name}",
             f"Position: ({st.position[0]:.1f}, {st.position[1]:.1f}, {st.position[2]:.1f})",
-            f"Lines: {len(slines)}",
+            t("lines_label") + f": {len(slines)}",
         ]:
             t = gfx.Text(text=item, font_size=15, screen_space=True,
                           anchor="top-left", material=gfx.TextMaterial(color=fg))
@@ -498,7 +499,7 @@ class MetroMapRenderer:
         length = line_length(ln.route, ln.fine_trajectory)
         is_circ = len(ln.route) >= 2 and ln.route[0].id == ln.route[-1].id
         for item in [
-            f"Stations: {len(ln.route)}{' (circular)' if is_circ else ''}",
+            f"Stations: {len(ln.route)}{t("circular_label") if is_circ else ''}",
             f"Length: {length:.2f} units",
             f"Max speed: {ln.max_speed} km/h",
         ]:
@@ -506,7 +507,7 @@ class MetroMapRenderer:
                           anchor="top-left", material=gfx.TextMaterial(color=fg))
             t.local.position = (40, y, 0); self._ui_scene.add(t); y -= 24
         y -= 10
-        t = gfx.Text(text="Route:", font_size=15, screen_space=True,
+        t = gfx.Text(text=t("route_label") + ":", font_size=15, screen_space=True,
                       anchor="top-left", material=gfx.TextMaterial(color=fg))
         t.local.position = (40, y, 0); self._ui_scene.add(t); y -= 22
         for s in ln.route:
@@ -519,7 +520,7 @@ class MetroMapRenderer:
     def _draw_network_page(self, fg, lw, lh):
         from spline import line_length
         y = lh - 40
-        t = gfx.Text(text="Line Network", font_size=22, screen_space=True,
+        t = gfx.Text(text=t("line_network_title"), font_size=22, screen_space=True,
                       anchor="top-left", material=gfx.TextMaterial(color=fg))
         t.local.position = (30, y, 0); self._ui_scene.add(t)
         y -= 40
@@ -534,10 +535,10 @@ class MetroMapRenderer:
 
     def _detail_btns(self, fg, lw, lh):
         """Back and close buttons."""
-        t = gfx.Text(text="< Back", font_size=15, screen_space=True,
+        t = gfx.Text(text=t("back"), font_size=15, screen_space=True,
                       anchor="top-left", material=gfx.TextMaterial(color="#6af"))
         t.local.position = (30, lh - 10, 0); self._ui_scene.add(t)
-        t = gfx.Text(text="X Close", font_size=15, screen_space=True,
+        t = gfx.Text(text=t("close"), font_size=15, screen_space=True,
                       anchor="top-right", material=gfx.TextMaterial(color="#f66"))
         t.local.position = (lw - 30, lh - 10, 0); self._ui_scene.add(t)
 
@@ -549,6 +550,11 @@ class MetroMapRenderer:
         k = event.get("key", "")
         if k in ("b", "B"):
             self._dark_mode = not self._dark_mode
+            self._rebuild_map()
+            self._rebuild_ui()
+            self._canvas.request_draw(self._render_frame)
+        elif k in ("l", "L"):
+            toggle_language()
             self._rebuild_map()
             self._rebuild_ui()
             self._canvas.request_draw(self._render_frame)
@@ -638,43 +644,29 @@ class MetroMapRenderer:
         dy = event["y"] - self._pointer_down_pos[1]
         self._pointer_down_pos = None
         if (dx*dx + dy*dy)**0.5 > 5:
-            return  # drag, not click
+            return
 
-        # Legend click
-        ly0 = self._canvas.get_logical_size()[1] - 40
-        for i, ln in enumerate(self._lines):
-            ly = ly0 - i * 32
-            if 25 <= event["x"] <= 180 and ly - 10 <= event["y"] <= ly + 10:
-                if ln.id in self._hidden_lines:
-                    self._hidden_lines.discard(ln.id)
-                else:
-                    self._hidden_lines.add(ln.id)
-                self._rebuild_map()
-                self._rebuild_ui()
-                self._canvas.request_draw(self._render_frame)
-                return
+        sx = event["x"]
+        sy_top = event["y"]  # mouse: 0=top, lh=bottom
+        lw, lh = self._canvas.get_logical_size()
+        lw, lh = lw or 1280, lh or 900
+        sy_btm = lh - sy_top  # bottom-origin for UI camera
 
-        # Detail page click
+        # --- Detail page ---
         if self._page_stack:
-            lw, lh = self._canvas.get_logical_size()
-            lw, lh = lw or 1280, lh or 900
-            sx, sy = event["x"], event["y"]
-            # Back button (top-left)
-            if sx < 80 and sy > lh - 30:
+            if sx < 80 and sy_top < 30:
                 self._page_stack.pop()
                 self._rebuild_ui()
                 self._canvas.request_draw(self._render_frame)
                 return
-            # Close button (top-right)
-            if sx > lw - 80 and sy > lh - 30:
+            if sx > lw - 80 and sy_top < 30:
                 self._page_stack.clear()
                 self._rebuild_ui()
                 self._canvas.request_draw(self._render_frame)
                 return
-            # Hotspot navigation (screen Y from bottom, hotspot Y from top)
             for hs in self._detail_hotspots():
                 if (hs["x"] <= sx <= hs["x"] + hs["w"]
-                        and hs["y"] <= (lh - sy) <= hs["y"] + hs["h"]):
+                        and hs["y"] <= sy_top <= hs["y"] + hs["h"]):
                     if hs["action"] == "push":
                         self._page_stack.append(hs["page"])
                         self._rebuild_ui()
@@ -682,24 +674,20 @@ class MetroMapRenderer:
                         return
             return
 
-        # Legend button clicks
+        # --- Legend buttons (bottom-origin) ---
         for x1, y1, x2, y2, action in getattr(self, "_legend_btns", []):
-            if x1 <= event["x"] <= x2 and y1 <= event["y"] <= y2:
-                if action == "expand":
-                    self._legend_mode = "partial"
-                elif action == "fold":
-                    self._legend_mode = "full_hide"
-                elif action == "full_show":
-                    self._legend_mode = "full_show"
-                elif action == "network":
-                    self._page_stack.append({"type": "network"})
+            if x1 <= sx <= x2 and y1 <= sy_btm <= y2:
+                if action == "expand":      self._legend_mode = "partial"
+                elif action == "fold":      self._legend_mode = "full_hide"
+                elif action == "full_show": self._legend_mode = "full_show"
+                elif action == "network":   self._page_stack.append({"type": "network"})
                 self._rebuild_ui()
                 self._canvas.request_draw(self._render_frame)
                 return
 
-        # Legend line click → toggle hide
+        # --- Legend lines ---
         for x1, y1, x2, y2, ln in getattr(self, "_legend_items", []):
-            if x1 <= event["x"] <= x2 and y1 <= event["y"] <= y2:
+            if x1 <= sx <= x2 and y1 <= sy_btm <= y2:
                 if ln.id in self._hidden_lines:
                     self._hidden_lines.discard(ln.id)
                 else:
@@ -709,30 +697,27 @@ class MetroMapRenderer:
                 self._canvas.request_draw(self._render_frame)
                 return
 
-        # Label click → hide terminal label
+        # --- Label click ---
         for lx1, ly1, lx2, ly2, ln in self._label_positions:
-            if lx1 <= event["x"] <= lx2 and ly1 <= event["y"] <= ly2:
+            if lx1 <= sx <= lx2 and ly1 <= sy_btm <= ly2:
                 ln.hide_terminal_label = True
                 self._rebuild_map()
                 self._rebuild_ui()
                 self._canvas.request_draw(self._render_frame)
-                print(f"[label] hidden for {line_identifier(ln.id, ln.name)}")
                 return
 
-        # Map click
-        wx, wy = self._screen_to_world(event["x"], event["y"])
+        # --- Map click ---
+        wx, wy = self._screen_to_world(sx, sy_top)
         hit = self._hit_test(wx, wy)
         if hit:
             if hit["type"] == "station":
                 self._page_stack.append({
-                    "type": "station",
-                    "station": hit["station"],
+                    "type": "station", "station": hit["station"],
                     "lines": hit["lines"],
                 })
             elif hit["type"] == "line":
                 self._page_stack.append({
-                    "type": "line",
-                    "line": hit["line"],
+                    "type": "line", "line": hit["line"],
                 })
             self._rebuild_ui()
             self._canvas.request_draw(self._render_frame)

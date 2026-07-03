@@ -251,9 +251,10 @@ def segment_length(route: list,
 def line_identifier(line_id: int, line_name: str | None) -> str:
     """Return the standard identifier string for a line.
 
-    Named line:   "name（id）"    e.g. "Urban Line（1）"
-    Unnamed line:  "地铁id号线"   e.g. "地铁2号线"
+    Named line:   "name（id）"
+    Unnamed line: uses lang.t("line_unnamed")
     """
     if line_name:
         return f"{line_name}（{line_id}）"
-    return f"地铁{line_id}号线"
+    from lang import t
+    return t("line_unnamed", id=line_id)

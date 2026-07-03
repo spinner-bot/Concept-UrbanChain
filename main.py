@@ -3,11 +3,16 @@ from enum import Enum
 
 class StationType(Enum):
     """Station construction type."""
-    UNDERGROUND = "underground"   # 地下站
-    GROUND = "ground"             # 地面站
-    ELEVATED = "elevated"         # 地上站
-    BUILDING = "building"         # 建筑站（预留）
-    STRUCTURE = "structure"       # 结构站（预留）
+    UNDERGROUND = "underground"
+    GROUND = "ground"
+    ELEVATED = "elevated"
+    BUILDING = "building"
+    STRUCTURE = "structure"
+
+    @property
+    def display_name(self) -> str:
+        from lang import t
+        return t(self.value)
 
 
 class Station:

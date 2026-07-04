@@ -278,11 +278,11 @@ class MetroMapRenderer:
                 spx += nx * offset
                 spy += ny * offset
                 fg_c = "#fff" if self._dark_mode else "#111"
-                t = gfx.Text(text=label, font_size=font_sz,
+                txt = gfx.Text(text=label, font_size=font_sz,
                               screen_space=True, anchor="middle-center",
                               material=gfx.TextMaterial(color=fg_c))
-                t.local.position = (spx, spy, 0)
-                self._scene.add(t)
+                txt.local.position = (spx, spy, 0)
+                self._scene.add(txt)
                 # Store for click detection
                 tw = len(label) * font_sz * 0.55
                 self._label_positions.append((spx - tw/2, spy - font_sz,
@@ -309,11 +309,11 @@ class MetroMapRenderer:
 
         if self._legend_mode == "full_hide":
             # Just a small expand icon
-            t = gfx.Text(text=t("expand"), font_size=16, screen_space=True,
-                          anchor="middle-left",
-                          material=gfx.TextMaterial(color="#888"))
-            t.local.position = (30, y0, 0)
-            self._ui_scene.add(t)
+            txt = gfx.Text(text=t("expand"), font_size=16, screen_space=True,
+                           anchor="middle-left",
+                           material=gfx.TextMaterial(color="#888"))
+            txt.local.position = (30, y0, 0)
+            self._ui_scene.add(txt)
             self._legend_btns.append((25, y0 - 12, 60, y0 + 12, "expand"))
             return
 
@@ -331,22 +331,22 @@ class MetroMapRenderer:
                 indices=np.int32([[0, 1, 2], [0, 2, 3]]),
             )
             self._ui_scene.add(gfx.Mesh(geo, gfx.MeshBasicMaterial(color=c)))
-            t = gfx.Text(text=label, font_size=14, screen_space=True,
+            txt = gfx.Text(text=label, font_size=14, screen_space=True,
                           anchor="middle-left",
                           material=gfx.TextMaterial(color=lc))
-            t.local.position = (58, y + 7, 0)
-            self._ui_scene.add(t)
+            txt.local.position = (58, y + 7, 0)
+            self._ui_scene.add(txt)
             self._legend_items.append((25, y - 4, 200, y + 20, ln))
 
         # Bottom buttons
         ny = y0 - len(self._lines) * 32 - 10
         # Fold button
         fold_txt = t("full_fold") if self._legend_mode == "full_show" else t("fold")
-        t = gfx.Text(text=fold_txt, font_size=12, screen_space=True,
-                      anchor="middle-left",
-                      material=gfx.TextMaterial(color="#888"))
-        t.local.position = (30, ny, 0)
-        self._ui_scene.add(t)
+        btn = gfx.Text(text=fold_txt, font_size=12, screen_space=True,
+                       anchor="middle-left",
+                       material=gfx.TextMaterial(color="#888"))
+        btn.local.position = (30, ny, 0)
+        self._ui_scene.add(btn)
         self._legend_btns.append((25, ny - 8, 55, ny + 10, "fold"))
         # Expand/Net buttons
         if self._legend_mode == "partial":
@@ -397,10 +397,10 @@ class MetroMapRenderer:
             indices=np.int32([[0,1,2],[0,2,3]]))
         self._ui_scene.add(gfx.Mesh(geo, gfx.MeshBasicMaterial(color=bg)))
         for i, l in enumerate(lines):
-            t = gfx.Text(text=l, font_size=font_sz, screen_space=True,
+            txt = gfx.Text(text=l, font_size=font_sz, screen_space=True,
                           anchor="top-left", material=gfx.TextMaterial(color=fg))
-            t.local.position = (bx+pad, by+box_h-pad-i*line_h, 0)
-            self._ui_scene.add(t)
+            txt.local.position = (bx+pad, by+box_h-pad-i*line_h, 0)
+            self._ui_scene.add(txt)
 
     # ------------------------------------------------------------------
     # Detail pages
@@ -466,35 +466,35 @@ class MetroMapRenderer:
         slines = page.get("lines", [])
         y = lh - 40
         # Title
-        t = gfx.Text(text=f"[{st.id:04d}] {st.name}", font_size=22,
+        txt = gfx.Text(text=f"[{st.id:04d}] {st.name}", font_size=22,
                       screen_space=True, anchor="top-left",
                       material=gfx.TextMaterial(color=fg))
-        t.local.position = (30, y, 0); self._ui_scene.add(t)
+        txt.local.position = (30, y, 0); self._ui_scene.add(txt)
         y -= 40
         for item in [
             f"Type: {st.station_type.display_name}",
             f"Position: ({st.position[0]:.1f}, {st.position[1]:.1f}, {st.position[2]:.1f})",
             t("lines_label") + f": {len(slines)}",
         ]:
-            t = gfx.Text(text=item, font_size=15, screen_space=True,
+            txt = gfx.Text(text=item, font_size=15, screen_space=True,
                           anchor="top-left", material=gfx.TextMaterial(color=fg))
-            t.local.position = (40, y, 0); self._ui_scene.add(t); y -= 24
+            txt.local.position = (40, y, 0); self._ui_scene.add(txt); y -= 24
         y -= 10
         for ln in slines:
             lid = line_identifier(ln.id, ln.name)
-            t = gfx.Text(text=f"  > {lid}", font_size=15, screen_space=True,
+            txt = gfx.Text(text=f"  > {lid}", font_size=15, screen_space=True,
                           anchor="top-left",
                           material=gfx.TextMaterial(color="#6af"))
-            t.local.position = (50, y, 0); self._ui_scene.add(t); y -= 22
+            txt.local.position = (50, y, 0); self._ui_scene.add(txt); y -= 22
 
     def _draw_line_page(self, page, fg, lw, lh):
         ln = page["line"]
         from spline import line_length
         y = lh - 40
-        t = gfx.Text(text=line_identifier(ln.id, ln.name), font_size=22,
+        txt = gfx.Text(text=line_identifier(ln.id, ln.name), font_size=22,
                       screen_space=True, anchor="top-left",
                       material=gfx.TextMaterial(color=fg))
-        t.local.position = (30, y, 0); self._ui_scene.add(t)
+        txt.local.position = (30, y, 0); self._ui_scene.add(txt)
         y -= 40
         length = line_length(ln.route, ln.fine_trajectory)
         is_circ = len(ln.route) >= 2 and ln.route[0].id == ln.route[-1].id
@@ -503,44 +503,44 @@ class MetroMapRenderer:
             f"Length: {length:.2f} units",
             f"Max speed: {ln.max_speed} km/h",
         ]:
-            t = gfx.Text(text=item, font_size=15, screen_space=True,
+            txt = gfx.Text(text=item, font_size=15, screen_space=True,
                           anchor="top-left", material=gfx.TextMaterial(color=fg))
-            t.local.position = (40, y, 0); self._ui_scene.add(t); y -= 24
+            txt.local.position = (40, y, 0); self._ui_scene.add(txt); y -= 24
         y -= 10
-        t = gfx.Text(text=t("route_label") + ":", font_size=15, screen_space=True,
+        txt = gfx.Text(text=t("route_label") + ":", font_size=15, screen_space=True,
                       anchor="top-left", material=gfx.TextMaterial(color=fg))
-        t.local.position = (40, y, 0); self._ui_scene.add(t); y -= 22
+        txt.local.position = (40, y, 0); self._ui_scene.add(txt); y -= 22
         for s in ln.route:
             xfer = f" [T:{len(self._station_lines.get(s.id, []))}]" if len(self._station_lines.get(s.id, [])) >= 2 else ""
-            t = gfx.Text(text=f"  > {s.name}{xfer}", font_size=14,
+            txt = gfx.Text(text=f"  > {s.name}{xfer}", font_size=14,
                           screen_space=True, anchor="top-left",
                           material=gfx.TextMaterial(color="#6af"))
-            t.local.position = (50, y, 0); self._ui_scene.add(t); y -= 20
+            txt.local.position = (50, y, 0); self._ui_scene.add(txt); y -= 20
 
     def _draw_network_page(self, fg, lw, lh):
         from spline import line_length
         y = lh - 40
-        t = gfx.Text(text=t("line_network_title"), font_size=22, screen_space=True,
+        txt = gfx.Text(text=t("line_network_title"), font_size=22, screen_space=True,
                       anchor="top-left", material=gfx.TextMaterial(color=fg))
-        t.local.position = (30, y, 0); self._ui_scene.add(t)
+        txt.local.position = (30, y, 0); self._ui_scene.add(txt)
         y -= 40
         for ln in self._lines:
             is_circ = len(ln.route) >= 2 and ln.route[0].id == ln.route[-1].id
             length = line_length(ln.route, ln.fine_trajectory)
             mid = f"(circ) term: {ln.route[0].name}" if is_circ else f"{ln.route[0].name} - {ln.route[-1].name}"
-            txt = f"{line_identifier(ln.id, ln.name)}  {mid}  [{len(ln.route)} stn | {length:.1f} u]"
-            t = gfx.Text(text=txt, font_size=14, screen_space=True,
+            label = f"{line_identifier(ln.id, ln.name)}  {mid}  [{len(ln.route)} stn | {length:.1f} u]"
+            txt = gfx.Text(text=label, font_size=14, screen_space=True,
                           anchor="top-left", material=gfx.TextMaterial(color="#6af"))
-            t.local.position = (40, y, 0); self._ui_scene.add(t); y -= 22
+            txt.local.position = (40, y, 0); self._ui_scene.add(txt); y -= 22
 
     def _detail_btns(self, fg, lw, lh):
         """Back and close buttons."""
-        t = gfx.Text(text=t("back"), font_size=15, screen_space=True,
+        btn_back = gfx.Text(text=t("back"), font_size=15, screen_space=True,
                       anchor="top-left", material=gfx.TextMaterial(color="#6af"))
-        t.local.position = (30, lh - 10, 0); self._ui_scene.add(t)
-        t = gfx.Text(text=t("close"), font_size=15, screen_space=True,
+        btn_back.local.position = (30, lh - 10, 0); self._ui_scene.add(btn_back)
+        btn_close = gfx.Text(text=t("close"), font_size=15, screen_space=True,
                       anchor="top-right", material=gfx.TextMaterial(color="#f66"))
-        t.local.position = (lw - 30, lh - 10, 0); self._ui_scene.add(t)
+        btn_close.local.position = (lw - 30, lh - 10, 0); self._ui_scene.add(btn_close)
 
     # ------------------------------------------------------------------
     # Input

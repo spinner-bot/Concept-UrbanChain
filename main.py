@@ -41,7 +41,7 @@ from spline import line_identifier  # noqa: E402 — used by renderer via spline
 
 
 class Line:
-    def __init__(self, id: int, name: str, route: list, max_speed: float,
+    def __init__(self, id: int, name: str, route: list[Station | int], max_speed: float,
                  color: tuple = (255, 0, 0),
                  fine_trajectory: list = None,
                  smooth_tension: float = 0.5,
@@ -79,6 +79,15 @@ class MetroNetwork:
         self.stations: dict[int, Station] = {}
 
     def add_line(self, line: Line) -> None:
+        # Resolve int IDs to Station objects
+        for i, item in enumerate(line.route):
+            if isinstance(item, int):
+                if item not in self.stations:
+                    raise KeyError(
+                        f"Station ID {item} not found in network. "
+                        "Add the station first or ensure it exists."
+                    )
+                line.route[i] = self.stations[item]
         self.lines.append(line)
         for station in line.route:
             if station.id not in self.stations:
@@ -172,10 +181,19 @@ def _create_test_network() -> MetroNetwork:
         ],
     )
 
+    # -- Line 4 (Orange / ID-based route demo) --------------------------------
+    #  Same as [s0, s1, s5, s6] but using station IDs
+    line4 = Line(
+        id=4, name="ID Demo", max_speed=60,
+        route=[0, 1, 5, 6],
+        color=(220, 140, 50),
+    )
+
     network = MetroNetwork()
     network.add_line(line1)
     network.add_line(line2)
     network.add_line(line3)
+    network.add_line(line4)
     return network
 
 

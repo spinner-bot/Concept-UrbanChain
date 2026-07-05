@@ -10,11 +10,13 @@ To add a new map:
 
 from maps.test_network import create_test_network
 from maps.Beijing_Metro import create_beijing_metro
+from maps.Shanghai_Metro import create_shanghai_metro
 
 # Registry:  key → (display_name, factory_function)
 MAP_REGISTRY: dict[str, tuple[str, callable]] = {
     "test": ("Test Network", create_test_network),
     "beijing": ("Beijing Metro", create_beijing_metro),
+    "shanghai": ("Shanghai Metro", create_shanghai_metro),
 }
 
 

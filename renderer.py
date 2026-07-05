@@ -406,141 +406,339 @@ class MetroMapRenderer:
     # Detail pages
     # ------------------------------------------------------------------
     def _detail_hotspots(self):
-        """Return list of clickable zones in current detail page."""
-        hs = []
+        """Return list of clickable zones in current detail page.
+        Populated by the draw functions via _detail_hs list."""
+        self._detail_hs = []
         page = self._page_stack[-1] if self._page_stack else None
         if not page:
-            return hs
+            return self._detail_hs
         pg = page["type"]
         lw, lh = self._canvas.get_logical_size()
         lw, lh = lw or 1280, lh or 900
-        y = lh - 90
+
         if pg == "station":
-            y -= 85  # skip header + info
-            for ln in page.get("lines", []):
-                hs.append({"x": 50, "y": y, "w": 300, "h": 26,
-                           "action": "push",
-                           "page": {"type": "line", "line": ln}})
+            st = page["station"]
+            slines = page.get("lines", [])
+            card_x, card_bottom, card_w, ix, iw = self._card_layout(lw, lh)
+            body_lines = 3
+            list_lines = len(slines)
+            total_h = 60 + body_lines * 28 + 16 + list_lines * 26 + 50
+            header_h = 60
+            y = card_bottom - header_h - 18 - body_lines * 28 - 6 - 2 - 14 - 26
+            for ln in slines:
+                self._detail_hs.append({
+                    "x": ix, "y": y, "w": iw, "h": 26,
+                    "action": "push",
+                    "page": {"type": "line", "line": ln}})
                 y -= 26
         elif pg == "line":
             ln = page["line"]
-            y -= 85
-            y -= 40  # skip route header
+            card_x, card_bottom, card_w, ix, iw = self._card_layout(lw, lh)
+            list_lines = len(ln.route)
+            total_h = 60 + 3 * 28 + 16 + 26 + list_lines * 24 + 50
+            header_h = 60
+            y = card_bottom - header_h - 18 - 3 * 28 - 6 - 2 - 14 - 26
             for s in ln.route:
-                hs.append({"x": 50, "y": y, "w": 300, "h": 24,
-                           "action": "push",
-                           "page": {"type": "station", "station": s,
-                                    "lines": self._station_lines.get(s.id, [ln])}})
+                self._detail_hs.append({
+                    "x": ix, "y": y, "w": iw, "h": 24,
+                    "action": "push",
+                    "page": {"type": "station", "station": s,
+                             "lines": self._station_lines.get(s.id, [ln])}})
                 y -= 24
         elif pg == "network":
-            y -= 50
+            card_x, card_bottom, card_w, ix, iw = self._card_layout(lw, lh)
+            header_h = 56
+            y = card_bottom - header_h - 16
             for ln in self._lines:
-                hs.append({"x": 40, "y": y, "w": 600, "h": 26,
-                           "action": "push",
-                           "page": {"type": "line", "line": ln}})
-                y -= 26
-        return hs
+                self._detail_hs.append({
+                    "x": ix, "y": y - 34, "w": iw, "h": 34,
+                    "action": "push",
+                    "page": {"type": "line", "line": ln}})
+                y -= 34
+        return self._detail_hs
+    # ------------------------------------------------------------------
+    # Panel helper — draws a filled rectangle in UI space
+    # ------------------------------------------------------------------
+    def _draw_rect(self, x, y, w, h, color):
+        geo = gfx.Geometry(
+            positions=np.float32([(x, y, 0), (x + w, y, 0),
+                                  (x + w, y + h, 0), (x, y + h, 0)]),
+            indices=np.int32([[0, 1, 2], [0, 2, 3]]))
+        self._ui_scene.add(gfx.Mesh(geo, gfx.MeshBasicMaterial(color=color)))
+
+    def _card_layout(self, lw, lh):
+        """Return (card_x, card_y, card_w, card_bottom, inner_x, inner_w)."""
+        margin = 30
+        card_w = min(lw - margin * 2, 680)
+        card_x = (lw - card_w) / 2
+        card_bottom = lh - margin
+        inner_x = card_x + 24
+        inner_w = card_w - 48
+        return card_x, card_bottom, card_w, inner_x, inner_w
+
     def _draw_detail_page(self):
         page = self._page_stack[-1]
         pg = page["type"]
-        fg = "#ddd" if self._dark_mode else "#222"
-        bg = (0.10, 0.10, 0.12, 0.94) if self._dark_mode else (0.94, 0.94, 0.96, 0.94)
         lw, lh = self._canvas.get_logical_size()
         lw, lh = lw or 1280, lh or 900
-        # Full-screen bg
-        geo = gfx.Geometry(
-            positions=np.float32([(0,0,0),(lw,0,0),(lw,lh,0),(0,lh,0)]),
-            indices=np.int32([[0,1,2],[0,2,3]]))
-        self._ui_scene.add(gfx.Mesh(geo, gfx.MeshBasicMaterial(color=bg)))
-        if pg == "station":
-            self._draw_station_page(page, fg, lw, lh)
-        elif pg == "line":
-            self._draw_line_page(page, fg, lw, lh)
-        elif pg == "network":
-            self._draw_network_page(fg, lw, lh)
-        # Nav buttons
-        self._detail_btns(fg, lw, lh)
 
-    def _draw_station_page(self, page, fg, lw, lh):
+        # Semi-transparent overlay behind card
+        dim_bg = (0.08, 0.08, 0.10, 0.72) if self._dark_mode else (0.12, 0.12, 0.14, 0.55)
+        self._draw_rect(0, 0, lw, lh, dim_bg)
+
+        if pg == "station":
+            self._draw_station_page(page, lw, lh)
+        elif pg == "line":
+            self._draw_line_page(page, lw, lh)
+        elif pg == "network":
+            self._draw_network_page(page, lw, lh)
+
+        # Nav buttons — always at screen edges
+        self._detail_btns(lw, lh)
+
+    # ------------------------------------------------------------------
+    # Station page
+    # ------------------------------------------------------------------
+    def _draw_station_page(self, page, lw, lh):
         st = page["station"]
         slines = page.get("lines", [])
-        y = lh - 40
-        # Title
-        txt = gfx.Text(text=f"[{st.id:04d}] {st.name}", font_size=30,
+        card_x, card_bottom, card_w, ix, iw = self._card_layout(lw, lh)
+
+        fg = "#eee" if self._dark_mode else "#1a1a1a"
+        sub_fg = "#bbb" if self._dark_mode else "#555"
+        card_bg = (0.16, 0.16, 0.20, 0.96) if self._dark_mode else (0.97, 0.97, 0.99, 0.96)
+        header_bg = (0.20, 0.20, 0.26, 1.0) if self._dark_mode else (0.22, 0.24, 0.30, 1.0)
+        header_fg = "#fff"
+        row_bg = (0.18, 0.18, 0.23, 0.50) if self._dark_mode else (0.92, 0.93, 0.95, 0.50)
+
+        # Compute total height
+        body_lines = 3  # type, position, lines count
+        list_lines = len(slines)
+        total_h = 60 + body_lines * 28 + 16 + list_lines * 26 + 50
+        card_top = card_bottom - total_h
+
+        # Card background
+        self._draw_rect(card_x, card_top, card_w, total_h, card_bg)
+
+        # Header bar
+        header_h = 60
+        self._draw_rect(card_x, card_bottom - header_h, card_w, header_h, header_bg)
+        # Accent dot (station color from first line)
+        if slines:
+            dot_color = _rgba(slines[0].color)
+            self._draw_rect(card_x + 16, card_bottom - header_h + 16, 8, 28, dot_color)
+        title_x = ix + 16 if slines else ix
+        txt = gfx.Text(text=f"[{st.id:04d}]  {st.name}", font_size=28,
                       screen_space=True, anchor="top-left",
-                      material=gfx.TextMaterial(color=fg))
-        txt.local.position = (30, y, 0); self._ui_scene.add(txt)
-        y -= 40
-        for item in [
-            f"Type: {st.station_type.display_name}",
-            f"Position: ({st.position[0]:.1f}, {st.position[1]:.1f}, {st.position[2]:.1f})",
-            t("lines_label") + f": {len(slines)}",
-        ]:
-            txt = gfx.Text(text=item, font_size=19, screen_space=True,
-                          anchor="top-left", material=gfx.TextMaterial(color=fg))
-            txt.local.position = (40, y, 0); self._ui_scene.add(txt); y -= 28
-        y -= 10
-        for ln in slines:
+                      material=gfx.TextMaterial(color=header_fg))
+        txt.local.position = (title_x, card_bottom - header_h + 16, 0)
+        self._ui_scene.add(txt)
+
+        # Body
+        y = card_bottom - header_h - 18
+        info_items = [
+            (t("station_type_label"), st.station_type.display_name),
+            (t("position_label"),
+             f"({st.position[0]:.1f}, {st.position[1]:.1f}, {st.position[2]:.1f})"),
+            (t("lines_label"), str(len(slines))),
+        ]
+        for label, value in info_items:
+            txt = gfx.Text(text=f"{label}:  {value}", font_size=18,
+                          screen_space=True, anchor="top-left",
+                          material=gfx.TextMaterial(color=fg))
+            txt.local.position = (ix, y, 0); self._ui_scene.add(txt)
+            y -= 28
+
+        # Separator
+        y -= 6
+        sep_c = (0.30, 0.30, 0.35, 0.5) if self._dark_mode else (0.82, 0.82, 0.85, 0.6)
+        self._draw_rect(ix, y, iw, 2, sep_c)
+        y -= 14
+
+        # Lines heading
+        txt = gfx.Text(text=t("lines_label") + ":", font_size=17,
+                      screen_space=True, anchor="top-left",
+                      material=gfx.TextMaterial(color=sub_fg))
+        txt.local.position = (ix, y, 0); self._ui_scene.add(txt)
+        y -= 26
+
+        for i, ln in enumerate(slines):
             lid = line_identifier(ln.id, ln.name)
-            txt = gfx.Text(text=f"  > {lid}", font_size=18, screen_space=True,
+            row_top = y
+            # Row background (subtle stripe)
+            if i % 2 == 0:
+                self._draw_rect(ix - 6, row_top - 2, iw + 12, 26, row_bg)
+            # Color dot
+            dot_c = _rgba(ln.color)
+            self._draw_rect(ix, row_top + 6, 6, 12, dot_c)
+            txt = gfx.Text(text=lid, font_size=18, screen_space=True,
                           anchor="top-left",
                           material=gfx.TextMaterial(color="#6af"))
-            txt.local.position = (50, y, 0); self._ui_scene.add(txt); y -= 26
+            txt.local.position = (ix + 16, row_top + 2, 0)
+            self._ui_scene.add(txt)
+            y -= 26
 
-    def _draw_line_page(self, page, fg, lw, lh):
+    # ------------------------------------------------------------------
+    # Line page
+    # ------------------------------------------------------------------
+    def _draw_line_page(self, page, lw, lh):
         ln = page["line"]
         from spline import line_length
-        y = lh - 40
-        txt = gfx.Text(text=line_identifier(ln.id, ln.name), font_size=30,
-                      screen_space=True, anchor="top-left",
-                      material=gfx.TextMaterial(color=fg))
-        txt.local.position = (30, y, 0); self._ui_scene.add(txt)
-        y -= 40
+        card_x, card_bottom, card_w, ix, iw = self._card_layout(lw, lh)
+
+        fg = "#eee" if self._dark_mode else "#1a1a1a"
+        sub_fg = "#bbb" if self._dark_mode else "#555"
+        card_bg = (0.16, 0.16, 0.20, 0.96) if self._dark_mode else (0.97, 0.97, 0.99, 0.96)
+        header_bg = (0.20, 0.20, 0.26, 1.0) if self._dark_mode else (0.22, 0.24, 0.30, 1.0)
+        header_fg = "#fff"
+        row_bg = (0.18, 0.18, 0.23, 0.50) if self._dark_mode else (0.92, 0.93, 0.95, 0.50)
+
         length = line_length(ln.route, ln.fine_trajectory)
         is_circ = len(ln.route) >= 2 and ln.route[0].id == ln.route[-1].id
-        for item in [
-            f"Stations: {len(ln.route)}{t("circular_label") if is_circ else ''}",
-            f"Length: {length:.2f} units",
-            f"Max speed: {ln.max_speed} km/h",
-        ]:
-            txt = gfx.Text(text=item, font_size=19, screen_space=True,
-                          anchor="top-left", material=gfx.TextMaterial(color=fg))
-            txt.local.position = (40, y, 0); self._ui_scene.add(txt); y -= 28
-        y -= 10
-        txt = gfx.Text(text=t("route_label") + ":", font_size=19, screen_space=True,
-                      anchor="top-left", material=gfx.TextMaterial(color=fg))
-        txt.local.position = (40, y, 0); self._ui_scene.add(txt); y -= 22
-        for s in ln.route:
-            xfer = f" [T:{len(self._station_lines.get(s.id, []))}]" if len(self._station_lines.get(s.id, [])) >= 2 else ""
-            txt = gfx.Text(text=f"  > {s.name}{xfer}", font_size=18,
+        list_lines = len(ln.route)
+        total_h = 60 + 3 * 28 + 16 + 26 + list_lines * 24 + 50
+        card_top = card_bottom - total_h
+
+        # Card background
+        self._draw_rect(card_x, card_top, card_w, total_h, card_bg)
+
+        # Header bar
+        header_h = 60
+        self._draw_rect(card_x, card_bottom - header_h, card_w, header_h, header_bg)
+        # Line color accent
+        dot_color = _rgba(ln.color)
+        self._draw_rect(card_x + 16, card_bottom - header_h + 16, 8, 28, dot_color)
+        title_text = line_identifier(ln.id, ln.name)
+        txt = gfx.Text(text=title_text, font_size=28,
+                      screen_space=True, anchor="top-left",
+                      material=gfx.TextMaterial(color=header_fg))
+        txt.local.position = (ix + 16, card_bottom - header_h + 16, 0)
+        self._ui_scene.add(txt)
+
+        # Body — info items
+        y = card_bottom - header_h - 18
+        info_items = [
+            (t("stations_label"),
+             f"{len(ln.route)}{t('circular_label') if is_circ else ''}"),
+            (t("length_label"), f"{length:.2f}"),
+            (t("max_speed_label"), f"{ln.max_speed} km/h"),
+        ]
+        for label, value in info_items:
+            txt = gfx.Text(text=f"{label}:  {value}", font_size=18,
+                          screen_space=True, anchor="top-left",
+                          material=gfx.TextMaterial(color=fg))
+            txt.local.position = (ix, y, 0); self._ui_scene.add(txt)
+            y -= 28
+
+        # Separator
+        y -= 6
+        sep_c = (0.30, 0.30, 0.35, 0.5) if self._dark_mode else (0.82, 0.82, 0.85, 0.6)
+        self._draw_rect(ix, y, iw, 2, sep_c)
+        y -= 14
+
+        # Route heading
+        txt = gfx.Text(text=t("route_label") + ":", font_size=17,
+                      screen_space=True, anchor="top-left",
+                      material=gfx.TextMaterial(color=sub_fg))
+        txt.local.position = (ix, y, 0); self._ui_scene.add(txt)
+        y -= 26
+
+        for i, s in enumerate(ln.route):
+            xfer = f"  [T:{len(self._station_lines.get(s.id, []))}]" if len(self._station_lines.get(s.id, [])) >= 2 else ""
+            row_top = y
+            if i % 2 == 0:
+                self._draw_rect(ix - 6, row_top - 2, iw + 12, 24, row_bg)
+            # Station index marker
+            idx_txt = gfx.Text(text=f"{i+1}", font_size=15,
+                              screen_space=True, anchor="middle-center",
+                              material=gfx.TextMaterial(color=sub_fg))
+            idx_txt.local.position = (ix + 10, row_top + 12, 0)
+            self._ui_scene.add(idx_txt)
+            txt = gfx.Text(text=f"{s.name}{xfer}", font_size=18,
                           screen_space=True, anchor="top-left",
                           material=gfx.TextMaterial(color="#6af"))
-            txt.local.position = (50, y, 0); self._ui_scene.add(txt); y -= 24
+            txt.local.position = (ix + 28, row_top + 2, 0)
+            self._ui_scene.add(txt)
+            y -= 24
 
-    def _draw_network_page(self, fg, lw, lh):
+    # ------------------------------------------------------------------
+    # Network page
+    # ------------------------------------------------------------------
+    def _draw_network_page(self, page, lw, lh):
         from spline import line_length
-        y = lh - 40
-        txt = gfx.Text(text=t("line_network_title"), font_size=30, screen_space=True,
-                      anchor="top-left", material=gfx.TextMaterial(color=fg))
-        txt.local.position = (30, y, 0); self._ui_scene.add(txt)
-        y -= 40
-        for ln in self._lines:
+        card_x, card_bottom, card_w, ix, iw = self._card_layout(lw, lh)
+
+        fg = "#eee" if self._dark_mode else "#1a1a1a"
+        sub_fg = "#bbb" if self._dark_mode else "#555"
+        card_bg = (0.16, 0.16, 0.20, 0.96) if self._dark_mode else (0.97, 0.97, 0.99, 0.96)
+        header_bg = (0.20, 0.20, 0.26, 1.0) if self._dark_mode else (0.22, 0.24, 0.30, 1.0)
+        header_fg = "#fff"
+        row_bg = (0.18, 0.18, 0.23, 0.50) if self._dark_mode else (0.92, 0.93, 0.95, 0.50)
+
+        list_lines = len(self._lines)
+        total_h = 56 + list_lines * 34 + 36
+        card_top = card_bottom - total_h
+
+        # Card background
+        self._draw_rect(card_x, card_top, card_w, total_h, card_bg)
+
+        # Header
+        header_h = 56
+        self._draw_rect(card_x, card_bottom - header_h, card_w, header_h, header_bg)
+        txt = gfx.Text(text=t("line_network_title"), font_size=26,
+                      screen_space=True, anchor="top-left",
+                      material=gfx.TextMaterial(color=header_fg))
+        txt.local.position = (ix, card_bottom - header_h + 12, 0)
+        self._ui_scene.add(txt)
+
+        # Line list
+        y = card_bottom - header_h - 16
+        for i, ln in enumerate(self._lines):
             is_circ = len(ln.route) >= 2 and ln.route[0].id == ln.route[-1].id
             length = line_length(ln.route, ln.fine_trajectory)
-            mid = f"(circ) term: {ln.route[0].name}" if is_circ else f"{ln.route[0].name} - {ln.route[-1].name}"
-            label = f"{line_identifier(ln.id, ln.name)}  {mid}  [{len(ln.route)} stn | {length:.1f} u]"
-            txt = gfx.Text(text=label, font_size=18, screen_space=True,
-                          anchor="top-left", material=gfx.TextMaterial(color="#6af"))
-            txt.local.position = (40, y, 0); self._ui_scene.add(txt); y -= 26
+            mid = f"(circ)  {ln.route[0].name}" if is_circ else f"{ln.route[0].name}  –  {ln.route[-1].name}"
+            row_top = y
+            if i % 2 == 0:
+                self._draw_rect(ix - 6, row_top - 4, iw + 12, 34, row_bg)
+            # Line color dot
+            dot_c = _rgba(ln.color)
+            self._draw_rect(ix, row_top + 8, 6, 14, dot_c)
+            # Line name
+            lid = line_identifier(ln.id, ln.name)
+            txt = gfx.Text(text=lid, font_size=18, screen_space=True,
+                          anchor="top-left",
+                          material=gfx.TextMaterial(color="#6af"))
+            txt.local.position = (ix + 16, row_top + 4, 0)
+            self._ui_scene.add(txt)
+            # Terminals + stats
+            detail = f"{mid}    [{len(ln.route)} stn · {length:.1f} u]"
+            txt = gfx.Text(text=detail, font_size=15, screen_space=True,
+                          anchor="top-left",
+                          material=gfx.TextMaterial(color=sub_fg))
+            txt.local.position = (ix + 16, row_top + 4 - 18, 0)
+            self._ui_scene.add(txt)
+            y -= 34
 
-    def _detail_btns(self, fg, lw, lh):
-        """Back and close buttons."""
-        btn_back = gfx.Text(text=t("back"), font_size=19, screen_space=True,
-                      anchor="top-left", material=gfx.TextMaterial(color="#6af"))
-        btn_back.local.position = (30, lh - 10, 0); self._ui_scene.add(btn_back)
-        btn_close = gfx.Text(text=t("close"), font_size=19, screen_space=True,
-                      anchor="top-right", material=gfx.TextMaterial(color="#f66"))
-        btn_close.local.position = (lw - 30, lh - 10, 0); self._ui_scene.add(btn_close)
+    def _detail_btns(self, lw, lh):
+        """Back / Close buttons fixed to screen edges."""
+        margin = 20
+        btn_bg = (0.15, 0.15, 0.20, 0.85) if self._dark_mode else (0.90, 0.90, 0.94, 0.85)
+        # Back
+        bw, bh = 90, 34
+        self._draw_rect(margin, lh - margin - bh, bw, bh, btn_bg)
+        btn_back = gfx.Text(text=t("back"), font_size=18, screen_space=True,
+                           anchor="middle-center",
+                           material=gfx.TextMaterial(color="#6af"))
+        btn_back.local.position = (margin + bw / 2, lh - margin - bh / 2, 0)
+        self._ui_scene.add(btn_back)
+        # Close
+        cw, ch = 90, 34
+        self._draw_rect(lw - margin - cw, lh - margin - ch, cw, ch, btn_bg)
+        btn_close = gfx.Text(text=t("close"), font_size=18, screen_space=True,
+                            anchor="middle-center",
+                            material=gfx.TextMaterial(color="#f66"))
+        btn_close.local.position = (lw - margin - cw / 2, lh - margin - ch / 2, 0)
+        self._ui_scene.add(btn_close)
 
     # ------------------------------------------------------------------
     # Input
@@ -654,19 +852,25 @@ class MetroMapRenderer:
 
         # --- Detail page ---
         if self._page_stack:
-            if sx < 80 and sy_top < 30:
+            btn_margin = 20
+            btn_w, btn_h = 90, 34
+            # Back button (bottom-left of screen)
+            if (btn_margin <= sx <= btn_margin + btn_w
+                    and btn_margin <= sy_btm <= btn_margin + btn_h):
                 self._page_stack.pop()
                 self._rebuild_ui()
                 self._canvas.request_draw(self._render_frame)
                 return
-            if sx > lw - 80 and sy_top < 30:
+            # Close button (bottom-right of screen)
+            if (lw - btn_margin - btn_w <= sx <= lw - btn_margin
+                    and btn_margin <= sy_btm <= btn_margin + btn_h):
                 self._page_stack.clear()
                 self._rebuild_ui()
                 self._canvas.request_draw(self._render_frame)
                 return
             for hs in self._detail_hotspots():
                 if (hs["x"] <= sx <= hs["x"] + hs["w"]
-                        and hs["y"] <= sy_top <= hs["y"] + hs["h"]):
+                        and hs["y"] <= sy_btm <= hs["y"] + hs["h"]):
                     if hs["action"] == "push":
                         self._page_stack.append(hs["page"])
                         self._rebuild_ui()

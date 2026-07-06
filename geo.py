@@ -55,3 +55,43 @@ def geo_to_plane(
     )
 
     return x, y
+
+
+def plane_to_geo(
+    base_x: float,
+    base_y: float,
+    x: float,
+    y: float,
+    scale: float,
+) -> tuple[float, float]:
+    """Convert planar projection coordinates back to geographic coordinates.
+
+    Inverse of :func:`geo_to_plane`.  Takes a point in the projected plane
+    and recovers its *(longitude, latitude)* under the Web Mercator
+    projection.
+
+    Args:
+        base_x: X coordinate of the origin (lon=0, lat=0) in the plane.
+        base_y: Y coordinate of the origin (lon=0, lat=0) in the plane.
+        x:     X coordinate in the projected plane.
+        y:     Y coordinate in the projected plane.
+        scale: Scale factor — same value used during the forward
+               projection.
+
+    Returns:
+        ``(longitude, latitude)`` in degrees.  Longitude is in
+        ``[-180, 180]``; latitude may exceed ±85.051° if the input
+        *y* maps beyond the Web Mercator range (rare in practice).
+
+    Edge cases:
+        - The inverse of the latitude clamp in :func:`geo_to_plane` is
+          lossy — points projected from latitudes beyond ±85.051° cannot
+          be distinguished from those exactly at the bound.
+    """
+    lon_rad = (x - base_x) / (scale * _EARTH_RADIUS)
+    lat_rad = (
+        2.0 * math.atan(math.exp((y - base_y) / (scale * _EARTH_RADIUS)))
+        - math.pi / 2.0
+    )
+
+    return math.degrees(lon_rad), math.degrees(lat_rad)

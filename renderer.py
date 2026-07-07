@@ -93,6 +93,11 @@ class MetroMapRenderer:
         self._page_stack = []          # detail page navigation stack
         self._label_positions = []     # (screen_x, screen_y, line, station)
 
+        # edit mode
+        self._edit_mode = False
+        self._selected_station_id: int | None = None
+        self._dragging_station: object | None = None  # Station being dragged
+
         # ---- Canvas & renderer ----
         self._canvas = RenderCanvas(size=(1280, 900),
                                      title="Concept UrbanChain")
@@ -272,8 +277,23 @@ class MetroMapRenderer:
 
         hovered = (self._hovered and self._hovered.get("type") == "station"
                    and self._hovered.get("station") is st)
+        selected = (self._edit_mode
+                    and st.id == self._selected_station_id)
         if hovered:
             ring_sz += 3 * self._scale_factor
+
+        # Edit-mode selected station gets a green glow ring.
+        if selected:
+            glow_sz = ring_sz + 6 * self._scale_factor
+            self._scene.add(gfx.Points(
+                gfx.Geometry(positions=np.float32([(x, y, 0.019)])),
+                gfx.PointsMaterial(size=glow_sz, size_space="screen",
+                                   color=(0.2, 1.0, 0.3, 0.8)),
+            ))
+
+        if self._edit_mode:
+            # Subtle edit-mode indicator: slightly blue-tinted ring.
+            fg = (0.6, 0.8, 1.0, 1.0) if self._dark_mode else (0.2, 0.4, 0.8, 1.0)
 
         # ring (z above lines which are at 0.01)
         self._scene.add(gfx.Points(
@@ -851,6 +871,13 @@ class MetroMapRenderer:
             self._rebuild_map()
             self._rebuild_ui()
             self._canvas.request_draw(self._render_frame)
+        elif k in ("e", "E"):
+            self._edit_mode = not self._edit_mode
+            self._selected_station_id = None
+            self._dragging_station = None
+            self._rebuild_map()
+            self._rebuild_ui()
+            self._canvas.request_draw(self._render_frame)
         elif k in ("m", "M"):
             self._toggle_map_menu()
         elif k == "[":
@@ -936,6 +963,17 @@ class MetroMapRenderer:
     def _on_ptr_move(self, event):
         self._mouse_screen = (event["x"], event["y"])
         wx, wy = self._screen_to_world(event["x"], event["y"])
+
+        # Dragging a station in edit mode — move it.
+        if self._dragging_station is not None:
+            st = self._dragging_station
+            st.position = (wx, wy, st.position[2])
+            self._rebuild_splines()
+            self._rebuild_map()
+            self._rebuild_ui()
+            self._canvas.request_draw(self._render_frame)
+            return
+
         hit = self._hit_test(wx, wy)
         prev = self._hovered
         self._hovered = hit
@@ -951,14 +989,25 @@ class MetroMapRenderer:
 
     def _on_ptr_down(self, event):
         self._pointer_down_pos = (event["x"], event["y"])
+        # In edit mode, check if we hit a station to begin dragging.
+        if self._edit_mode:
+            wx, wy = self._screen_to_world(event["x"], event["y"])
+            hit = self._hit_test(wx, wy)
+            if hit and hit["type"] == "station":
+                self._dragging_station = hit["station"]
+                self._selected_station_id = hit["station"].id
+                self._rebuild_map()
+                self._canvas.request_draw(self._render_frame)
 
     def _on_ptr_up(self, event):
+        was_dragging = self._dragging_station is not None
+        self._dragging_station = None
         if self._pointer_down_pos is None:
             return
         dx = event["x"] - self._pointer_down_pos[0]
         dy = event["y"] - self._pointer_down_pos[1]
         self._pointer_down_pos = None
-        if (dx*dx + dy*dy)**0.5 > 5:
+        if not was_dragging and (dx*dx + dy*dy)**0.5 > 5:
             return
 
         sx = event["x"]
@@ -1034,6 +1083,16 @@ class MetroMapRenderer:
         wx, wy = self._screen_to_world(sx, sy_top)
         hit = self._hit_test(wx, wy)
         if hit:
+            if self._edit_mode and hit["type"] == "station":
+                # Select / deselect station in edit mode.
+                if self._selected_station_id == hit["station"].id:
+                    self._selected_station_id = None
+                else:
+                    self._selected_station_id = hit["station"].id
+                self._rebuild_map()
+                self._rebuild_ui()
+                self._canvas.request_draw(self._render_frame)
+                return
             if hit["type"] == "station":
                 self._page_stack.append({
                     "type": "station", "station": hit["station"],
@@ -1045,3 +1104,10 @@ class MetroMapRenderer:
                 })
             self._rebuild_ui()
             self._canvas.request_draw(self._render_frame)
+        elif self._edit_mode:
+            # Clicked empty space — deselect.
+            if self._selected_station_id is not None:
+                self._selected_station_id = None
+                self._rebuild_map()
+                self._rebuild_ui()
+                self._canvas.request_draw(self._render_frame)

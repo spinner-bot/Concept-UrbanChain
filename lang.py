@@ -31,6 +31,25 @@ STRINGS = {
         "building": "建筑站",
         "structure": "结构站",
         "line_unnamed": "地铁{id}号线",
+        # Map menu
+        "map_menu_title": "地图列表 — 按 M 关闭",
+        "new_map_btn": "+  新建地图",
+        "new_map_default_name": "新地图",
+        # Edit mode
+        "edit_mode_on": "[编辑模式] E=退出 N=加站 Del=删除 Shift+S=保存",
+        "edit_mode_new_station": "新站{id}",
+        "central_station": "中心站",
+        # Archive
+        "save_ok": "已保存",
+        "export_menu": "导出",
+        "import_menu": "导入",
+        # UI modes
+        "mode_simple": "简约版",
+        "mode_full": "完全版",
+        "switch_mode": "切换界面模式",
+        # Search
+        "search_placeholder": "搜索站点或线路...",
+        "no_results": "无结果",
     },
     "en": {
         "net_btn": "Net >",
@@ -59,6 +78,25 @@ STRINGS = {
         "building": "Building",
         "structure": "Structure",
         "line_unnamed": "Metro Line {id}",
+        # Map menu
+        "map_menu_title": "Maps — press M to close",
+        "new_map_btn": "+  New Map",
+        "new_map_default_name": "New Map",
+        # Edit mode
+        "edit_mode_on": "[Edit] E=exit N=add Del=delete Shift+S=save",
+        "edit_mode_new_station": "Stn {id}",
+        "central_station": "Central",
+        # Archive
+        "save_ok": "Saved",
+        "export_menu": "Export",
+        "import_menu": "Import",
+        # UI modes
+        "mode_simple": "Simple",
+        "mode_full": "Full",
+        "switch_mode": "Switch UI Mode",
+        # Search
+        "search_placeholder": "Search station or line...",
+        "no_results": "No results",
     },
 }
 

@@ -252,6 +252,20 @@ def main(map_key: str | None = None):
     from renderer import MetroMapRenderer
     renderer = MetroMapRenderer(network.lines, map_key=map_key,
                                  network=network)
+
+    # Check UI mode preference.
+    from ui_config import config
+    config.last_map_key = map_key
+
+    if config.mode == "full":
+        try:
+            from qt_host import run_qt_app
+            run_qt_app(renderer)
+            return
+        except RuntimeError as e:
+            print(f"[ui] {e}")
+            print("[ui] Falling back to simple mode.")
+
     renderer.show()
 
 

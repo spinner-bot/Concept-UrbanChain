@@ -1,0 +1,20 @@
+[project]
+name = "concept-urbanchain"
+version = "0.2.0"
+description = "GPU-accelerated metro map viewer, editor, and geo-projection toolkit"
+requires-python = ">=3.11"
+dependencies = [
+    "pygfx>=0.15",
+    "numpy>=1.24",
+    "rendercanvas>=2.3",
+]
+
+[project.optional-dependencies]
+full = ["PySide6>=6.5", "imgui-bundle>=1.0"]
+dev  = ["pytest", "ruff"]
+
+[project.scripts]
+urbanchain = "main:main"
+
+[tool.ruff]
+line-length = 88

@@ -249,6 +249,7 @@ class MetroMapRenderer:
         else:
             self._draw_legend()
             self._draw_tooltip()
+            self._draw_status_bar()
 
     # ------------------------------------------------------------------
     def _add_line(self, ln):
@@ -867,6 +868,39 @@ class MetroMapRenderer:
         self._ui_scene.add(btn_close)
 
     # ------------------------------------------------------------------
+    # Status bar (mode-aware)
+    # ------------------------------------------------------------------
+
+    def _draw_status_bar(self):
+        """Draw a thin status bar at the bottom of the screen.
+
+        Simple mode: key hints only.  Full mode: map key + edit state.
+        """
+        lw, lh = self._canvas.get_logical_size()
+        lw, lh = lw or 1280, lh or 900
+        from ui_config import config
+
+        bar_h = 22
+        bar_bg = (0.10, 0.10, 0.14, 0.80) if self._dark_mode else (0.88, 0.88, 0.92, 0.80)
+        self._draw_rect(0, 0, lw, bar_h, bar_bg)
+
+        fg = "#999" if self._dark_mode else "#555"
+        font_sz = 12
+
+        if config.mode == "full":
+            map_label = self._map_key or "(none)"
+            edit_flag = " [EDIT]" if self._edit_mode else ""
+            text = f"Map: {map_label}{edit_flag}  |  F5: {config.mode} mode  |  M: maps"
+        else:
+            text = "M:maps  E:edit  B:dark  L:lang  [/]:scale  F5:full"
+
+        txt = gfx.Text(text=text, font_size=font_sz, screen_space=True,
+                       anchor="middle-left",
+                       material=gfx.TextMaterial(color=fg))
+        txt.local.position = (8, bar_h / 2 + 1, 0)
+        self._ui_scene.add(txt)
+
+    # ------------------------------------------------------------------
     # Input
     # ------------------------------------------------------------------
 
@@ -891,6 +925,8 @@ class MetroMapRenderer:
             self._canvas.request_draw(self._render_frame)
         elif k in ("m", "M"):
             self._toggle_map_menu()
+        elif k == "F5":
+            self._cycle_ui_mode()
         # Edit-mode keys
         elif self._edit_mode and k in ("n", "N"):
             self._add_station_at_mouse()
@@ -921,6 +957,16 @@ class MetroMapRenderer:
             self._page_stack.pop()
         else:
             self._page_stack.append({"type": "map_menu"})
+        self._rebuild_ui()
+        self._canvas.request_draw(self._render_frame)
+
+    def _cycle_ui_mode(self):
+        """Cycle between simple and full UI modes (F5 key)."""
+        from ui_config import config
+        if config.mode == "simple":
+            config.mode = "full"
+        else:
+            config.mode = "simple"
         self._rebuild_ui()
         self._canvas.request_draw(self._render_frame)
 

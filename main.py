@@ -37,6 +37,27 @@ class Station:
         else:
             self.position = tuple(position)
 
+    # -- serialisation -------------------------------------------------------
+
+    def to_dict(self) -> dict:
+        """Encode the station as a JSON-serialisable dict."""
+        return {
+            "id": self.id,
+            "name": self.name,
+            "position": list(self.position),
+            "station_type": self.station_type.value,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Station":
+        """Decode a station from a dict produced by :meth:`to_dict`."""
+        return cls(
+            id=d["id"],
+            name=d["name"],
+            position=tuple(d["position"]),
+            station_type=StationType(d["station_type"]),
+        )
+
 from spline import line_identifier  # noqa: E402 — used by renderer via spline
 
 
@@ -70,9 +91,61 @@ class Line:
             else:
                 self.fine_trajectory = list(fine_trajectory[:target_len])
 
+    # -- serialisation -------------------------------------------------------
+
+    def to_dict(self) -> dict:
+        """Encode the line as a JSON-serialisable dict.
+
+        Station references in *route* are written as their integer IDs.
+        """
+        route_ids = [
+            s.id if isinstance(s, Station) else s for s in self.route
+        ]
+        return {
+            "id": self.id,
+            "name": self.name,
+            "route": route_ids,
+            "max_speed": self.max_speed,
+            "color": list(self.color),
+            "fine_trajectory": [
+                [list(pt) for pt in seg] for seg in self.fine_trajectory
+            ],
+            "smooth_tension": self.smooth_tension,
+            "hide_terminal_label": self.hide_terminal_label,
+            "ring_label_station_id": self.ring_label_station_id,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict, stations: dict[int, "Station"]) -> "Line":
+        """Decode a line from a dict produced by :meth:`to_dict`.
+
+        Args:
+            d: The dict representation.
+            stations: ``{id: Station}`` lookup used to resolve route IDs.
+        """
+        route = [stations[rid] for rid in d["route"]]
+        ft_raw = d.get("fine_trajectory", [])
+        fine_trajectory = [
+            [tuple(pt) for pt in seg] for seg in ft_raw
+        ]
+        return cls(
+            id=d["id"],
+            name=d["name"],
+            route=route,
+            max_speed=d["max_speed"],
+            color=tuple(d.get("color", (255, 0, 0))),
+            fine_trajectory=fine_trajectory,
+            smooth_tension=d.get("smooth_tension", 0.5),
+            hide_terminal_label=d.get("hide_terminal_label", False),
+            ring_label_station_id=d.get("ring_label_station_id"),
+        )
+
 
 class MetroNetwork:
     """Container for all metro lines and stations."""
+
+    # Increment when the save format changes in a breaking way.
+    FORMAT_VERSION = 1
 
     def __init__(self):
         self.lines: list[Line] = []
@@ -113,6 +186,44 @@ class MetroNetwork:
     def is_circular(line: "Line") -> bool:
         """Return True if the line is a circle (first and last station same)."""
         return len(line.route) >= 2 and line.route[0].id == line.route[-1].id
+
+    # -- serialisation -------------------------------------------------------
+
+    def to_dict(self) -> dict:
+        """Encode the full network as a JSON-serialisable dict.
+
+        Returns a dict with ``"format_version"``, ``"stations"`` and
+        ``"lines"`` keys suitable for :meth:`from_dict`.
+        """
+        return {
+            "format_version": self.FORMAT_VERSION,
+            "stations": {
+                str(sid): s.to_dict() for sid, s in self.stations.items()
+            },
+            "lines": [ln.to_dict() for ln in self.lines],
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "MetroNetwork":
+        """Decode a network from a dict produced by :meth:`to_dict`.
+
+        Supports future format versions by inspecting ``"format_version"``.
+        """
+        version = d.get("format_version", 1)
+
+        net = cls()
+        # Rebuild stations first so lines can reference them.
+        for sid_str, sdata in d["stations"].items():
+            st = Station.from_dict(sdata)
+            net.stations[st.id] = st
+
+        if version == 1:
+            for ldata in d["lines"]:
+                net.add_line(Line.from_dict(ldata, net.stations))
+        else:
+            raise ValueError(f"Unsupported format version: {version}")
+
+        return net
 
 
 def main(map_key: str | None = None):

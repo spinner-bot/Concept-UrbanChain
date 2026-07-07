@@ -792,19 +792,20 @@ class MetroMapRenderer:
 
     def _draw_map_menu_page(self, lw, lh):
         """Draw a card listing all registered maps with the current one
-        highlighted.  Clicking a map switches to it."""
+        highlighted.  Clicking a map switches to it.  Includes a
+        "+ New Map" button at the bottom."""
         from maps import list_maps
 
         maps = list_maps()
         card_x, card_bottom, card_w, ix, iw = self._card_layout(lw, lh)
         fg = "#eee" if self._dark_mode else "#1a1a1a"
-        sub_fg = "#bbb" if self._dark_mode else "#555"
         card_bg = (0.16, 0.16, 0.20, 0.96) if self._dark_mode else (0.97, 0.97, 0.99, 0.96)
         header_bg = (0.20, 0.20, 0.26, 1.0) if self._dark_mode else (0.22, 0.24, 0.30, 1.0)
         accent = (0.18, 0.18, 0.24, 1.0) if self._dark_mode else (0.85, 0.85, 0.90, 1.0)
         row_h = 36
+        new_btn_h = 40  # extra row for "+ New Map"
 
-        total_h = 60 + len(maps) * row_h + 50
+        total_h = 60 + len(maps) * row_h + new_btn_h + 50
         card_y = card_bottom - total_h
         # Card background
         self._draw_rect(card_x, card_y, card_w, total_h, card_bg)
@@ -833,6 +834,16 @@ class MetroMapRenderer:
             self._ui_scene.add(txt)
             self._map_menu_items.append((ix, y - row_h, iw, row_h, key))
             y -= row_h
+
+        # "+ New Map" button
+        new_btn_bg = (0.15, 0.40, 0.25, 0.70) if self._dark_mode else (0.60, 0.90, 0.70, 0.70)
+        self._draw_rect(ix, y - new_btn_h, iw, new_btn_h, new_btn_bg)
+        txt = gfx.Text(text="+  New Map", font_size=18, screen_space=True,
+                       anchor="middle-left",
+                       material=gfx.TextMaterial(color="#fff" if self._dark_mode else "#155724"))
+        txt.local.position = (ix + 12, y - new_btn_h / 2, 0)
+        self._ui_scene.add(txt)
+        self._map_menu_items.append((ix, y - new_btn_h, iw, new_btn_h, "__new__"))
 
     def _detail_btns(self, lw, lh):
         """Back / Close buttons fixed to screen edges."""
@@ -911,6 +922,9 @@ class MetroMapRenderer:
 
     def _switch_to_map(self, map_key: str):
         """Load a different map by key and display it."""
+        if map_key == "__new__":
+            self._create_new_map()
+            return
         from maps import get_map
         entry = get_map(map_key)
         if entry is None:
@@ -919,6 +933,18 @@ class MetroMapRenderer:
         network = factory()
         self.reload_network(network.lines, map_key=map_key,
                             network=network)
+
+    def _create_new_map(self):
+        """Create a blank map with one central station."""
+        from main import MetroNetwork, Station
+        from maps import register_map, next_user_key
+        net = MetroNetwork()
+        center = Station(id=0, name="Central", position=(0, 0, 1))
+        net.stations[0] = center
+        key = next_user_key("new_map")
+        display = "New Map"
+        register_map(key, display, lambda net=net: net)
+        self.reload_network(net.lines, map_key=key, network=net)
 
     # -- edit mode helpers -------------------------------------------------
 

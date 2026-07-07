@@ -99,3 +99,16 @@ def clear_user_maps() -> int:
     for k in to_remove:
         del MAP_REGISTRY[k]
     return len(to_remove)
+
+
+def next_user_key(base: str = "user_map") -> str:
+    """Return a map key that does not yet exist in the registry.
+
+    Generates keys like ``"user_map"``, ``"user_map_2"``, …
+    """
+    if not is_registered(base):
+        return base
+    i = 2
+    while is_registered(f"{base}_{i}"):
+        i += 1
+    return f"{base}_{i}"

@@ -880,6 +880,14 @@ class MetroMapRenderer:
             self._canvas.request_draw(self._render_frame)
         elif k in ("m", "M"):
             self._toggle_map_menu()
+        # Edit-mode keys
+        elif self._edit_mode and k in ("n", "N"):
+            self._add_station_at_mouse()
+        elif self._edit_mode and k in ("Delete", "Backspace"):
+            self._delete_selected_station()
+        elif self._edit_mode and k == "s" and (
+                "Shift" in str(event.get("modifiers", ""))):
+            self._save_current_map()
         elif k == "[":
             self._scale_factor = max(0.3, self._scale_factor - 0.1)
             self._rebuild_map()
@@ -911,6 +919,68 @@ class MetroMapRenderer:
         network = factory()
         self.reload_network(network.lines, map_key=map_key,
                             network=network)
+
+    # -- edit mode helpers -------------------------------------------------
+
+    def _next_station_id(self) -> int:
+        """Return the smallest unused station ID >= 0."""
+        used = set(self._network.stations.keys()) if self._network else set()
+        i = 0
+        while i in used:
+            i += 1
+        return i
+
+    def _add_station_at_mouse(self):
+        """Create a new station at the current mouse world position."""
+        mx, my = self._mouse_screen
+        wx, wy = self._screen_to_world(mx, my)
+        sid = self._next_station_id()
+        st = __import__("main").Station(
+            id=sid, name=f"Station {sid}", position=(wx, wy),
+        )
+        if self._network:
+            self._network.stations[sid] = st
+        self._selected_station_id = sid
+        self._rebuild_splines()
+        self._rebuild_map()
+        self._rebuild_ui()
+        self._canvas.request_draw(self._render_frame)
+
+    def _delete_selected_station(self):
+        """Remove the selected station and all lines that reference it."""
+        if self._selected_station_id is None or not self._network:
+            return
+        sid = self._selected_station_id
+        self._selected_station_id = None
+        # Remove station from network.
+        self._network.stations.pop(sid, None)
+        # Remove lines that contain this station.
+        self._network.lines = [
+            ln for ln in self._network.lines
+            if not any(s.id == sid for s in ln.route)
+        ]
+        self._lines = self._network.lines
+        self._rebuild_splines()
+        self._rebuild_map()
+        self._rebuild_ui()
+        self._canvas.request_draw(self._render_frame)
+
+    def _save_current_map(self):
+        """Save the current (possibly edited) network to JSON via the
+        archive system."""
+        if not self._network:
+            return
+        from archive import export_json
+        from pathlib import Path
+        path = Path(f"{self._map_key or 'map'}.json")
+        export_json(self._network, path,
+                    meta={"map_key": self._map_key})
+        # Re-register so the map menu picks up changes.
+        from maps import register_map
+        register_map(self._map_key or "custom",
+                     self._map_key or "Custom Map",
+                     lambda: self._network)
+        print(f"Saved: {path}")
 
     def _render_frame(self):
         lw, lh = self._canvas.get_logical_size()

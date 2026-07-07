@@ -64,8 +64,10 @@ def _point_seg_dist(px, py, x1, y1, x2, y2):
 # MetroMapRenderer
 # ---------------------------------------------------------------------------
 class MetroMapRenderer:
-    def __init__(self, lines):
+    def __init__(self, lines, map_key: str = "", network=None):
         self._lines = lines
+        self._map_key = map_key
+        self._network = network  # MetroNetwork reference for editor/save ops
 
         # index
         self._station_lines = defaultdict(list)
@@ -78,11 +80,7 @@ class MetroMapRenderer:
 
         # splines
         self._spline_data = {}
-        for ln in lines:
-            keys = build_key_points(ln.route, ln.fine_trajectory)
-            pts = catmull_rom_spline(keys, 30, ln.smooth_tension)
-            self._spline_data[ln.id] = np.float32(
-                [(x, y, 0.01) for x, y in pts])
+        self._rebuild_splines()
 
         # state
         self._dark_mode = False
@@ -173,6 +171,46 @@ class MetroMapRenderer:
             (min(ys) + max(ys)) / 2,
             10,
         )
+
+    # ------------------------------------------------------------------
+    # Spline / network management
+    # ------------------------------------------------------------------
+
+    def _rebuild_splines(self):
+        """Recompute spline data and station→line index."""
+        self._spline_data = {}
+        for ln in self._lines:
+            keys = build_key_points(ln.route, ln.fine_trajectory)
+            pts = catmull_rom_spline(keys, 30, ln.smooth_tension)
+            self._spline_data[ln.id] = np.float32(
+                [(x, y, 0.01) for x, y in pts])
+
+        self._station_lines = defaultdict(list)
+        for ln in self._lines:
+            seen = set()
+            for st in ln.route:
+                if st.id not in seen:
+                    self._station_lines[st.id].append(ln)
+                    seen.add(st.id)
+
+    def reload_network(self, lines, map_key: str = "",
+                       network=None):
+        """Replace the displayed network with a new one.
+
+        Rebuilds splines, index, clears UI state, and redraws.
+        """
+        self._lines = lines
+        self._map_key = map_key
+        self._network = network
+        self._hidden_lines = set()
+        self._page_stack = []
+        self._label_positions = []
+        self._hovered = None
+        self._rebuild_splines()
+        self._auto_fit()
+        self._rebuild_map()
+        self._rebuild_ui()
+        self._canvas.request_draw(self._render_frame)
 
     # ------------------------------------------------------------------
     def _rebuild_map(self):
@@ -455,6 +493,13 @@ class MetroMapRenderer:
                     "action": "push",
                     "page": {"type": "line", "line": ln}})
                 y -= 34
+        elif pg == "map_menu":
+            for (ix, iy, iw, ih, key) in getattr(self, "_map_menu_items", []):
+                self._detail_hs.append({
+                    "x": ix, "y": iy, "w": iw, "h": ih,
+                    "action": "switch_map",
+                    "map_key": key,
+                })
         return self._detail_hs
     # ------------------------------------------------------------------
     # Panel helper — draws a filled rectangle in UI space
@@ -492,6 +537,8 @@ class MetroMapRenderer:
             self._draw_line_page(page, lw, lh)
         elif pg == "network":
             self._draw_network_page(page, lw, lh)
+        elif pg == "map_menu":
+            self._draw_map_menu_page(lw, lh)
 
         # Nav buttons — always at screen edges
         self._detail_btns(lw, lh)
@@ -719,6 +766,54 @@ class MetroMapRenderer:
             self._ui_scene.add(txt)
             y -= 34
 
+    # ------------------------------------------------------------------
+    # Map menu page
+    # ------------------------------------------------------------------
+
+    def _draw_map_menu_page(self, lw, lh):
+        """Draw a card listing all registered maps with the current one
+        highlighted.  Clicking a map switches to it."""
+        from maps import list_maps
+
+        maps = list_maps()
+        card_x, card_bottom, card_w, ix, iw = self._card_layout(lw, lh)
+        fg = "#eee" if self._dark_mode else "#1a1a1a"
+        sub_fg = "#bbb" if self._dark_mode else "#555"
+        card_bg = (0.16, 0.16, 0.20, 0.96) if self._dark_mode else (0.97, 0.97, 0.99, 0.96)
+        header_bg = (0.20, 0.20, 0.26, 1.0) if self._dark_mode else (0.22, 0.24, 0.30, 1.0)
+        accent = (0.18, 0.18, 0.24, 1.0) if self._dark_mode else (0.85, 0.85, 0.90, 1.0)
+        row_h = 36
+
+        total_h = 60 + len(maps) * row_h + 50
+        card_y = card_bottom - total_h
+        # Card background
+        self._draw_rect(card_x, card_y, card_w, total_h, card_bg)
+        # Header
+        self._draw_rect(card_x, card_bottom - 60, card_w, 60, header_bg)
+        title = gfx.Text(text="Maps  —  press M to close", font_size=24,
+                         screen_space=True, anchor="middle-left",
+                         material=gfx.TextMaterial(color=fg))
+        title.local.position = (ix, card_bottom - 32, 0)
+        self._ui_scene.add(title)
+
+        y = card_bottom - 60 - 8
+        self._map_menu_items = []
+        for i, (key, display_name) in enumerate(maps):
+            is_current = (key == self._map_key)
+            row_bg = accent if i % 2 == 0 else card_bg
+            if is_current:
+                row_bg = (0.15, 0.30, 0.50, 0.70) if self._dark_mode else (0.70, 0.85, 1.0, 0.70)
+            self._draw_rect(ix, y - row_h, iw, row_h, row_bg)
+            marker = "> " if is_current else "  "
+            label = f"{marker}{display_name}  [{key}]"
+            txt = gfx.Text(text=label, font_size=17, screen_space=True,
+                           anchor="middle-left",
+                           material=gfx.TextMaterial(color=fg))
+            txt.local.position = (ix + 12, y - row_h / 2, 0)
+            self._ui_scene.add(txt)
+            self._map_menu_items.append((ix, y - row_h, iw, row_h, key))
+            y -= row_h
+
     def _detail_btns(self, lw, lh):
         """Back / Close buttons fixed to screen edges."""
         margin = 20
@@ -756,6 +851,8 @@ class MetroMapRenderer:
             self._rebuild_map()
             self._rebuild_ui()
             self._canvas.request_draw(self._render_frame)
+        elif k in ("m", "M"):
+            self._toggle_map_menu()
         elif k == "[":
             self._scale_factor = max(0.3, self._scale_factor - 0.1)
             self._rebuild_map()
@@ -767,6 +864,26 @@ class MetroMapRenderer:
             self._rebuild_map()
             self._rebuild_ui()
             self._canvas.request_draw(self._render_frame)
+
+    def _toggle_map_menu(self):
+        """Open or close the map-switching menu."""
+        if self._page_stack and self._page_stack[-1]["type"] == "map_menu":
+            self._page_stack.pop()
+        else:
+            self._page_stack.append({"type": "map_menu"})
+        self._rebuild_ui()
+        self._canvas.request_draw(self._render_frame)
+
+    def _switch_to_map(self, map_key: str):
+        """Load a different map by key and display it."""
+        from maps import get_map
+        entry = get_map(map_key)
+        if entry is None:
+            return
+        _display_name, factory = entry
+        network = factory()
+        self.reload_network(network.lines, map_key=map_key,
+                            network=network)
 
     def _render_frame(self):
         lw, lh = self._canvas.get_logical_size()
@@ -875,6 +992,9 @@ class MetroMapRenderer:
                         self._page_stack.append(hs["page"])
                         self._rebuild_ui()
                         self._canvas.request_draw(self._render_frame)
+                        return
+                    if hs["action"] == "switch_map":
+                        self._switch_to_map(hs["map_key"])
                         return
             return
 

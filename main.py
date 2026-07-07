@@ -250,7 +250,8 @@ def main(map_key: str | None = None):
     network = factory()
 
     from renderer import MetroMapRenderer
-    renderer = MetroMapRenderer(network.lines)
+    renderer = MetroMapRenderer(network.lines, map_key=map_key,
+                                 network=network)
     renderer.show()
 
 

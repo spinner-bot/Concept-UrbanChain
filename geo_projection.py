@@ -206,3 +206,107 @@ def plane_to_oblique_mercator(
     )
 
     return math.degrees(lon_rad), math.degrees(lat_rad)
+
+
+# ---------------------------------------------------------------------------
+# Geographic toolkit
+# ---------------------------------------------------------------------------
+
+def haversine_distance(lat1: float, lon1: float,
+                       lat2: float, lon2: float) -> float:
+    """Great-circle distance between two points on the WGS84 sphere (metres).
+
+    Uses the haversine formula, which is numerically stable for both
+    small and large distances.
+
+    Args:
+        lat1, lon1: Start point in degrees.
+        lat2, lon2: End   point in degrees.
+
+    Returns:
+        Distance in metres.
+    """
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlam = math.radians(lon2 - lon1)
+
+    a = (math.sin(dphi / 2.0) ** 2
+         + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2.0) ** 2)
+    return _EARTH_RADIUS * 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+
+
+def bearing(lat1: float, lon1: float,
+            lat2: float, lon2: float) -> float:
+    """Initial bearing (forward azimuth) from point 1 to point 2.
+
+    Args:
+        lat1, lon1: Start point in degrees.
+        lat2, lon2: End   point in degrees.
+
+    Returns:
+        Bearing in degrees (0 = North, 90 = East, clockwise).
+    """
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    dlam = math.radians(lon2 - lon1)
+
+    y = math.sin(dlam) * math.cos(phi2)
+    x = (math.cos(phi1) * math.sin(phi2)
+         - math.sin(phi1) * math.cos(phi2) * math.cos(dlam))
+
+    return (math.degrees(math.atan2(y, x)) + 360.0) % 360.0
+
+
+def destination_point(lat: float, lon: float,
+                      brng: float, distance: float) -> tuple[float, float]:
+    """Given a start point, bearing and distance, compute the destination.
+
+    Args:
+        lat, lon: Start point in degrees.
+        brng:     Forward azimuth in degrees (0 = North).
+        distance: Distance to travel in metres.
+
+    Returns:
+        ``(latitude, longitude)`` of the destination in degrees.
+    """
+    phi = math.radians(lat)
+    brng_rad = math.radians(brng)
+    delta = distance / _EARTH_RADIUS  # angular distance
+
+    phi2 = math.asin(
+        math.sin(phi) * math.cos(delta)
+        + math.cos(phi) * math.sin(delta) * math.cos(brng_rad)
+    )
+    lon2 = math.radians(lon) + math.atan2(
+        math.sin(brng_rad) * math.sin(delta) * math.cos(phi),
+        math.cos(delta) - math.sin(phi) * math.sin(phi2),
+    )
+
+    return math.degrees(phi2), math.degrees(lon2)
+
+
+def wrap_longitude(lon: float) -> float:
+    """Normalise a longitude value to ``[-180, 180]`` degrees.
+
+    >>> wrap_longitude(190)
+    -170.0
+    >>> wrap_longitude(-190)
+    170.0
+    """
+    return ((lon + 180.0) % 360.0) - 180.0
+
+
+def is_antimeridian_crossing(lon1: float, lon2: float) -> bool:
+    """Return *True* if the shorter arc between two longitudes crosses
+    the ±180° antimeridian.
+
+    This is useful for detecting routes that would "teleport" across
+    the map edge in a simple equirectangular or Mercator display.
+
+    >>> is_antimeridian_crossing(170, -170)
+    True
+    >>> is_antimeridian_crossing(10, 20)
+    False
+    """
+    return abs(lon1 - lon2) > 180.0

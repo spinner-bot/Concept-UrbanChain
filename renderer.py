@@ -899,6 +899,10 @@ class MetroMapRenderer:
         elif self._edit_mode and k == "s" and (
                 "Shift" in str(event.get("modifiers", ""))):
             self._save_current_map()
+        elif k in ("e", "E") and "Control" in str(event.get("modifiers", "")):
+            self._export_dialog()
+        elif k in ("i", "I") and "Control" in str(event.get("modifiers", "")):
+            self._import_dialog()
         elif k == "[":
             self._scale_factor = max(0.3, self._scale_factor - 0.1)
             self._rebuild_map()
@@ -1007,6 +1011,27 @@ class MetroMapRenderer:
                      self._map_key or "Custom Map",
                      lambda: self._network)
         print(f"Saved: {path}")
+
+    def _export_dialog(self):
+        """Open the export file dialog and save the current network."""
+        if not self._network:
+            return
+        from archive_ui import export_via_dialog
+        result = export_via_dialog(self._network, self._map_key)
+        if result:
+            print(f"Exported: {result}")
+
+    def _import_dialog(self):
+        """Open the import file dialog and load a network."""
+        from archive_ui import import_via_dialog
+        from maps import register_map, next_user_key
+        net = import_via_dialog()
+        if net is None:
+            return
+        key = next_user_key("imported")
+        register_map(key, f"Imported ({key})", lambda n=net: n)
+        self.reload_network(net.lines, map_key=key, network=net)
+        print(f"Imported: {key}")
 
     def _render_frame(self):
         lw, lh = self._canvas.get_logical_size()

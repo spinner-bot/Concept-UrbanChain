@@ -51,6 +51,7 @@ class MainWindow(QtWidgets.QMainWindow if _QT_AVAILABLE else object):
         _require_qt()
         super().__init__()
         self._renderer = renderer
+        self._map_actions: list = []  # dynamic per-map QActions
         self.setWindowTitle(title)
         self.resize(1280, 900)
 
@@ -62,37 +63,41 @@ class MainWindow(QtWidgets.QMainWindow if _QT_AVAILABLE else object):
         self._setup_menus()
         self._setup_status_bar()
 
+        # Refresh Qt menus after every map change
+        renderer.on_map_changed = self._on_map_changed
+
     # -- menus ---------------------------------------------------------------
 
     def _setup_menus(self):
+        from lang import t, toggle_language as _tl
         menu_bar = self.menuBar()
 
         # --- File ---
-        file_menu = menu_bar.addMenu("&File")
-        act = file_menu.addAction("&Open Map List\tM")
+        file_menu = menu_bar.addMenu(t("menu_file"))
+        act = file_menu.addAction(t("open_map_list"))
         act.triggered.connect(lambda: self._renderer._toggle_map_menu())
 
         file_menu.addSeparator()
 
-        act = file_menu.addAction("&Save Map\tCtrl+S")
+        act = file_menu.addAction(t("save_map"))
         act.triggered.connect(
             lambda: self._renderer._save_current_map()
             if self._renderer._edit_mode else None
         )
 
-        act = file_menu.addAction("E&xport JSON...\tCtrl+E")
+        act = file_menu.addAction(t("export_json"))
         act.triggered.connect(self._export_json_dialog)
 
-        act = file_menu.addAction("&Import JSON...\tCtrl+I")
+        act = file_menu.addAction(t("import_json"))
         act.triggered.connect(self._import_json_dialog)
 
         file_menu.addSeparator()
-        act = file_menu.addAction("E&xit\tAlt+F4")
+        act = file_menu.addAction(t("exit_app"))
         act.triggered.connect(self.close)
 
         # --- View ---
-        view_menu = menu_bar.addMenu("&View")
-        act = view_menu.addAction("Toggle &Dark Mode\tB")
+        view_menu = menu_bar.addMenu(t("menu_view"))
+        act = view_menu.addAction(t("toggle_dark_mode"))
         act.triggered.connect(
             lambda: setattr(
                 self._renderer, '_dark_mode',
@@ -103,8 +108,7 @@ class MainWindow(QtWidgets.QMainWindow if _QT_AVAILABLE else object):
                 self._renderer._render_frame
             )
         )
-        act = view_menu.addAction("Toggle &Language\tL")
-        from lang import toggle_language as _tl
+        act = view_menu.addAction(t("toggle_language"))
         act.triggered.connect(
             lambda: _tl() or self._renderer._rebuild_map()
             or self._renderer._rebuild_ui()
@@ -114,8 +118,8 @@ class MainWindow(QtWidgets.QMainWindow if _QT_AVAILABLE else object):
         )
 
         # --- Edit ---
-        edit_menu = menu_bar.addMenu("&Edit")
-        act = edit_menu.addAction("Toggle Edit &Mode\tE")
+        edit_menu = menu_bar.addMenu(t("menu_edit"))
+        act = edit_menu.addAction(t("toggle_edit_mode"))
         act.triggered.connect(
             lambda: setattr(
                 self._renderer, '_edit_mode',
@@ -128,30 +132,80 @@ class MainWindow(QtWidgets.QMainWindow if _QT_AVAILABLE else object):
         )
 
         # --- Maps ---
-        maps_menu = menu_bar.addMenu("&Maps")
-        act = maps_menu.addAction("&Map List...\tM")
+        self._maps_menu = menu_bar.addMenu(t("menu_maps"))
+        act = self._maps_menu.addAction(t("map_list_item"))
         act.triggered.connect(lambda: self._renderer._toggle_map_menu())
-        act = maps_menu.addAction("&New Map\tCtrl+N")
+        act = self._maps_menu.addAction(t("new_map_item"))
         act.triggered.connect(lambda: self._renderer._create_new_map())
 
+        self._maps_menu.addSeparator()
+        self._rebuild_maps_menu()
+
         # --- UI Mode ---
-        mode_menu = menu_bar.addMenu("&Mode")
-        act = mode_menu.addAction("Switch to &Full\tCtrl+Shift+F")
+        mode_menu = menu_bar.addMenu(t("menu_mode"))
+        act = mode_menu.addAction(t("switch_to_full"))
         act.triggered.connect(lambda: self._toggle_ui_mode("full"))
 
     # -- status bar ----------------------------------------------------------
 
     def _setup_status_bar(self):
         self._status = self.statusBar()
-        self._status.showMessage(
-            f"Map: {self._renderer._map_key or '(none)'}"
-        )
+        self._update_status_bar()
+
+    def _update_status_bar(self):
+        """Refresh the status bar with the current map display name."""
+        from lang import t
+        from maps import get_map
+        map_key = self._renderer._map_key
+        entry = get_map(map_key) if map_key else None
+        display = entry[0] if entry else (map_key or "(none)")
+        self._status.showMessage(t("status_map_prefix") + display)
+
+    # -- dynamic map menu ----------------------------------------------------
+
+    def _rebuild_maps_menu(self):
+        """Rebuild the per-map switch actions in the Maps menu."""
+        from maps import list_maps
+        # Remove old dynamic actions
+        for act in self._map_actions:
+            self._maps_menu.removeAction(act)
+        self._map_actions.clear()
+
+        current_key = self._renderer._map_key
+        for key, display_name in list_maps():
+            label = f"{display_name}  [{key}]"
+            act = self._maps_menu.addAction(label)
+            act.setCheckable(True)
+            act.setChecked(key == current_key)
+            act.triggered.connect(
+                lambda checked, k=key: self._switch_to_map(k)
+            )
+            self._map_actions.append(act)
+
+        # If no maps registered at all, show a placeholder
+        if not self._map_actions:
+            from lang import t
+            act = self._maps_menu.addAction(t("no_maps"))
+            act.setEnabled(False)
+            self._map_actions.append(act)
+
+    def _switch_to_map(self, map_key: str):
+        """Switch to *map_key* and update menus + status bar."""
+        self._renderer._switch_to_map(map_key)
+        self._rebuild_maps_menu()
+        self._update_status_bar()
+
+    def _on_map_changed(self):
+        """Called by the renderer after any map change."""
+        self._rebuild_maps_menu()
+        self._update_status_bar()
 
     # -- dialogs -------------------------------------------------------------
 
     def _export_json_dialog(self):
+        from lang import t
         path, _ = QtWidgets.QFileDialog.getSaveFileName(
-            self, "Export Map", "", "JSON (*.json);;All (*)",
+            self, t("export_dialog_title"), "", "JSON (*.json);;All (*)",
         )
         if path and self._renderer._network:
             from archive import export_json
@@ -159,11 +213,12 @@ class MainWindow(QtWidgets.QMainWindow if _QT_AVAILABLE else object):
                 self._renderer._network, Path(path),
                 meta={"map_key": self._renderer._map_key},
             )
-            self._status.showMessage(f"Exported: {path}")
+            self._status.showMessage(t("exported_msg") + str(path))
 
     def _import_json_dialog(self):
+        from lang import t
         path, _ = QtWidgets.QFileDialog.getOpenFileName(
-            self, "Import Map", "", "JSON (*.json);;All (*)",
+            self, t("import_dialog_title"), "", "JSON (*.json);;All (*)",
         )
         if path:
             from archive import import_json
@@ -174,7 +229,7 @@ class MainWindow(QtWidgets.QMainWindow if _QT_AVAILABLE else object):
             self._renderer.reload_network(
                 net.lines, map_key=key, network=net,
             )
-            self._status.showMessage(f"Imported: {key}")
+            self._status.showMessage(t("imported_msg") + key)
 
     # -- ui mode switch ------------------------------------------------------
 

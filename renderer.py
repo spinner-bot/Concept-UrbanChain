@@ -98,6 +98,9 @@ class MetroMapRenderer:
         self._selected_station_id: int | None = None
         self._dragging_station: object | None = None  # Station being dragged
 
+        # Callback invoked after map changes (Qt host uses this to refresh menus)
+        self.on_map_changed = None
+
         # ---- Canvas & renderer ----
         self._canvas = RenderCanvas(size=(1280, 900),
                                      title="Concept UrbanChain")
@@ -216,6 +219,8 @@ class MetroMapRenderer:
         self._rebuild_map()
         self._rebuild_ui()
         self._canvas.request_draw(self._render_frame)
+        if self.on_map_changed:
+            self.on_map_changed()
 
     # ------------------------------------------------------------------
     def _rebuild_map(self):
@@ -888,7 +893,15 @@ class MetroMapRenderer:
         font_sz = 12
 
         if config.mode == "full":
+            # Show display name from registry (or map_key as fallback)
             map_label = self._map_key or "(none)"
+            try:
+                from maps import get_map
+                entry = get_map(self._map_key)
+                if entry:
+                    map_label = entry[0]
+            except Exception:
+                pass
             edit_flag = " [EDIT]" if self._edit_mode else ""
             text = f"Map: {map_label}{edit_flag}  |  F5: {config.mode} mode  |  M: maps"
         else:

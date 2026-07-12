@@ -812,7 +812,7 @@ class MetroMapRenderer:
         self._draw_rect(card_x, card_y, card_w, total_h, card_bg)
         # Header
         self._draw_rect(card_x, card_bottom - 60, card_w, 60, header_bg)
-        title = gfx.Text(text="Maps  —  press M to close", font_size=24,
+        title = gfx.Text(text=t("map_menu_title"), font_size=24,
                          screen_space=True, anchor="middle-left",
                          material=gfx.TextMaterial(color=fg))
         title.local.position = (ix, card_bottom - 32, 0)
@@ -839,7 +839,7 @@ class MetroMapRenderer:
         # "+ New Map" button
         new_btn_bg = (0.15, 0.40, 0.25, 0.70) if self._dark_mode else (0.60, 0.90, 0.70, 0.70)
         self._draw_rect(ix, y - new_btn_h, iw, new_btn_h, new_btn_bg)
-        txt = gfx.Text(text="+  New Map", font_size=18, screen_space=True,
+        txt = gfx.Text(text=t("new_map_btn"), font_size=18, screen_space=True,
                        anchor="middle-left",
                        material=gfx.TextMaterial(color="#fff" if self._dark_mode else "#155724"))
         txt.local.position = (ix + 12, y - new_btn_h / 2, 0)
@@ -989,10 +989,10 @@ class MetroMapRenderer:
         from main import MetroNetwork, Station
         from maps import register_map, next_user_key
         net = MetroNetwork()
-        center = Station(id=0, name="Central", position=(0, 0, 1))
+        center = Station(id=0, name=t("central_station"), position=(0, 0, 1))
         net.stations[0] = center
         key = next_user_key("new_map")
-        display = "New Map"
+        display = t("new_map_default_name")
         register_map(key, display, lambda net=net: net)
         self.reload_network(net.lines, map_key=key, network=net)
 

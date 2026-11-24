@@ -1,7 +1,7 @@
 @echo off
 rem Concept UrbanChain launcher.
-rem   start.bat            build if needed, then launch
-rem   start.bat --rebuild  force a rebuild, then launch
+rem   start_v3.bat            build if needed, then launch
+rem   start_v3.bat --rebuild  force a rebuild, then launch
 setlocal
 cd /d "%~dp0"
 

@@ -12,6 +12,13 @@ namespace uc {
 
 constexpr double kDefaultTransferSeconds = 120.0;
 
+struct TransferRecord {
+    Index station = kInvalidIndex;
+    int fromLine = -1;
+    int toLine = -1;
+    double seconds = 0.0;
+};
+
 // 线网：地图 + 线路集合 + 换乘参数。
 class Network {
 public:
@@ -27,6 +34,9 @@ public:
     // 按线路保存的有向换乘走行时间：在 station 从 fromLine 换到 toLine。
     bool setTransferTime(Index station, int fromLine, int toLine, double seconds);
     double transferTime(Index station, int fromLine, int toLine) const;
+    DynamicArray<TransferRecord> transferRecords() const;
+
+    void clearLines();
 
     bool validate(std::string* error) const;
 

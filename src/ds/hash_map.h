@@ -146,6 +146,18 @@ public:
         std::swap(hasher_, other.hasher_);
     }
 
+    template <class F>
+    void forEach(F&& fn) const {
+        if (buckets_ == nullptr) {
+            return;
+        }
+        for (std::size_t b = 0; b < bucketCount_; ++b) {
+            for (Node* node = buckets_[b]; node != nullptr; node = node->next) {
+                fn(node->key, node->value);
+            }
+        }
+    }
+
 private:
     struct Node {
         K key;

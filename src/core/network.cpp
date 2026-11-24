@@ -34,6 +34,25 @@ double Network::transferTime(Index station, int fromLine, int toLine) const {
     return found == nullptr ? kDefaultTransferSeconds : *found;
 }
 
+DynamicArray<TransferRecord> Network::transferRecords() const {
+    DynamicArray<TransferRecord> records;
+    records.reserve(transfers_.size());
+    transfers_.forEach([&records](std::uint64_t key, double seconds) {
+        TransferRecord record;
+        record.station = static_cast<Index>((key >> 42) & 0x1fffffull);
+        record.fromLine = static_cast<int>((key >> 21) & 0x1fffffull);
+        record.toLine = static_cast<int>(key & 0x1fffffull);
+        record.seconds = seconds;
+        records.push_back(record);
+    });
+    return records;
+}
+
+void Network::clearLines() {
+    lines_.clear();
+    transfers_.clear();
+}
+
 bool Network::validate(std::string* error) const {
     if (map_.stationCount() > 1 && !map_.isConnected()) {
         if (error != nullptr) {

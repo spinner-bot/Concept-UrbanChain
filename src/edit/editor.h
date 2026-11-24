@@ -35,6 +35,7 @@ public:
     bool addEdge(Index from, Index to, double cost, double length, std::string* error);
     bool addEdge(Index from, Index to, std::string* error);
     bool removeEdge(Index from, Index to, std::string* error);
+    bool setEdgeWeight(Index from, Index to, double cost, double length, std::string* error);
 
     // 线路
     int addLine(const std::string& name, std::uint32_t color, std::string* error);
@@ -46,6 +47,7 @@ public:
 
     bool setTransferTime(Index station, int fromLine, int toLine, double seconds,
                          std::string* error);
+    bool setTransferTimes(const DynamicArray<TransferRecord>& records, std::string* error);
 
     // 撤销 / 重做
     bool canUndo() const { return !undo_.empty(); }

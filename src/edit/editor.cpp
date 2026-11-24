@@ -43,6 +43,10 @@ bool Editor::load(const std::string& mapPath, const std::string& linePath,
 
 bool Editor::save(const std::string& mapPath, const std::string& linePath,
                   std::string* error) {
+    std::string validateError;
+    if (!network_.validate(&validateError)) {
+        return fail(error, "cannot save: " + validateError);
+    }
     if (!io::saveMap(mapPath, network_.map(), error)) {
         return false;
     }
@@ -232,6 +236,26 @@ bool Editor::addEdge(Index from, Index to, std::string* error) {
     return addEdge(from, to, distance, distance, error);
 }
 
+bool Editor::setEdgeWeight(Index from, Index to, double cost, double length,
+                           std::string* error) {
+    if (!checkStation(from, error) || !checkStation(to, error)) {
+        return false;
+    }
+    if (!network_.map().hasEdge(from, to)) {
+        return fail(error, "edge does not exist");
+    }
+    if (cost < 0.0 || length < 0.0) {
+        return fail(error, "edge cost and length cannot be negative");
+    }
+    pushUndo();
+    if (!network_.map().setEdgeWeight(from, to, cost, length)) {
+        rollbackUndo();
+        return fail(error, "failed to update edge");
+    }
+    dirty_ = true;
+    return true;
+}
+
 bool Editor::removeEdge(Index from, Index to, std::string* error) {
     if (!checkStation(from, error) || !checkStation(to, error)) {
         return false;
@@ -395,6 +419,34 @@ bool Editor::setTransferTime(Index station, int fromLine, int toLine, double sec
     if (!network_.setTransferTime(station, fromLine, toLine, seconds)) {
         rollbackUndo();
         return fail(error, "failed to set transfer time");
+    }
+    dirty_ = true;
+    return true;
+}
+
+bool Editor::setTransferTimes(const DynamicArray<TransferRecord>& records,
+                              std::string* error) {
+    for (std::size_t i = 0; i < records.size(); ++i) {
+        const TransferRecord& record = records[i];
+        if (!checkStation(record.station, error) || !checkLine(record.fromLine, error) ||
+            !checkLine(record.toLine, error)) {
+            return false;
+        }
+        if (record.fromLine == record.toLine) {
+            return fail(error, "transfer lines must differ");
+        }
+        if (record.seconds < 0.0) {
+            return fail(error, "transfer time cannot be negative");
+        }
+    }
+    if (records.empty()) {
+        return true;
+    }
+    pushUndo();
+    for (std::size_t i = 0; i < records.size(); ++i) {
+        const TransferRecord& record = records[i];
+        network_.setTransferTime(record.station, record.fromLine, record.toLine,
+                                 record.seconds);
     }
     dirty_ = true;
     return true;

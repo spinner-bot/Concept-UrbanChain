@@ -239,6 +239,7 @@ void testIoRoundTrip() {
     river.id = "river";
     river.kind = uc::BackgroundKind::River;
     river.closed = false;
+    river.width = 0.2;
     river.points.push_back(uc::Vec2{0.0, 0.5});
     river.points.push_back(uc::Vec2{2.0, 0.75});
     map.addBackgroundFeature(river);
@@ -269,6 +270,7 @@ void testIoRoundTrip() {
     CHECK(loadedMap.backgroundFeatures()[0].kind == uc::BackgroundKind::River);
     CHECK(!loadedMap.backgroundFeatures()[0].closed);
     CHECK(loadedMap.backgroundFeatures()[0].points.size() == 2);
+    CHECK(std::fabs(loadedMap.backgroundFeatures()[0].width - 0.2) < 1e-9);
     CHECK(std::fabs(loadedMap.backgroundFeatures()[0].points[1].y - 0.75) < 1e-9);
 
     uc::Network loadedNetwork;

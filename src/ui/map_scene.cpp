@@ -221,85 +221,154 @@ void MapScene::paintBackgroundFeatures(QPainter* painter, const Map& map) const 
         return;
     }
 
-    // 区域填充先画，避免遮住河流、边界与线网。
-    QColor regionFill(232, 224, 205, 150);
-    QPen regionPen(QColor("#cdbfa7"));
-    regionPen.setCosmetic(true);
-    regionPen.setWidthF(1.0);
+    auto scenePoints = [](const BackgroundFeature& feature) {
+        DynamicArray<Vec2> points;
+        for (std::size_t i = 0; i < feature.points.size(); ++i) {
+            points.push_back(Vec2{feature.points[i].x, -feature.points[i].y});
+        }
+        return points;
+    };
+    auto makePath = [](const DynamicArray<Vec2>& points, bool closed) {
+        QPainterPath path;
+        if (!points.empty()) {
+            path.moveTo(points[0].x, points[0].y);
+            for (std::size_t i = 1; i < points.size(); ++i) {
+                path.lineTo(points[i].x, points[i].y);
+            }
+        }
+        if (closed) {
+            path.closeSubpath();
+        }
+        return path;
+    };
+    auto strokeBand = [painter, &makePath](const DynamicArray<Vec2>& points, double width,
+                                           const QColor& color, bool smooth) {
+        if (points.size() < 2) {
+            return;
+        }
+        const DynamicArray<Vec2> samples =
+            smooth ? catmullRomSpline(points, 16, 0.5) : points;
+        QPen pen(color);
+        pen.setCosmetic(false);
+        pen.setWidthF(std::max(width, 0.001));
+        pen.setCapStyle(Qt::RoundCap);
+        pen.setJoinStyle(Qt::RoundJoin);
+        painter->setPen(pen);
+        painter->setBrush(Qt::NoBrush);
+        painter->drawPath(makePath(samples, false));
+    };
+
+    // 1. 面状底图：城市区域、公园、湖泊与闭合水体。
     for (std::size_t i = 0; i < features.size(); ++i) {
         const BackgroundFeature& feature = features[i];
-        if (feature.kind != BackgroundKind::Region || !feature.closed ||
-            feature.points.size() < 3) {
+        if (!feature.closed || feature.points.size() < 3) {
             continue;
         }
-        QPainterPath path;
-        path.moveTo(feature.points[0].x, -feature.points[0].y);
-        for (std::size_t j = 1; j < feature.points.size(); ++j) {
-            path.lineTo(feature.points[j].x, -feature.points[j].y);
+        QColor fill;
+        QColor stroke;
+        if (feature.kind == BackgroundKind::Region) {
+            fill = QColor("#f3efe6");
+            stroke = QColor("#d8cdbb");
+        } else if (feature.kind == BackgroundKind::Park) {
+            fill = QColor("#cfe6c4");
+            stroke = QColor("#a6c99a");
+        } else if (feature.kind == BackgroundKind::Water ||
+                   feature.kind == BackgroundKind::River) {
+            fill = QColor("#b7d9e8");
+            stroke = QColor("#8fbcd0");
+        } else {
+            continue;
         }
-        path.closeSubpath();
-        painter->setPen(regionPen);
-        painter->setBrush(regionFill);
-        painter->drawPath(path);
+        const DynamicArray<Vec2> points = scenePoints(feature);
+        QPen pen(stroke);
+        pen.setCosmetic(true);
+        pen.setWidthF(1.2);
+        painter->setPen(pen);
+        painter->setBrush(fill);
+        painter->drawPath(makePath(points, true));
     }
     painter->setBrush(Qt::NoBrush);
 
+    // 道路、河流等底图线状要素裁剪到城市区域，避免伸出陆地边界。
+    QPainterPath regionClip;
     for (std::size_t i = 0; i < features.size(); ++i) {
         const BackgroundFeature& feature = features[i];
-        if (feature.kind == BackgroundKind::Region && feature.closed) {
+        if (feature.kind == BackgroundKind::Region && feature.closed &&
+            feature.points.size() >= 3) {
+            regionClip.addPath(makePath(scenePoints(feature), true));
+        }
+    }
+    painter->save();
+    if (!regionClip.isEmpty()) {
+        painter->setClipPath(regionClip);
+    }
+
+    // 2. 道路：深色外框 + 浅色路面，宽度按数据坐标缩放。
+    for (std::size_t i = 0; i < features.size(); ++i) {
+        const BackgroundFeature& feature = features[i];
+        if (feature.kind != BackgroundKind::Road || feature.points.size() < 2) {
             continue;
         }
-        QPen pen(QColor("#b9aa90"));
-        pen.setCosmetic(true);
-        pen.setWidthF(1.5);
-        switch (feature.kind) {
-            case BackgroundKind::River:
-                pen.setColor(QColor("#7fb3d5"));
-                pen.setWidthF(4.5);
-                pen.setStyle(Qt::SolidLine);
-                break;
-            case BackgroundKind::Coast:
-                pen.setColor(QColor("#4f86a6"));
-                pen.setWidthF(3.5);
-                break;
-            case BackgroundKind::Mountain:
-                pen.setColor(QColor("#a1886f"));
-                pen.setWidthF(2.0);
-                pen.setStyle(Qt::DashLine);
-                break;
-            case BackgroundKind::Boundary:
-                pen.setColor(QColor("#b9aa90"));
-                pen.setStyle(Qt::DashLine);
-                break;
-            case BackgroundKind::Region:
-                pen.setColor(QColor("#cdbfa7"));
-                break;
+        const DynamicArray<Vec2> points = scenePoints(feature);
+        const double width = feature.width > 0.0 ? feature.width : 0.05;
+        strokeBand(points, width + std::max(0.012, width * 0.18),
+                   QColor("#d8d0c0"), false);
+        strokeBand(points, width * 0.72, QColor("#fffdf7"), false);
+    }
+
+    // 3. 河流：河岸 + 水面，宽度来自数据。
+    for (std::size_t i = 0; i < features.size(); ++i) {
+        const BackgroundFeature& feature = features[i];
+        if (feature.kind != BackgroundKind::River || feature.closed ||
+            feature.points.size() < 2) {
+            continue;
         }
+        const DynamicArray<Vec2> points = scenePoints(feature);
+        const double width = feature.width > 0.0 ? feature.width : 0.16;
+        strokeBand(points, width + std::max(0.02, width * 0.18),
+                   QColor("#7faec6"), true);
+        strokeBand(points, width, QColor("#a9d3e6"), true);
+    }
+
+    // 4. 海岸线。
+    for (std::size_t i = 0; i < features.size(); ++i) {
+        const BackgroundFeature& feature = features[i];
+        if (feature.kind != BackgroundKind::Coast || feature.points.size() < 2) {
+            continue;
+        }
+        const DynamicArray<Vec2> points = scenePoints(feature);
+        const double width = feature.width > 0.0 ? feature.width : 0.03;
+        strokeBand(points, width, QColor("#4f86a6"), true);
+    }
+    painter->restore();
+
+    // 5. 行政边界、山体/等高线以及未闭合的其他线状要素。
+    for (std::size_t i = 0; i < features.size(); ++i) {
+        const BackgroundFeature& feature = features[i];
         if (feature.points.size() < 2) {
             continue;
         }
-        DynamicArray<Vec2> keys;
-        for (std::size_t j = 0; j < feature.points.size(); ++j) {
-            keys.push_back(Vec2{feature.points[j].x, -feature.points[j].y});
+        if (feature.kind == BackgroundKind::Road ||
+            feature.kind == BackgroundKind::River ||
+            feature.kind == BackgroundKind::Coast ||
+            (feature.closed &&
+             (feature.kind == BackgroundKind::Region ||
+              feature.kind == BackgroundKind::Park ||
+              feature.kind == BackgroundKind::Water))) {
+            continue;
         }
-        const bool smooth = !feature.closed &&
-                            (feature.kind == BackgroundKind::River ||
-                             feature.kind == BackgroundKind::Coast ||
-                             feature.kind == BackgroundKind::Mountain);
-        const DynamicArray<Vec2> samples =
-            smooth ? catmullRomSpline(keys, 12, 0.5) : keys;
-        QPainterPath path;
-        if (!samples.empty()) {
-            path.moveTo(samples[0].x, samples[0].y);
-            for (std::size_t j = 1; j < samples.size(); ++j) {
-                path.lineTo(samples[j].x, samples[j].y);
-            }
-        }
-        if (feature.closed) {
-            path.closeSubpath();
+        const DynamicArray<Vec2> points = scenePoints(feature);
+        QPen pen(QColor("#b3a68d"));
+        pen.setCosmetic(true);
+        pen.setWidthF(1.1);
+        pen.setStyle(Qt::DashLine);
+        if (feature.kind == BackgroundKind::Mountain) {
+            pen.setColor(QColor("#b3a48c"));
+            pen.setWidthF(1.0);
         }
         painter->setPen(pen);
-        painter->drawPath(path);
+        painter->setBrush(Qt::NoBrush);
+        painter->drawPath(makePath(points, feature.closed));
     }
 }
 

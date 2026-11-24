@@ -74,7 +74,7 @@ bool loadMap(const std::string& path, Map& map, std::string* error) {
             if (keyword != "CUC3M") {
                 return setError(error, lineNumber, "expected CUC3M header");
             }
-            if (!(stream >> version) || (version != 1 && version != 2)) {
+            if (!(stream >> version) || version < 1 || version > 3) {
                 return setError(error, lineNumber, "unsupported CUC3M version");
             }
             headerSeen = true;
@@ -120,6 +120,12 @@ bool loadMap(const std::string& path, Map& map, std::string* error) {
                 return setError(error, lineNumber, "unknown background kind: " + kind);
             }
             feature.closed = closed != 0;
+            if (version >= 3) {
+                if (!(stream >> feature.width) || feature.width < 0.0) {
+                    return setError(error, lineNumber,
+                                    "BG expects a non-negative width after id");
+                }
+            }
             double x = 0.0;
             double y = 0.0;
             while (stream >> x >> y) {
@@ -217,14 +223,15 @@ bool saveMap(const std::string& path, const Map& map, std::string* error) {
         return false;
     }
 
-    output << "CUC3M 2\n";
+    output << "CUC3M 3\n";
     output << std::setprecision(17);
     output << "BACKGROUND " << map.backgroundFeatures().size() << '\n';
     for (std::size_t i = 0; i < map.backgroundFeatures().size(); ++i) {
         const BackgroundFeature& feature = map.backgroundFeatures()[i];
         output << "BG " << backgroundKindName(feature.kind) << ' '
                << (feature.closed ? 1 : 0) << ' '
-               << (feature.id.empty() ? std::string("bg") : feature.id);
+               << (feature.id.empty() ? std::string("bg") : feature.id) << ' '
+               << feature.width;
         for (std::size_t j = 0; j < feature.points.size(); ++j) {
             output << ' ' << feature.points[j].x << ' ' << feature.points[j].y;
         }

@@ -19,6 +19,22 @@ bool Map::addStation(const Station& station, Index* outIndex) {
     return true;
 }
 
+bool Map::setStationPosition(Index index, const Vec2& position) {
+    if (index < 0 || index >= stationCount()) {
+        return false;
+    }
+    stations_[static_cast<std::size_t>(index)].position = position;
+    return true;
+}
+
+bool Map::setStationName(Index index, const std::string& name) {
+    if (index < 0 || index >= stationCount()) {
+        return false;
+    }
+    stations_[static_cast<std::size_t>(index)].name = name;
+    return true;
+}
+
 Index Map::findStation(const std::string& id) const {
     const Index* found = stationIndex_.find(id);
     return found == nullptr ? kInvalidIndex : *found;

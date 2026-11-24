@@ -26,6 +26,7 @@ public:
     const Map& map() const { return map_; }
 
     int addLine(Line line);
+    bool removeLine(int index);
 
     const DynamicArray<Line>& lines() const { return lines_; }
     DynamicArray<Line>& lines() { return lines_; }

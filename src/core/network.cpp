@@ -11,6 +11,29 @@ int Network::addLine(Line line) {
     return index;
 }
 
+bool Network::removeLine(int index) {
+    if (index < 0 || index >= static_cast<int>(lines_.size())) {
+        return false;
+    }
+    lines_.erase(static_cast<std::size_t>(index));
+    for (std::size_t i = static_cast<std::size_t>(index); i < lines_.size(); ++i) {
+        lines_[i].setId(static_cast<int>(i));
+    }
+
+    const DynamicArray<TransferRecord> records = transferRecords();
+    transfers_.clear();
+    for (std::size_t i = 0; i < records.size(); ++i) {
+        const TransferRecord& record = records[i];
+        if (record.fromLine == index || record.toLine == index) {
+            continue;
+        }
+        const int fromLine = record.fromLine > index ? record.fromLine - 1 : record.fromLine;
+        const int toLine = record.toLine > index ? record.toLine - 1 : record.toLine;
+        transfers_.set(transferKey(record.station, fromLine, toLine), record.seconds);
+    }
+    return true;
+}
+
 const Line* Network::line(int index) const {
     if (index < 0 || index >= static_cast<int>(lines_.size())) {
         return nullptr;

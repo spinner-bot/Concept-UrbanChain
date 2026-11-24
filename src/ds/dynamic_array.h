@@ -92,6 +92,17 @@ public:
         }
     }
 
+    // 删除指定位置元素，后续元素前移。
+    void erase(std::size_t index) {
+        if (index >= size_) {
+            return;
+        }
+        for (std::size_t i = index; i + 1 < size_; ++i) {
+            data_[i] = std::move(data_[i + 1]);
+        }
+        --size_;
+    }
+
     void clear() { size_ = 0; }
 
     void reserve(std::size_t capacity) {

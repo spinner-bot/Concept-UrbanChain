@@ -23,7 +23,7 @@ add_library(uc_core
 
 target_include_directories(uc_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
-add_executable(urbanchain src/main.cpp)
+add_executable(urbanchain src/main.cpp src/app/console_app.cpp)
 target_link_libraries(urbanchain PRIVATE uc_core)
 
 enable_testing()

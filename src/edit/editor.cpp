@@ -18,6 +18,13 @@ bool fail(std::string* error, const std::string& message) {
 
 }  // namespace
 
+void Editor::newDocument() {
+    network_ = Network();
+    undo_.clear();
+    redo_.clear();
+    dirty_ = false;
+}
+
 bool Editor::load(const std::string& mapPath, const std::string& linePath,
                   std::string* error) {
     Network staged;

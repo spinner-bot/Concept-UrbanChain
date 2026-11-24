@@ -17,6 +17,7 @@ public:
 
     const Network& network() const { return network_; }
 
+    void newDocument();
     bool load(const std::string& mapPath, const std::string& linePath, std::string* error);
     bool save(const std::string& mapPath, const std::string& linePath, std::string* error);
 

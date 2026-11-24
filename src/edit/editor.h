@@ -29,10 +29,12 @@ public:
     Index addStation(const std::string& name, double x, double y, std::string* error);
     bool moveStation(Index station, double x, double y, std::string* error);
     bool renameStation(Index station, const std::string& name, std::string* error);
+    bool removeStation(Index station, std::string* error);
 
     // 区间
     bool addEdge(Index from, Index to, double cost, double length, std::string* error);
     bool addEdge(Index from, Index to, std::string* error);
+    bool removeEdge(Index from, Index to, std::string* error);
 
     // 线路
     int addLine(const std::string& name, std::uint32_t color, std::string* error);
@@ -40,6 +42,10 @@ public:
     bool appendStop(int line, Index station, std::string* error);
     bool removeLastStop(int line, std::string* error);
     bool setLineStations(int line, const DynamicArray<Index>& stations, std::string* error);
+    bool replaceLine(int line, Line updated, std::string* error);
+
+    bool setTransferTime(Index station, int fromLine, int toLine, double seconds,
+                         std::string* error);
 
     // 撤销 / 重做
     bool canUndo() const { return !undo_.empty(); }

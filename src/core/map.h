@@ -40,6 +40,7 @@ public:
     bool setStationName(Index index, const std::string& name);
 
     bool addEdge(Index u, Index v, double cost, double length = -1.0);
+    bool removeEdge(Index u, Index v);
     bool hasEdge(Index u, Index v) const;
     double edgeCost(Index u, Index v) const;
     double edgeLength(Index u, Index v) const;

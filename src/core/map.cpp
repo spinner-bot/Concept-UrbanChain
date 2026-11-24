@@ -63,6 +63,50 @@ bool Map::addEdge(Index u, Index v, double cost, double length) {
     return true;
 }
 
+bool Map::removeEdge(Index u, Index v) {
+    if (!hasEdge(u, v)) {
+        return false;
+    }
+    Index found = kInvalidIndex;
+    for (std::size_t i = 0; i < edges_.size(); ++i) {
+        const EdgeRecord& edge = edges_[i];
+        if ((edge.from == u && edge.to == v) || (edge.from == v && edge.to == u)) {
+            found = static_cast<Index>(i);
+            break;
+        }
+    }
+    if (found == kInvalidIndex) {
+        return false;
+    }
+    edges_.erase(static_cast<std::size_t>(found));
+
+    const Index count = stationCount();
+    for (Index i = 0; i < count; ++i) {
+        adjacency_[static_cast<std::size_t>(i)].clear();
+    }
+    for (std::size_t i = 0; i < matrixCost_.size(); ++i) {
+        matrixCost_[i] = kInfinity;
+        matrixLength_[i] = 0.0;
+    }
+    for (std::size_t i = 0; i < edges_.size(); ++i) {
+        const EdgeRecord& edge = edges_[i];
+        const Index edgeId = static_cast<Index>(i);
+        adjacency_[static_cast<std::size_t>(edge.from)].push_back(
+            AdjEdge{edge.to, edge.cost, edge.length, edgeId});
+        adjacency_[static_cast<std::size_t>(edge.to)].push_back(
+            AdjEdge{edge.from, edge.cost, edge.length, edgeId});
+        const std::size_t offset =
+            static_cast<std::size_t>(edge.from) * count + static_cast<std::size_t>(edge.to);
+        const std::size_t reverse =
+            static_cast<std::size_t>(edge.to) * count + static_cast<std::size_t>(edge.from);
+        matrixCost_[offset] = edge.cost;
+        matrixCost_[reverse] = edge.cost;
+        matrixLength_[offset] = edge.length;
+        matrixLength_[reverse] = edge.length;
+    }
+    return true;
+}
+
 bool Map::hasEdge(Index u, Index v) const {
     const Index count = stationCount();
     if (u < 0 || v < 0 || u >= count || v >= count || u == v) {

@@ -121,6 +121,89 @@ bool Editor::renameStation(Index station, const std::string& name, std::string* 
     return true;
 }
 
+bool Editor::removeStation(Index station, std::string* error) {
+    if (!checkStation(station, error)) {
+        return false;
+    }
+    for (std::size_t i = 0; i < network_.lines().size(); ++i) {
+        if (network_.lines()[i].containsStation(station)) {
+            return fail(error, "station is used by line " +
+                                   network_.lines()[i].name() +
+                                   "; remove it from the line first");
+        }
+    }
+
+    const Map& oldMap = network_.map();
+    const Index oldCount = oldMap.stationCount();
+    DynamicArray<Index> remap;
+    remap.resize(static_cast<std::size_t>(oldCount));
+    for (Index i = 0; i < oldCount; ++i) {
+        remap[static_cast<std::size_t>(i)] = kInvalidIndex;
+    }
+
+    Map newMap;
+    for (Index i = 0; i < oldCount; ++i) {
+        if (i == station) {
+            continue;
+        }
+        Index newIndex = kInvalidIndex;
+        if (!newMap.addStation(oldMap.station(i), &newIndex)) {
+            return fail(error, "failed to rebuild map while removing station");
+        }
+        remap[static_cast<std::size_t>(i)] = newIndex;
+    }
+    for (std::size_t i = 0; i < oldMap.edges().size(); ++i) {
+        const EdgeRecord& edge = oldMap.edges()[i];
+        if (edge.from == station || edge.to == station) {
+            continue;
+        }
+        const Index from = remap[static_cast<std::size_t>(edge.from)];
+        const Index to = remap[static_cast<std::size_t>(edge.to)];
+        if (from == kInvalidIndex || to == kInvalidIndex ||
+            !newMap.addEdge(from, to, edge.cost, edge.length)) {
+            return fail(error, "failed to rebuild edges while removing station");
+        }
+    }
+
+    Network staged;
+    staged.map() = static_cast<Map&&>(newMap);
+    for (std::size_t i = 0; i < network_.lines().size(); ++i) {
+        Line line = network_.lines()[i];
+        DynamicArray<Index> stops;
+        for (std::size_t j = 0; j < line.stations().size(); ++j) {
+            const Index remapped = remap[static_cast<std::size_t>(line.stations()[j])];
+            if (remapped == kInvalidIndex) {
+                return fail(error, "line references the station being removed");
+            }
+            stops.push_back(remapped);
+        }
+        line.setStations(static_cast<DynamicArray<Index>&&>(stops));
+        staged.addLine(static_cast<Line&&>(line));
+    }
+    const DynamicArray<TransferRecord> transfers = network_.transferRecords();
+    for (std::size_t i = 0; i < transfers.size(); ++i) {
+        const TransferRecord& record = transfers[i];
+        if (record.station == station) {
+            continue;
+        }
+        const Index remapped = remap[static_cast<std::size_t>(record.station)];
+        if (remapped == kInvalidIndex) {
+            continue;
+        }
+        staged.setTransferTime(remapped, record.fromLine, record.toLine, record.seconds);
+    }
+
+    std::string validateError;
+    if (!staged.validate(&validateError)) {
+        return fail(error, "cannot delete station: " + validateError);
+    }
+
+    pushUndo();
+    network_ = static_cast<Network&&>(staged);
+    dirty_ = true;
+    return true;
+}
+
 bool Editor::addEdge(Index from, Index to, double cost, double length, std::string* error) {
     if (!checkStation(from, error) || !checkStation(to, error)) {
         return false;
@@ -147,6 +230,33 @@ bool Editor::addEdge(Index from, Index to, std::string* error) {
     const double distance = euclideanDistance(network_.map().station(from).position,
                                               network_.map().station(to).position);
     return addEdge(from, to, distance, distance, error);
+}
+
+bool Editor::removeEdge(Index from, Index to, std::string* error) {
+    if (!checkStation(from, error) || !checkStation(to, error)) {
+        return false;
+    }
+    if (!network_.map().hasEdge(from, to)) {
+        return fail(error, "edge does not exist");
+    }
+    for (std::size_t i = 0; i < network_.lines().size(); ++i) {
+        const Line& line = network_.lines()[i];
+        for (int j = 0; j + 1 < line.stationCount(); ++j) {
+            const Index a = line.stations()[static_cast<std::size_t>(j)];
+            const Index b = line.stations()[static_cast<std::size_t>(j + 1)];
+            if ((a == from && b == to) || (a == to && b == from)) {
+                return fail(error, "edge is used by line " + line.name() +
+                                       "; remove the line first");
+            }
+        }
+    }
+    pushUndo();
+    if (!network_.map().removeEdge(from, to)) {
+        rollbackUndo();
+        return fail(error, "failed to remove edge");
+    }
+    dirty_ = true;
+    return true;
 }
 
 int Editor::addLine(const std::string& name, std::uint32_t color, std::string* error) {
@@ -249,6 +359,43 @@ bool Editor::setLineStations(int line, const DynamicArray<Index>& stations,
 
     pushUndo();
     network_.lines()[static_cast<std::size_t>(line)] = static_cast<Line&&>(candidate);
+    dirty_ = true;
+    return true;
+}
+
+bool Editor::replaceLine(int line, Line updated, std::string* error) {
+    if (!checkLine(line, error)) {
+        return false;
+    }
+    updated.setId(line);
+    std::string validateError;
+    if (!updated.validate(network_.map(), &validateError)) {
+        return fail(error, validateError);
+    }
+    pushUndo();
+    network_.lines()[static_cast<std::size_t>(line)] =
+        static_cast<Line&&>(updated);
+    dirty_ = true;
+    return true;
+}
+
+bool Editor::setTransferTime(Index station, int fromLine, int toLine, double seconds,
+                             std::string* error) {
+    if (!checkStation(station, error) || !checkLine(fromLine, error) ||
+        !checkLine(toLine, error)) {
+        return false;
+    }
+    if (fromLine == toLine) {
+        return fail(error, "transfer lines must differ");
+    }
+    if (seconds < 0.0) {
+        return fail(error, "transfer time cannot be negative");
+    }
+    pushUndo();
+    if (!network_.setTransferTime(station, fromLine, toLine, seconds)) {
+        rollbackUndo();
+        return fail(error, "failed to set transfer time");
+    }
     dirty_ = true;
     return true;
 }

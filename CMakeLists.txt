@@ -24,8 +24,32 @@ add_library(uc_core
 
 target_include_directories(uc_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
-add_executable(urbanchain src/main.cpp src/app/console_app.cpp)
-target_link_libraries(urbanchain PRIVATE uc_core)
+option(UC_BUILD_GUI "Build the Qt Widgets GUI" ON)
+if(UC_BUILD_GUI)
+    find_package(Qt6 QUIET COMPONENTS Widgets)
+    if(Qt6_FOUND)
+        set(CMAKE_AUTOMOC ON)
+        add_executable(urbanchain WIN32
+            src/ui/main.cpp
+            src/ui/main_window.cpp
+            src/ui/map_view.cpp
+            src/ui/map_scene.cpp
+            src/ui/station_item.cpp
+        )
+        target_link_libraries(urbanchain PRIVATE uc_core Qt6::Widgets)
+
+        get_filename_component(_qt_prefix "${Qt6_DIR}/../../.." ABSOLUTE)
+        find_program(WINDEPLOYQT_EXECUTABLE windeployqt HINTS "${_qt_prefix}/bin")
+        if(WINDEPLOYQT_EXECUTABLE)
+            add_custom_command(TARGET urbanchain POST_BUILD
+                COMMAND "${WINDEPLOYQT_EXECUTABLE}" --no-translations --no-opengl-sw
+                        "$<TARGET_FILE:urbanchain>"
+                COMMENT "Deploying Qt runtime")
+        endif()
+    else()
+        message(WARNING "Qt6 not found; set CMAKE_PREFIX_PATH to the Qt msvc2022_64 directory.")
+    endif()
+endif()
 
 enable_testing()
 

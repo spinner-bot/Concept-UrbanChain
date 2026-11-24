@@ -33,7 +33,18 @@ set "CMAKE=%VSPATH%\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake
 set "NINJA_DIR=%VSPATH%\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja"
 set "PATH=%NINJA_DIR%;%PATH%"
 
-"%CMAKE%" -S "%~dp0.." -B "%~dp0..\build" -G Ninja -DCMAKE_BUILD_TYPE=Release
+set "QT_PATH=%UC_QT_PATH%"
+if defined QT_PATH goto :have_qt
+if exist "F:\dev-tools\6.8.3\msvc2022_64\lib\cmake\Qt6\Qt6Config.cmake" set "QT_PATH=F:\dev-tools\6.8.3\msvc2022_64"
+:have_qt
+
+set "QT_ARG="
+if not defined QT_PATH goto :no_qt
+set "QT_ARG=-DCMAKE_PREFIX_PATH=%QT_PATH%"
+set "PATH=%QT_PATH%\bin;%PATH%"
+:no_qt
+
+"%CMAKE%" -S "%~dp0.." -B "%~dp0..\build" -G Ninja -DCMAKE_BUILD_TYPE=Release %QT_ARG%
 if errorlevel 1 exit /b 1
 
 "%CMAKE%" --build "%~dp0..\build"

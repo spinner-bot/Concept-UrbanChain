@@ -539,8 +539,10 @@ void MapView::mouseMoveEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
-    previewPos_ = mapToScene(event->pos());
-    scene_->setPreview(previewPos_, pendingStation_, activeLine_);
+    if (pendingStation_ >= 0 || activeLine_ >= 0) {
+        previewPos_ = mapToScene(event->pos());
+        scene_->setPreview(previewPos_, pendingStation_, activeLine_);
+    }
     event->accept();
 }
 

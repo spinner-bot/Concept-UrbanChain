@@ -200,8 +200,11 @@ hr.sep{border:none;border-top:1px dashed var(--line-strong);margin:34px 0}
   background:linear-gradient(180deg,#fffefb,#fbf7ef);
   border:1px solid var(--line);border-radius:15px;
   box-shadow:0 1px 0 rgba(255,255,255,.9) inset, 0 2px 12px -8px rgba(20,22,28,.16);
-  overflow-x:auto;text-align:center;
+  overflow-x:auto;-webkit-overflow-scrolling:touch;text-align:center;
 }
+.fx::-webkit-scrollbar,.tbl-wrap::-webkit-scrollbar{height:8px}
+.fx::-webkit-scrollbar-thumb,.tbl-wrap::-webkit-scrollbar-thumb{background:#d8cebc;border-radius:4px}
+.fx::-webkit-scrollbar-track,.tbl-wrap::-webkit-scrollbar-track{background:transparent}
 .fx[data-label]::before{
   content:attr(data-label);position:absolute;top:11px;left:17px;
   font-family:var(--mono);font-size:9.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--faint);
@@ -310,7 +313,7 @@ hr.sep{border:none;border-top:1px dashed var(--line-strong);margin:34px 0}
 .obj-body .fx{border-radius:12px;background:linear-gradient(180deg,#fffefa,#fbf7ef)}
 
 /* ============ 表格 ============ */
-.tbl-wrap{margin:24px 0;border:1px solid var(--line);border-radius:15px;overflow:hidden;box-shadow:var(--shadow);background:var(--paper)}
+.tbl-wrap{margin:24px 0;border:1px solid var(--line);border-radius:15px;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;box-shadow:var(--shadow);background:var(--paper)}
 table{width:100%;border-collapse:collapse;font-size:14.4px}
 thead th{
   background:linear-gradient(180deg,#f3eee3,#eee8db);
@@ -387,9 +390,9 @@ footer .big{font-family:var(--serif);font-style:italic;font-size:30px;color:rgba
 
 /* ============ 响应式 ============ */
 @media (max-width:1120px){
-  .layout{grid-template-columns:1fr;padding:0 28px}
+  .layout{grid-template-columns:minmax(0,1fr);padding:0 28px}
   .toc{display:none}
-  main{max-width:860px;margin:0 auto}
+  main{max-width:860px;margin:0 auto;width:100%}
 }
 @media (max-width:720px){
   body{font-size:15.8px}
@@ -397,12 +400,14 @@ footer .big{font-family:var(--serif);font-style:italic;font-size:30px;color:rgba
   .sec-num{font-size:40px;min-width:44px}
   .sec-head{gap:16px}
   .sec-head h2{font-size:23px}
-  .constraints{grid-template-columns:1fr}
+  .constraints{grid-template-columns:minmax(0,1fr)}
   .hero-formula{padding:16px 20px}
   .obj-head{flex-wrap:wrap;padding:20px}
   .obj-body{padding:20px}
   .fx{padding:22px 14px 16px}
+  .fx mjx-container{font-size:.92em !important}
   .hero{padding:80px 20px 90px}
+  .scroll-cue{display:none}
   .foot-in{flex-direction:column;align-items:flex-start}
 }
 @media (prefers-reduced-motion:reduce){

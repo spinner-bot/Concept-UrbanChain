@@ -8,6 +8,7 @@
 #include "ds/dynamic_array.h"
 #include "ds/hash_map.h"
 #include "ds/queue.h"
+#include "ds/sort.h"
 #include "ds/stack.h"
 #include "ds/union_find.h"
 #include "edit/editor.h"
@@ -75,6 +76,21 @@ void testBinaryHeap() {
     CHECK(heap.pop().key == 3.0);
     CHECK(heap.pop().key == 5.0);
     CHECK(heap.empty());
+}
+
+void testSort() {
+    uc::DynamicArray<int> values;
+    const int raw[] = {5, 1, 9, 3, 3, 7, 0, 8, 2, 6, 4, 4, 11, 10};
+    for (int value : raw) {
+        values.push_back(value);
+    }
+    uc::quickSort(values, [](int a, int b) { return a < b; });
+    CHECK(values.size() == 14);
+    for (std::size_t i = 1; i < values.size(); ++i) {
+        CHECK(values[i - 1] <= values[i]);
+    }
+    CHECK(values[0] == 0);
+    CHECK(values[values.size() - 1] == 11);
 }
 
 void testUnionFind() {
@@ -464,6 +480,7 @@ int main() {
     testDynamicArray();
     testHashMap();
     testBinaryHeap();
+    testSort();
     testUnionFind();
     testQueueStack();
     testMapAndLine();

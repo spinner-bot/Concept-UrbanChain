@@ -42,6 +42,7 @@ public:
 
     void selectLine(int lineIndex);
     int selectedLine() const { return selectedLine_; }
+    bool hasActiveLine() const { return activeLine_ >= 0; }
 
     void setStatusCallback(std::function<void(const QString&)> callback);
     void setChangeCallback(std::function<void()> callback);

@@ -365,6 +365,9 @@ void MainWindow::loadDemoIfAvailable() {
             updateTitle();
             updateActions();
             refreshPanels();
+            if (!editor_.network().lines().empty()) {
+                view_->selectLine(0);
+            }
             statusBar()->showMessage(tr("Loaded demo network"), 3000);
             return;
         }
@@ -395,8 +398,19 @@ void MainWindow::openDocument() {
     if (mapPath.isEmpty()) {
         return;
     }
-    const QString linePath = QFileDialog::getOpenFileName(
-        this, tr("Open line file"), QString(), tr("UrbanChain lines (*.cuc3l);;All files (*)"));
+
+    // 优先使用与地图同名的线路文件，避免每次打开都要选两个文件。
+    QString linePath;
+    const QFileInfo mapInfo(mapPath);
+    const QString sibling =
+        mapInfo.dir().filePath(mapInfo.completeBaseName() + QString(".cuc3l"));
+    if (QFileInfo::exists(sibling)) {
+        linePath = sibling;
+    } else {
+        linePath = QFileDialog::getOpenFileName(
+            this, tr("Open line file"), mapInfo.dir().absolutePath(),
+            tr("UrbanChain lines (*.cuc3l);;All files (*)"));
+    }
     if (linePath.isEmpty()) {
         return;
     }
@@ -413,6 +427,9 @@ void MainWindow::openDocument() {
     updateTitle();
     updateActions();
     refreshPanels();
+    if (!editor_.network().lines().empty()) {
+        view_->selectLine(0);
+    }
     statusBar()->showMessage(tr("Loaded"), 3000);
 }
 
@@ -430,8 +447,14 @@ bool MainWindow::saveDocumentAs() {
     if (mapPath.isEmpty()) {
         return false;
     }
+    QString defaultLinePath = linePath_;
+    if (defaultLinePath.isEmpty()) {
+        const QFileInfo mapInfo(mapPath);
+        defaultLinePath =
+            mapInfo.dir().filePath(mapInfo.completeBaseName() + QString(".cuc3l"));
+    }
     const QString linePath = QFileDialog::getSaveFileName(
-        this, tr("Save line file"), linePath_.isEmpty() ? QString("lines.cuc3l") : linePath_,
+        this, tr("Save line file"), defaultLinePath,
         tr("UrbanChain lines (*.cuc3l);;All files (*)"));
     if (linePath.isEmpty()) {
         return false;
@@ -516,6 +539,11 @@ void MainWindow::updateActions() {
             transferButton_->setEnabled(!editor_.network().lines().empty());
         }
         routeButton_->setEnabled(fromCombo_->count() > 0 && toCombo_->count() > 0);
+        if (finishLineAction_ != nullptr) {
+            const bool drawing = view_->hasActiveLine();
+            finishLineAction_->setEnabled(drawing);
+            removeLastStopAction_->setEnabled(drawing);
+        }
     }
 }
 

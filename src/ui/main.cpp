@@ -7,12 +7,35 @@
 #include <QTimer>
 #include <QWidget>
 
+#include "ui/language.h"
 #include "ui/main_window.h"
 
 int main(int argc, char** argv) {
     QApplication app(argc, argv);
-    QApplication::setApplicationName("Concept UrbanChain");
+    QCoreApplication::setOrganizationName("ConceptUrbanChain");
+    QCoreApplication::setApplicationName("ConceptUrbanChain");
     QApplication::setStyle(QStyleFactory::create("Fusion"));
+
+    uc::initializeLanguage();
+
+    QString mode;
+    QString path;
+    QString languageOverride;
+    for (int i = 1; i < argc; ++i) {
+        const QString argument = QString::fromLocal8Bit(argv[i]);
+        if (argument == "--lang" && i + 1 < argc) {
+            languageOverride = QString::fromLocal8Bit(argv[++i]);
+        } else if (mode.isEmpty()) {
+            mode = argument;
+        } else if (path.isEmpty()) {
+            path = argument;
+        }
+    }
+    if (languageOverride == "zh") {
+        uc::setLanguage(uc::Language::Chinese, false);
+    } else if (languageOverride == "en") {
+        uc::setLanguage(uc::Language::English, false);
+    }
 
     uc::MainWindow window;
     window.show();
@@ -20,16 +43,16 @@ int main(int argc, char** argv) {
     // 开发自检入口：
     //   --screenshot <path>        截取窗口
     //   --screenshot-route <path>  选择 WEST -> SE 并查询，然后截图
-    const QString mode = argc >= 2 ? QString::fromLocal8Bit(argv[1]) : QString();
-    const QString path = argc >= 3 ? QString::fromLocal8Bit(argv[2]) : QString();
+    //   --screenshot-line <path>   打开线路属性对话框并截图
+    //   --screenshot-transfers <path> 打开换乘时间对话框并截图
     if (mode == "--screenshot-route" && !path.isEmpty()) {
         QTimer::singleShot(600, &window, [&window, path] {
             auto* from = window.findChild<QComboBox*>("fromCombo");
             auto* to = window.findChild<QComboBox*>("toCombo");
             auto* button = window.findChild<QPushButton*>("routeButton");
             if (from != nullptr && to != nullptr && button != nullptr) {
-                const int fromIndex = from->findData(1);
-                const int toIndex = to->findData(6);
+                const int fromIndex = from->findData(QStringLiteral("WEST"));
+                const int toIndex = to->findData(QStringLiteral("SE"));
                 if (fromIndex >= 0) {
                     from->setCurrentIndex(fromIndex);
                 }

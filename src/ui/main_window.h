@@ -4,17 +4,22 @@
 #include <QString>
 
 #include "edit/editor.h"
+#include "ui/language.h"
 #include "ui/map_view.h"
 
 class QAction;
 class QCloseEvent;
 class QComboBox;
+class QDockWidget;
+class QGroupBox;
 class QShowEvent;
 class QLabel;
 class QListWidget;
+class QMenu;
 class QPlainTextEdit;
 class QPushButton;
 class QTimeEdit;
+class QToolBar;
 
 namespace uc {
 
@@ -43,6 +48,8 @@ private:
     bool maybeSave();
 
     void setMode(EditMode mode);
+    void applyLanguage(Language language);
+    void retranslateUi();
     void updateTitle();
     void updateActions();
     void refreshPanels();
@@ -78,6 +85,24 @@ private:
     QAction* transferAction_ = nullptr;
     QAction* fitAction_ = nullptr;
     QAction* aboutAction_ = nullptr;
+    QAction* chineseAction_ = nullptr;
+    QAction* englishAction_ = nullptr;
+
+    QMenu* fileMenu_ = nullptr;
+    QMenu* editMenu_ = nullptr;
+    QMenu* modeMenu_ = nullptr;
+    QMenu* lineMenu_ = nullptr;
+    QMenu* viewMenu_ = nullptr;
+    QMenu* settingsMenu_ = nullptr;
+    QMenu* languageMenu_ = nullptr;
+    QMenu* helpMenu_ = nullptr;
+    QDockWidget* networkDock_ = nullptr;
+    QGroupBox* linesGroup_ = nullptr;
+    QGroupBox* routeGroup_ = nullptr;
+    QToolBar* toolbar_ = nullptr;
+    QLabel* fromLabel_ = nullptr;
+    QLabel* toLabel_ = nullptr;
+    QLabel* departLabel_ = nullptr;
 
     QLabel* modeLabel_ = nullptr;
     QListWidget* lineList_ = nullptr;

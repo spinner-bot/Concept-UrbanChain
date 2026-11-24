@@ -20,6 +20,7 @@
 #include <algorithm>
 
 #include "core/map.h"
+#include "ui/language.h"
 
 namespace uc {
 namespace {
@@ -52,25 +53,25 @@ QDoubleSpinBox* makeDoubleSpin(double minimum, double maximum, double value, QWi
 
 LineDialog::LineDialog(const Line& line, const Map& map, QWidget* parent)
     : QDialog(parent), line_(line), map_(map), color_(line.color()) {
-    setWindowTitle("Line Properties");
+    setWindowTitle(L("Line Properties"));
     resize(700, 760);
 
     auto* layout = new QVBoxLayout(this);
 
     auto* basicForm = new QFormLayout();
     nameEdit_ = new QLineEdit(QString::fromUtf8(line_.name().c_str()), this);
-    basicForm->addRow("Name", nameEdit_);
+    basicForm->addRow(L("Name"), nameEdit_);
 
     colorButton_ = new QPushButton(this);
     colorButton_->setMinimumWidth(120);
     connect(colorButton_, &QPushButton::clicked, this, [this] { chooseColor(); });
-    basicForm->addRow("Color", colorButton_);
+    basicForm->addRow(L("Color"), colorButton_);
 
     dwellSpin_ = makeDoubleSpin(0.0, 3600.0, line_.ops().dwellSec, this);
-    basicForm->addRow("Dwell at stops (s)", dwellSpin_);
+    basicForm->addRow(L("Dwell at stops (s)"), dwellSpin_);
     layout->addLayout(basicForm);
 
-    layout->addWidget(new QLabel("Stops (top to bottom)", this));
+    layout->addWidget(new QLabel(L("Stops (top to bottom)"), this));
     stopsList_ = new QListWidget(this);
     stopsList_->setMaximumHeight(150);
     for (std::size_t i = 0; i < line_.stations().size(); ++i) {
@@ -80,9 +81,9 @@ LineDialog::LineDialog(const Line& line, const Map& map, QWidget* parent)
     }
     layout->addWidget(stopsList_);
     auto* stopButtons = new QHBoxLayout();
-    auto* removeStopButton = new QPushButton("Remove stop", this);
-    auto* upStopButton = new QPushButton("Move up", this);
-    auto* downStopButton = new QPushButton("Move down", this);
+    auto* removeStopButton = new QPushButton(L("Remove stop"), this);
+    auto* upStopButton = new QPushButton(L("Move up"), this);
+    auto* downStopButton = new QPushButton(L("Move down"), this);
     connect(removeStopButton, &QPushButton::clicked, this, [this] {
         const int row = stopsList_->currentRow();
         if (row < 0) {
@@ -101,17 +102,17 @@ LineDialog::LineDialog(const Line& line, const Map& map, QWidget* parent)
     stopButtons->addStretch(1);
     layout->addLayout(stopButtons);
 
-    layout->addWidget(new QLabel("Segment run times (s)", this));
+    layout->addWidget(new QLabel(L("Segment run times (s)"), this));
     segmentTable_ = new QTableWidget(0, 3, this);
-    segmentTable_->setHorizontalHeaderLabels({"From", "To", "Run (s)"});
+    segmentTable_->setHorizontalHeaderLabels({L("From"), L("To"), L("Run (s)")});
     segmentTable_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     segmentTable_->verticalHeader()->setVisible(false);
     rebuildSegmentTable(line_.stations(), line_.ops().segmentRunSec);
     layout->addWidget(segmentTable_, 1);
 
-    layout->addWidget(new QLabel("Headway periods (seconds since midnight)", this));
+    layout->addWidget(new QLabel(L("Headway periods (seconds since midnight)"), this));
     headwayTable_ = new QTableWidget(0, 3, this);
-    headwayTable_->setHorizontalHeaderLabels({"Start", "End", "Interval (s)"});
+    headwayTable_->setHorizontalHeaderLabels({L("Start"), L("End"), L("Interval (s)")});
     headwayTable_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     headwayTable_->verticalHeader()->setVisible(false);
     for (std::size_t i = 0; i < line_.ops().headway.size(); ++i) {
@@ -123,8 +124,8 @@ LineDialog::LineDialog(const Line& line, const Map& map, QWidget* parent)
     layout->addWidget(headwayTable_);
 
     auto* headwayButtons = new QHBoxLayout();
-    auto* addButton = new QPushButton("Add period", this);
-    auto* removeButton = new QPushButton("Remove period", this);
+    auto* addButton = new QPushButton(L("Add period"), this);
+    auto* removeButton = new QPushButton(L("Remove period"), this);
     connect(addButton, &QPushButton::clicked, this, [this] {
         addHeadwayRow(HeadwayPeriod{0, 86400, 300});
     });
@@ -144,7 +145,7 @@ LineDialog::LineDialog(const Line& line, const Map& map, QWidget* parent)
 
 void LineDialog::chooseColor() {
     const QColor initial = QColor::fromRgb(static_cast<QRgb>(color_ | 0xff000000u));
-    const QColor chosen = QColorDialog::getColor(initial, this, "Line color");
+    const QColor chosen = QColorDialog::getColor(initial, this, L("Line color"));
     if (chosen.isValid()) {
         color_ = static_cast<std::uint32_t>(chosen.rgb()) & 0x00ffffffu;
         updateColorButton();

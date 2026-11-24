@@ -2,26 +2,38 @@
 #include <QApplication>
 #include <QComboBox>
 #include <QDialog>
+#include <QDockWidget>
 #include <QGraphicsView>
 #include <QInputDialog>
 #include <QListWidget>
+#include <QMenu>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QStatusBar>
 #include <QTimer>
 #include <QtTest/QtTest>
 
+#include "ui/language.h"
 #include "ui/main_window.h"
 
 class UiSmokeTest : public QObject {
     Q_OBJECT
 
 private slots:
+    void initTestCase();
     void selectionAndRoute();
     void editingWorkflow();
+    void languageSwitch();
 };
 
+void UiSmokeTest::initTestCase() {
+    QCoreApplication::setOrganizationName("ConceptUrbanChainTests");
+    QCoreApplication::setApplicationName("ConceptUrbanChainTests");
+    uc::setLanguage(uc::Language::English, false);
+}
+
 void UiSmokeTest::selectionAndRoute() {
+    uc::setLanguage(uc::Language::English, false);
     uc::MainWindow window;
     window.resize(1280, 840);
     window.show();
@@ -68,6 +80,7 @@ void UiSmokeTest::selectionAndRoute() {
 }
 
 void UiSmokeTest::editingWorkflow() {
+    uc::setLanguage(uc::Language::English, false);
     uc::MainWindow window;
     window.resize(1280, 840);
     window.show();
@@ -168,6 +181,36 @@ void UiSmokeTest::editingWorkflow() {
     lineTimer.stop();
     QVERIFY(lineDialogHandled);
     QCOMPARE(lineList->count(), 3);
+}
+
+void UiSmokeTest::languageSwitch() {
+    uc::setLanguage(uc::Language::English, false);
+    uc::MainWindow window;
+    window.resize(1280, 840);
+    window.show();
+    QTest::qWait(400);
+
+    auto* chinese = window.findChild<QAction*>("chineseLanguageAction");
+    auto* english = window.findChild<QAction*>("englishLanguageAction");
+    auto* newAction = window.findChild<QAction*>("newAction");
+    auto* fileMenu = window.findChild<QMenu*>("fileMenu");
+    auto* dock = window.findChild<QDockWidget*>("networkDock");
+    QVERIFY(chinese != nullptr);
+    QVERIFY(english != nullptr);
+    QVERIFY(newAction != nullptr);
+    QVERIFY(fileMenu != nullptr);
+    QVERIFY(dock != nullptr);
+
+    QCOMPARE(newAction->text(), QString("&New"));
+    chinese->trigger();
+    QVERIFY2(newAction->text() != QString("&New"), qPrintable(newAction->text()));
+    QCOMPARE(fileMenu->title(), QString::fromUtf8("文件(&F)"));
+    QCOMPARE(dock->windowTitle(), QString::fromUtf8("线网"));
+
+    english->trigger();
+    QCOMPARE(newAction->text(), QString("&New"));
+    QCOMPARE(fileMenu->title(), QString("&File"));
+    QCOMPARE(dock->windowTitle(), QString("Network"));
 }
 
 QTEST_MAIN(UiSmokeTest)

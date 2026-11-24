@@ -31,6 +31,7 @@ if(UC_BUILD_GUI)
         set(CMAKE_AUTOMOC ON)
 
         add_library(uc_ui STATIC
+            src/ui/language.cpp
             src/ui/main_window.cpp
             src/ui/map_view.cpp
             src/ui/map_scene.cpp
@@ -55,10 +56,21 @@ if(UC_BUILD_GUI)
         endfunction()
         uc_deploy_qt(urbanchain)
 
+        set(_qt_zh_qm "${_qt_prefix}/translations/qtbase_zh_CN.qm")
+        if(EXISTS "${_qt_zh_qm}")
+            add_custom_command(TARGET urbanchain POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E make_directory
+                        "$<TARGET_FILE_DIR:urbanchain>/translations"
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_qt_zh_qm}"
+                        "$<TARGET_FILE_DIR:urbanchain>/translations/qtbase_zh_CN.qm"
+                COMMENT "Copying Qt Chinese translations")
+        endif()
+
         find_package(Qt6 QUIET COMPONENTS Test)
         if(Qt6Test_FOUND)
             add_executable(uc_ui_tests tests/ui_smoke.cpp)
             target_link_libraries(uc_ui_tests PRIVATE uc_ui Qt6::Test)
+            add_dependencies(uc_ui_tests urbanchain)
             uc_deploy_qt(uc_ui_tests)
         endif()
     else()

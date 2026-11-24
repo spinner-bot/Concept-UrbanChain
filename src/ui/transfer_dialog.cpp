@@ -8,6 +8,8 @@
 #include <QTableWidgetItem>
 #include <QVBoxLayout>
 
+#include "ui/language.h"
+
 namespace uc {
 namespace {
 
@@ -20,16 +22,17 @@ QString stationLabel(const Map& map, Index station) {
 }  // namespace
 
 TransferDialog::TransferDialog(const Network& network, QWidget* parent) : QDialog(parent) {
-    setWindowTitle("Transfer Times");
+    setWindowTitle(L("Transfer Times"));
     resize(720, 420);
 
     auto* layout = new QVBoxLayout(this);
     layout->addWidget(new QLabel(
-        "Transfer walk times for shared stations. Each ordered line pair is listed once.",
+        L("Transfer walk times for shared stations. Each ordered line pair is listed once."),
         this));
 
     table_ = new QTableWidget(0, 4, this);
-    table_->setHorizontalHeaderLabels({"Station", "From line", "To line", "Seconds"});
+    table_->setHorizontalHeaderLabels(
+        {L("Station"), L("From line"), L("To line"), L("Seconds")});
     table_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     table_->verticalHeader()->setVisible(false);
     table_->setEditTriggers(QAbstractItemView::NoEditTriggers);

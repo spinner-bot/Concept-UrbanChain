@@ -21,6 +21,7 @@
 
 #include "core/network.h"
 #include "edit/editor.h"
+#include "ui/language.h"
 #include "ui/map_scene.h"
 #include "ui/station_item.h"
 
@@ -43,7 +44,9 @@ const char* modeName(EditMode mode) {
     return "Unknown";
 }
 
-QString fromUtf8(const std::string& text) { return QString::fromUtf8(text.c_str()); }
+QString fromUtf8(const std::string& text) {
+    return localizeMessage(QString::fromUtf8(text.c_str()));
+}
 
 double hitThreshold(const QGraphicsView& view, double pixels) {
     const double scale = std::max(0.0001, view.transform().m11());
@@ -165,7 +168,7 @@ void MapView::setMode(EditMode mode) {
     mode_ = mode;
     scene_->clearPreview();
     updateCursor();
-    notifyStatus(QString("Mode: ") + QString::fromLatin1(modeName(mode_)));
+    notifyStatus(L("Mode: %1").arg(L(modeName(mode_))));
 }
 
 void MapView::fitContent() {
@@ -210,7 +213,7 @@ StationItem* MapView::stationAt(const QPoint& viewPosition) const {
 
 void MapView::createStationAt(const QPointF& scenePos) {
     bool accepted = false;
-    const QString name = QInputDialog::getText(this, "New station", "Station name:",
+    const QString name = QInputDialog::getText(this, L("New station"), L("Station name:"),
                                                QLineEdit::Normal, QString(), &accepted);
     if (!accepted) {
         return;
@@ -227,7 +230,7 @@ void MapView::createStationAt(const QPointF& scenePos) {
     selectedLine_ = -1;
     scene_->setSelectedLine(-1);
     notifySelectionChanged();
-    notifyStatus("Station added");
+    notifyStatus(L("Station added"));
     notifyChanged();
 }
 
@@ -238,7 +241,7 @@ void MapView::renameStationDialog(int stationIndex) {
     const Station& station = editor_.network().map().station(stationIndex);
     bool accepted = false;
     const QString name = QInputDialog::getText(
-        this, "Rename station", "Station name:", QLineEdit::Normal,
+        this, L("Rename station"), L("Station name:"), QLineEdit::Normal,
         QString::fromUtf8(station.name.c_str()), &accepted);
     if (!accepted || name.trimmed().isEmpty()) {
         return;
@@ -249,7 +252,7 @@ void MapView::renameStationDialog(int stationIndex) {
         return;
     }
     refresh();
-    notifyStatus("Station renamed");
+    notifyStatus(L("Station renamed"));
     notifyChanged();
 }
 
@@ -261,7 +264,7 @@ void MapView::deleteStation(int stationIndex) {
     }
     scene_->setSelectedStation(-1);
     refresh();
-    notifyStatus("Station deleted");
+    notifyStatus(L("Station deleted"));
     notifyChanged();
 }
 
@@ -275,7 +278,7 @@ void MapView::deleteLine(int lineIndex) {
     scene_->setSelectedLine(-1);
     refresh();
     notifySelectionChanged();
-    notifyStatus("Line deleted");
+    notifyStatus(L("Line deleted"));
     notifyChanged();
 }
 
@@ -288,7 +291,7 @@ void MapView::editEdgeDialog(int edgeIndex) {
         editor_.network().map().edges()[static_cast<std::size_t>(edgeIndex)];
 
     QDialog dialog(this);
-    dialog.setWindowTitle("Edge Properties");
+    dialog.setWindowTitle(L("Edge Properties"));
     auto* layout = new QFormLayout(&dialog);
     auto* costSpin = new QDoubleSpinBox(&dialog);
     costSpin->setRange(0.0, 1.0e9);
@@ -298,8 +301,8 @@ void MapView::editEdgeDialog(int edgeIndex) {
     lengthSpin->setRange(0.0, 1.0e9);
     lengthSpin->setDecimals(3);
     lengthSpin->setValue(edge.length);
-    layout->addRow("Cost", costSpin);
-    layout->addRow("Length", lengthSpin);
+    layout->addRow(L("Cost"), costSpin);
+    layout->addRow(L("Length"), lengthSpin);
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
     QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
@@ -315,7 +318,7 @@ void MapView::editEdgeDialog(int edgeIndex) {
         return;
     }
     refresh();
-    notifyStatus("Edge updated");
+    notifyStatus(L("Edge updated"));
     notifyChanged();
 }
 
@@ -331,7 +334,7 @@ void MapView::deleteEdge(int edgeIndex) {
         return;
     }
     refresh();
-    notifyStatus("Edge deleted");
+    notifyStatus(L("Edge deleted"));
     notifyChanged();
 }
 
@@ -368,7 +371,7 @@ void MapView::handleLeftPress(const QPoint& viewPosition) {
         }
         case EditMode::AddStation: {
             if (station != nullptr) {
-                notifyStatus("Click an empty area to place a station");
+                notifyStatus(L("Click an empty area to place a station"));
                 break;
             }
             createStationAt(scenePos);
@@ -378,13 +381,13 @@ void MapView::handleLeftPress(const QPoint& viewPosition) {
             if (station == nullptr) {
                 pendingStation_ = -1;
                 scene_->clearPreview();
-                notifyStatus("Click the first station");
+                notifyStatus(L("Click the first station"));
                 break;
             }
             if (pendingStation_ < 0) {
                 pendingStation_ = station->stationIndex();
                 scene_->setPreview(scenePos, pendingStation_, -1);
-                notifyStatus("Click the second station");
+                notifyStatus(L("Click the second station"));
                 break;
             }
             const int first = pendingStation_;
@@ -392,7 +395,7 @@ void MapView::handleLeftPress(const QPoint& viewPosition) {
             pendingStation_ = -1;
             if (first == second) {
                 scene_->clearPreview();
-                notifyStatus("Choose a different station");
+                notifyStatus(L("Choose a different station"));
                 break;
             }
             if (!editor_.addEdge(first, second, &error)) {
@@ -400,13 +403,13 @@ void MapView::handleLeftPress(const QPoint& viewPosition) {
                 break;
             }
             refresh();
-            notifyStatus("Edge added");
+            notifyStatus(L("Edge added"));
             notifyChanged();
             break;
         }
         case EditMode::DrawLine: {
             if (station == nullptr) {
-                notifyStatus("Click a station to add it to the line");
+                notifyStatus(L("Click a station to add it to the line"));
                 break;
             }
             if (activeLine_ < 0) {
@@ -423,7 +426,7 @@ void MapView::handleLeftPress(const QPoint& viewPosition) {
             selectedLine_ = activeLine_;
             refresh();
             notifySelectionChanged();
-            notifyStatus("Station added to line; double-click or right-click to finish");
+            notifyStatus(L("Station added to line; double-click or right-click to finish"));
             notifyChanged();
             break;
         }
@@ -442,7 +445,7 @@ void MapView::handleLeftPress(const QPoint& viewPosition) {
                 deleteEdge(edge);
                 break;
             }
-            notifyStatus("Nothing to delete here");
+            notifyStatus(L("Nothing to delete here"));
             break;
         }
     }
@@ -461,8 +464,8 @@ void MapView::showContextMenu(const QPoint& viewPosition, const QPoint& globalPo
     QMenu menu(this);
     if (station != nullptr) {
         const int stationIndex = station->stationIndex();
-        QAction* renameAction = menu.addAction("Rename Station...");
-        QAction* deleteAction = menu.addAction("Delete Station");
+        QAction* renameAction = menu.addAction(L("Rename Station..."));
+        QAction* deleteAction = menu.addAction(L("Delete Station"));
         QAction* chosen = menu.exec(globalPosition);
         if (chosen == renameAction) {
             renameStationDialog(stationIndex);
@@ -472,8 +475,8 @@ void MapView::showContextMenu(const QPoint& viewPosition, const QPoint& globalPo
         return;
     }
     if (line >= 0) {
-        QAction* editAction = menu.addAction("Edit Line...");
-        QAction* deleteAction = menu.addAction("Delete Line");
+        QAction* editAction = menu.addAction(L("Edit Line..."));
+        QAction* deleteAction = menu.addAction(L("Delete Line"));
         QAction* chosen = menu.exec(globalPosition);
         if (chosen == editAction) {
             if (editLineCallback_) {
@@ -485,8 +488,8 @@ void MapView::showContextMenu(const QPoint& viewPosition, const QPoint& globalPo
         return;
     }
     if (edge >= 0) {
-        QAction* editAction = menu.addAction("Edit Edge...");
-        QAction* deleteAction = menu.addAction("Delete Edge");
+        QAction* editAction = menu.addAction(L("Edit Edge..."));
+        QAction* deleteAction = menu.addAction(L("Delete Edge"));
         QAction* chosen = menu.exec(globalPosition);
         if (chosen == editAction) {
             editEdgeDialog(edge);
@@ -496,7 +499,7 @@ void MapView::showContextMenu(const QPoint& viewPosition, const QPoint& globalPo
         return;
     }
 
-    QAction* addAction = menu.addAction("Add Station Here");
+    QAction* addAction = menu.addAction(L("Add Station Here"));
     if (menu.exec(globalPosition) == addAction) {
         createStationAt(scenePos);
     }
@@ -564,7 +567,7 @@ void MapView::mouseReleaseEvent(QMouseEvent* event) {
             if (!editor_.moveStation(dragStation_, target.x(), -target.y(), &error)) {
                 notifyStatus(fromUtf8(error));
             } else {
-                notifyStatus("Station moved");
+                notifyStatus(L("Station moved"));
                 notifyChanged();
             }
             refresh();
@@ -625,7 +628,7 @@ void MapView::contextMenuEvent(QContextMenuEvent* event) {
     if (pendingStation_ >= 0) {
         pendingStation_ = -1;
         scene_->clearPreview();
-        notifyStatus("Edge creation cancelled");
+        notifyStatus(L("Edge creation cancelled"));
         event->accept();
         return;
     }
@@ -649,10 +652,10 @@ void MapView::finishLine() {
     if (tooShort) {
         editor_.removeLine(line, &error);
         selectedLine_ = -1;
-        notifyStatus("Line discarded: at least two stations are required");
+        notifyStatus(L("Line discarded: at least two stations are required"));
     } else {
         selectedLine_ = line;
-        notifyStatus("Line finished");
+        notifyStatus(L("Line finished"));
     }
     refresh();
     notifySelectionChanged();
@@ -661,7 +664,7 @@ void MapView::finishLine() {
 
 void MapView::removeLastStop() {
     if (activeLine_ < 0) {
-        notifyStatus("No line is being drawn");
+        notifyStatus(L("No line is being drawn"));
         return;
     }
     std::string error;

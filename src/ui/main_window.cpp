@@ -82,27 +82,28 @@ MainWindow::MainWindow() {
 }
 
 void MainWindow::createActions() {
-    newAction_ = new QAction(tr("&New"), this);
+    newAction_ = new QAction(L("&New"), this);
+    newAction_->setObjectName("newAction");
     newAction_->setShortcut(QKeySequence::New);
     connect(newAction_, &QAction::triggered, this, [this] { newDocument(); });
 
-    openAction_ = new QAction(tr("&Open..."), this);
+    openAction_ = new QAction(L("&Open..."), this);
     openAction_->setShortcut(QKeySequence::Open);
     connect(openAction_, &QAction::triggered, this, [this] { openDocument(); });
 
-    saveAction_ = new QAction(tr("&Save"), this);
+    saveAction_ = new QAction(L("&Save"), this);
     saveAction_->setShortcut(QKeySequence::Save);
     connect(saveAction_, &QAction::triggered, this, [this] { saveDocument(); });
 
-    saveAsAction_ = new QAction(tr("Save &As..."), this);
+    saveAsAction_ = new QAction(L("Save &As..."), this);
     saveAsAction_->setShortcut(QKeySequence::SaveAs);
     connect(saveAsAction_, &QAction::triggered, this, [this] { saveDocumentAs(); });
 
-    exitAction_ = new QAction(tr("E&xit"), this);
+    exitAction_ = new QAction(L("E&xit"), this);
     exitAction_->setShortcut(QKeySequence::Quit);
     connect(exitAction_, &QAction::triggered, this, [this] { close(); });
 
-    undoAction_ = new QAction(tr("&Undo"), this);
+    undoAction_ = new QAction(L("&Undo"), this);
     undoAction_->setObjectName("undoAction");
     undoAction_->setShortcut(QKeySequence::Undo);
     connect(undoAction_, &QAction::triggered, this, [this] {
@@ -111,11 +112,11 @@ void MainWindow::createActions() {
             updateTitle();
             updateActions();
             refreshPanels();
-            statusBar()->showMessage(tr("Undo"), 2000);
+            statusBar()->showMessage(L("Undo"), 2000);
         }
     });
 
-    redoAction_ = new QAction(tr("&Redo"), this);
+    redoAction_ = new QAction(L("&Redo"), this);
     redoAction_->setShortcut(QKeySequence::Redo);
     connect(redoAction_, &QAction::triggered, this, [this] {
         if (editor_.redo()) {
@@ -123,31 +124,31 @@ void MainWindow::createActions() {
             updateTitle();
             updateActions();
             refreshPanels();
-            statusBar()->showMessage(tr("Redo"), 2000);
+            statusBar()->showMessage(L("Redo"), 2000);
         }
     });
 
-    selectAction_ = new QAction(tr("&Select / Move"), this);
+    selectAction_ = new QAction(L("&Select / Move"), this);
     selectAction_->setCheckable(true);
     selectAction_->setChecked(true);
     connect(selectAction_, &QAction::triggered, this, [this] { setMode(EditMode::Select); });
 
-    addStationAction_ = new QAction(tr("Add &Station"), this);
+    addStationAction_ = new QAction(L("Add &Station"), this);
     addStationAction_->setObjectName("addStationAction");
     addStationAction_->setCheckable(true);
     connect(addStationAction_, &QAction::triggered, this, [this] { setMode(EditMode::AddStation); });
 
-    addEdgeAction_ = new QAction(tr("Add &Edge"), this);
+    addEdgeAction_ = new QAction(L("Add &Edge"), this);
     addEdgeAction_->setObjectName("addEdgeAction");
     addEdgeAction_->setCheckable(true);
     connect(addEdgeAction_, &QAction::triggered, this, [this] { setMode(EditMode::AddEdge); });
 
-    drawLineAction_ = new QAction(tr("&Draw Line"), this);
+    drawLineAction_ = new QAction(L("&Draw Line"), this);
     drawLineAction_->setObjectName("drawLineAction");
     drawLineAction_->setCheckable(true);
     connect(drawLineAction_, &QAction::triggered, this, [this] { setMode(EditMode::DrawLine); });
 
-    deleteAction_ = new QAction(tr("&Delete"), this);
+    deleteAction_ = new QAction(L("&Delete"), this);
     deleteAction_->setObjectName("deleteAction");
     deleteAction_->setCheckable(true);
     connect(deleteAction_, &QAction::triggered, this, [this] { setMode(EditMode::Delete); });
@@ -160,7 +161,7 @@ void MainWindow::createActions() {
     modeGroup->addAction(drawLineAction_);
     modeGroup->addAction(deleteAction_);
 
-    finishLineAction_ = new QAction(tr("&Finish Line"), this);
+    finishLineAction_ = new QAction(L("&Finish Line"), this);
     finishLineAction_->setObjectName("finishLineAction");
     finishLineAction_->setShortcut(QKeySequence(Qt::Key_Return));
     connect(finishLineAction_, &QAction::triggered, this, [this] {
@@ -170,7 +171,7 @@ void MainWindow::createActions() {
         refreshPanels();
     });
 
-    removeLastStopAction_ = new QAction(tr("Remove Last &Stop"), this);
+    removeLastStopAction_ = new QAction(L("Remove Last &Stop"), this);
     removeLastStopAction_->setShortcut(QKeySequence(Qt::Key_Backspace));
     connect(removeLastStopAction_, &QAction::triggered, this, [this] {
         view_->removeLastStop();
@@ -179,134 +180,164 @@ void MainWindow::createActions() {
         refreshPanels();
     });
 
-    transferAction_ = new QAction(tr("Transfer &Times..."), this);
+    transferAction_ = new QAction(L("Transfer &Times..."), this);
     transferAction_->setObjectName("transferAction");
     connect(transferAction_, &QAction::triggered, this, [this] { editTransfers(); });
 
-    fitAction_ = new QAction(tr("&Fit Content"), this);
+    fitAction_ = new QAction(L("&Fit Content"), this);
     fitAction_->setShortcut(QKeySequence(Qt::Key_F));
     connect(fitAction_, &QAction::triggered, this, [this] { view_->fitContent(); });
 
-    aboutAction_ = new QAction(tr("&About"), this);
+    aboutAction_ = new QAction(L("&About"), this);
     connect(aboutAction_, &QAction::triggered, this, [this] {
-        QMessageBox::about(this, tr("About Concept UrbanChain"),
-                           tr("Concept UrbanChain v0.3\n"
+        QMessageBox::about(this, L("About Concept UrbanChain"),
+                           L("Concept UrbanChain v0.3\n"
                               "A data-structure course project for metro network editing and "
                               "time-dependent routing."));
     });
+
+    chineseAction_ = new QAction(QString::fromUtf8("中文"), this);
+    chineseAction_->setObjectName("chineseLanguageAction");
+    chineseAction_->setCheckable(true);
+    connect(chineseAction_, &QAction::triggered, this,
+            [this] { applyLanguage(Language::Chinese); });
+
+    englishAction_ = new QAction(QString("English"), this);
+    englishAction_->setObjectName("englishLanguageAction");
+    englishAction_->setCheckable(true);
+    connect(englishAction_, &QAction::triggered, this,
+            [this] { applyLanguage(Language::English); });
+
+    auto* languageGroup = new QActionGroup(this);
+    languageGroup->setExclusive(true);
+    languageGroup->addAction(chineseAction_);
+    languageGroup->addAction(englishAction_);
+    chineseAction_->setChecked(currentLanguage() == Language::Chinese);
+    englishAction_->setChecked(currentLanguage() == Language::English);
 }
 
 void MainWindow::createMenus() {
-    QMenu* fileMenu = menuBar()->addMenu(tr("&File"));
-    fileMenu->addAction(newAction_);
-    fileMenu->addAction(openAction_);
-    fileMenu->addAction(saveAction_);
-    fileMenu->addAction(saveAsAction_);
-    fileMenu->addSeparator();
-    fileMenu->addAction(exitAction_);
+    fileMenu_ = menuBar()->addMenu(L("&File"));
+    fileMenu_->setObjectName("fileMenu");
+    fileMenu_->addAction(newAction_);
+    fileMenu_->addAction(openAction_);
+    fileMenu_->addAction(saveAction_);
+    fileMenu_->addAction(saveAsAction_);
+    fileMenu_->addSeparator();
+    fileMenu_->addAction(exitAction_);
 
-    QMenu* editMenu = menuBar()->addMenu(tr("&Edit"));
-    editMenu->addAction(undoAction_);
-    editMenu->addAction(redoAction_);
+    editMenu_ = menuBar()->addMenu(L("&Edit"));
+    editMenu_->addAction(undoAction_);
+    editMenu_->addAction(redoAction_);
 
-    QMenu* modeMenu = menuBar()->addMenu(tr("&Mode"));
-    modeMenu->addAction(selectAction_);
-    modeMenu->addAction(addStationAction_);
-    modeMenu->addAction(addEdgeAction_);
-    modeMenu->addAction(drawLineAction_);
-    modeMenu->addAction(deleteAction_);
+    modeMenu_ = menuBar()->addMenu(L("&Mode"));
+    modeMenu_->addAction(selectAction_);
+    modeMenu_->addAction(addStationAction_);
+    modeMenu_->addAction(addEdgeAction_);
+    modeMenu_->addAction(drawLineAction_);
+    modeMenu_->addAction(deleteAction_);
 
-    QMenu* lineMenu = menuBar()->addMenu(tr("&Line"));
-    lineMenu->addAction(finishLineAction_);
-    lineMenu->addAction(removeLastStopAction_);
-    lineMenu->addSeparator();
-    lineMenu->addAction(transferAction_);
+    lineMenu_ = menuBar()->addMenu(L("&Line"));
+    lineMenu_->addAction(finishLineAction_);
+    lineMenu_->addAction(removeLastStopAction_);
+    lineMenu_->addSeparator();
+    lineMenu_->addAction(transferAction_);
 
-    QMenu* viewMenu = menuBar()->addMenu(tr("&View"));
-    viewMenu->addAction(fitAction_);
+    viewMenu_ = menuBar()->addMenu(L("&View"));
+    viewMenu_->addAction(fitAction_);
 
-    QMenu* helpMenu = menuBar()->addMenu(tr("&Help"));
-    helpMenu->addAction(aboutAction_);
+    settingsMenu_ = menuBar()->addMenu(L("&Settings"));
+    settingsMenu_->setObjectName("settingsMenu");
+    languageMenu_ = settingsMenu_->addMenu(L("&Language"));
+    languageMenu_->addAction(chineseAction_);
+    languageMenu_->addAction(englishAction_);
+
+    helpMenu_ = menuBar()->addMenu(L("&Help"));
+    helpMenu_->addAction(aboutAction_);
 }
 
 void MainWindow::createToolBar() {
-    QToolBar* toolbar = addToolBar(tr("Main"));
-    toolbar->setMovable(false);
-    toolbar->setToolButtonStyle(Qt::ToolButtonTextOnly);
-    toolbar->addAction(openAction_);
-    toolbar->addAction(saveAction_);
-    toolbar->addSeparator();
-    toolbar->addAction(undoAction_);
-    toolbar->addAction(redoAction_);
-    toolbar->addSeparator();
-    toolbar->addAction(selectAction_);
-    toolbar->addAction(addStationAction_);
-    toolbar->addAction(addEdgeAction_);
-    toolbar->addAction(drawLineAction_);
-    toolbar->addAction(deleteAction_);
-    toolbar->addSeparator();
-    toolbar->addAction(finishLineAction_);
+    toolbar_ = addToolBar(L("Main"));
+    toolbar_->setMovable(false);
+    toolbar_->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    toolbar_->addAction(openAction_);
+    toolbar_->addAction(saveAction_);
+    toolbar_->addSeparator();
+    toolbar_->addAction(undoAction_);
+    toolbar_->addAction(redoAction_);
+    toolbar_->addSeparator();
+    toolbar_->addAction(selectAction_);
+    toolbar_->addAction(addStationAction_);
+    toolbar_->addAction(addEdgeAction_);
+    toolbar_->addAction(drawLineAction_);
+    toolbar_->addAction(deleteAction_);
+    toolbar_->addSeparator();
+    toolbar_->addAction(finishLineAction_);
 }
 
 void MainWindow::createStatusBar() {
-    statusBar()->showMessage(tr("Ready"));
+    statusBar()->showMessage(L("Ready"));
     modeLabel_ = new QLabel(this);
     statusBar()->addPermanentWidget(modeLabel_);
 }
 
 void MainWindow::createSidePanel() {
-    auto* dock = new QDockWidget(tr("Network"), this);
-    dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    networkDock_ = new QDockWidget(L("Network"), this);
+    networkDock_->setObjectName("networkDock");
+    networkDock_->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
 
-    auto* panel = new QWidget(dock);
+    auto* panel = new QWidget(networkDock_);
     panel->setMinimumWidth(320);
     auto* layout = new QVBoxLayout(panel);
 
-    auto* linesGroup = new QGroupBox(tr("Lines"), panel);
-    auto* linesLayout = new QVBoxLayout(linesGroup);
-    lineList_ = new QListWidget(linesGroup);
+    linesGroup_ = new QGroupBox(L("Lines"), panel);
+    auto* linesLayout = new QVBoxLayout(linesGroup_);
+    lineList_ = new QListWidget(linesGroup_);
     lineList_->setObjectName("lineList");
     lineList_->setMinimumHeight(150);
     linesLayout->addWidget(lineList_);
     auto* lineButtons = new QHBoxLayout();
-    editLineButton_ = new QPushButton(tr("Edit..."), linesGroup);
+    editLineButton_ = new QPushButton(L("Edit..."), linesGroup_);
     editLineButton_->setObjectName("editLineButton");
-    deleteLineButton_ = new QPushButton(tr("Delete"), linesGroup);
-    transferButton_ = new QPushButton(tr("Transfers..."), linesGroup);
+    deleteLineButton_ = new QPushButton(L("Delete"), linesGroup_);
+    transferButton_ = new QPushButton(L("Transfers..."), linesGroup_);
     transferButton_->setObjectName("transferButton");
     lineButtons->addWidget(editLineButton_);
     lineButtons->addWidget(deleteLineButton_);
     lineButtons->addWidget(transferButton_);
     linesLayout->addLayout(lineButtons);
-    layout->addWidget(linesGroup);
+    layout->addWidget(linesGroup_);
 
-    auto* routeGroup = new QGroupBox(tr("Route"), panel);
-    auto* routeLayout = new QVBoxLayout(routeGroup);
+    routeGroup_ = new QGroupBox(L("Route"), panel);
+    auto* routeLayout = new QVBoxLayout(routeGroup_);
     auto* routeForm = new QFormLayout();
-    fromCombo_ = new QComboBox(routeGroup);
+    fromCombo_ = new QComboBox(routeGroup_);
     fromCombo_->setObjectName("fromCombo");
-    toCombo_ = new QComboBox(routeGroup);
+    toCombo_ = new QComboBox(routeGroup_);
     toCombo_->setObjectName("toCombo");
-    timeEdit_ = new QTimeEdit(QTime(8, 0), routeGroup);
+    timeEdit_ = new QTimeEdit(QTime(8, 0), routeGroup_);
     timeEdit_->setObjectName("timeEdit");
     timeEdit_->setDisplayFormat("HH:mm");
-    routeForm->addRow(tr("From"), fromCombo_);
-    routeForm->addRow(tr("To"), toCombo_);
-    routeForm->addRow(tr("Depart"), timeEdit_);
+    fromLabel_ = new QLabel(L("From"), routeGroup_);
+    toLabel_ = new QLabel(L("To"), routeGroup_);
+    departLabel_ = new QLabel(L("Depart"), routeGroup_);
+    routeForm->addRow(fromLabel_, fromCombo_);
+    routeForm->addRow(toLabel_, toCombo_);
+    routeForm->addRow(departLabel_, timeEdit_);
     routeLayout->addLayout(routeForm);
-    routeButton_ = new QPushButton(tr("Find Route"), routeGroup);
+    routeButton_ = new QPushButton(L("Find Route"), routeGroup_);
     routeButton_->setObjectName("routeButton");
     routeLayout->addWidget(routeButton_);
-    routeOutput_ = new QPlainTextEdit(routeGroup);
+    routeOutput_ = new QPlainTextEdit(routeGroup_);
     routeOutput_->setObjectName("routeOutput");
     routeOutput_->setReadOnly(true);
     routeOutput_->setMinimumHeight(180);
-    routeOutput_->setPlaceholderText(tr("Route details appear here"));
+    routeOutput_->setPlaceholderText(L("Route details appear here"));
     routeLayout->addWidget(routeOutput_, 1);
-    layout->addWidget(routeGroup, 1);
+    layout->addWidget(routeGroup_, 1);
 
-    dock->setWidget(panel);
-    addDockWidget(Qt::RightDockWidgetArea, dock);
+    networkDock_->setWidget(panel);
+    addDockWidget(Qt::RightDockWidgetArea, networkDock_);
 
     connect(lineList_, &QListWidget::currentRowChanged, this, [this](int row) {
         if (updatingPanels_) {
@@ -368,7 +399,7 @@ void MainWindow::loadDemoIfAvailable() {
             if (!editor_.network().lines().empty()) {
                 view_->selectLine(0);
             }
-            statusBar()->showMessage(tr("Loaded demo network"), 3000);
+            statusBar()->showMessage(L("Loaded demo network"), 3000);
             return;
         }
     }
@@ -386,7 +417,7 @@ void MainWindow::newDocument() {
     updateTitle();
     updateActions();
     refreshPanels();
-    statusBar()->showMessage(tr("New document"), 3000);
+    statusBar()->showMessage(L("New document"), 3000);
 }
 
 void MainWindow::openDocument() {
@@ -394,7 +425,7 @@ void MainWindow::openDocument() {
         return;
     }
     const QString mapPath = QFileDialog::getOpenFileName(
-        this, tr("Open map"), QString(), tr("UrbanChain map (*.cuc3m);;All files (*)"));
+        this, L("Open map"), QString(), L("UrbanChain map (*.cuc3m);;All files (*)"));
     if (mapPath.isEmpty()) {
         return;
     }
@@ -408,8 +439,8 @@ void MainWindow::openDocument() {
         linePath = sibling;
     } else {
         linePath = QFileDialog::getOpenFileName(
-            this, tr("Open line file"), mapInfo.dir().absolutePath(),
-            tr("UrbanChain lines (*.cuc3l);;All files (*)"));
+            this, L("Open line file"), mapInfo.dir().absolutePath(),
+            L("UrbanChain lines (*.cuc3l);;All files (*)"));
     }
     if (linePath.isEmpty()) {
         return;
@@ -417,7 +448,7 @@ void MainWindow::openDocument() {
 
     std::string error;
     if (!editor_.load(mapPath.toUtf8().constData(), linePath.toUtf8().constData(), &error)) {
-        QMessageBox::critical(this, tr("Open failed"), QString::fromUtf8(error.c_str()));
+        QMessageBox::critical(this, L("Open failed"), localizeMessage(QString::fromUtf8(error.c_str())));
         return;
     }
     mapPath_ = mapPath;
@@ -430,7 +461,7 @@ void MainWindow::openDocument() {
     if (!editor_.network().lines().empty()) {
         view_->selectLine(0);
     }
-    statusBar()->showMessage(tr("Loaded"), 3000);
+    statusBar()->showMessage(L("Loaded"), 3000);
 }
 
 bool MainWindow::saveDocument() {
@@ -442,8 +473,8 @@ bool MainWindow::saveDocument() {
 
 bool MainWindow::saveDocumentAs() {
     const QString mapPath = QFileDialog::getSaveFileName(
-        this, tr("Save map"), mapPath_.isEmpty() ? QString("map.cuc3m") : mapPath_,
-        tr("UrbanChain map (*.cuc3m);;All files (*)"));
+        this, L("Save map"), mapPath_.isEmpty() ? QString("map.cuc3m") : mapPath_,
+        L("UrbanChain map (*.cuc3m);;All files (*)"));
     if (mapPath.isEmpty()) {
         return false;
     }
@@ -454,8 +485,8 @@ bool MainWindow::saveDocumentAs() {
             mapInfo.dir().filePath(mapInfo.completeBaseName() + QString(".cuc3l"));
     }
     const QString linePath = QFileDialog::getSaveFileName(
-        this, tr("Save line file"), defaultLinePath,
-        tr("UrbanChain lines (*.cuc3l);;All files (*)"));
+        this, L("Save line file"), defaultLinePath,
+        L("UrbanChain lines (*.cuc3l);;All files (*)"));
     if (linePath.isEmpty()) {
         return false;
     }
@@ -465,14 +496,14 @@ bool MainWindow::saveDocumentAs() {
 bool MainWindow::saveTo(const QString& mapPath, const QString& linePath) {
     std::string error;
     if (!editor_.save(mapPath.toUtf8().constData(), linePath.toUtf8().constData(), &error)) {
-        QMessageBox::critical(this, tr("Save failed"), QString::fromUtf8(error.c_str()));
+        QMessageBox::critical(this, L("Save failed"), localizeMessage(QString::fromUtf8(error.c_str())));
         return false;
     }
     mapPath_ = mapPath;
     linePath_ = linePath;
     updateTitle();
     updateActions();
-    statusBar()->showMessage(tr("Saved"), 3000);
+    statusBar()->showMessage(L("Saved"), 3000);
     return true;
 }
 
@@ -481,7 +512,7 @@ bool MainWindow::maybeSave() {
         return true;
     }
     const QMessageBox::StandardButton answer = QMessageBox::warning(
-        this, tr("Unsaved changes"), tr("Save changes before continuing?"),
+        this, L("Unsaved changes"), L("Save changes before continuing?"),
         QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
     if (answer == QMessageBox::Save) {
         return saveDocument();
@@ -505,8 +536,65 @@ void MainWindow::setMode(EditMode mode) {
     updateActions();
 }
 
+void MainWindow::applyLanguage(Language language) {
+    if (currentLanguage() == language) {
+        return;
+    }
+    setLanguage(language, true);
+    retranslateUi();
+    statusBar()->showMessage(L("Language changed"), 3000);
+}
+
+void MainWindow::retranslateUi() {
+    newAction_->setText(L("&New"));
+    openAction_->setText(L("&Open..."));
+    saveAction_->setText(L("&Save"));
+    saveAsAction_->setText(L("Save &As..."));
+    exitAction_->setText(L("E&xit"));
+    undoAction_->setText(L("&Undo"));
+    redoAction_->setText(L("&Redo"));
+    selectAction_->setText(L("&Select / Move"));
+    addStationAction_->setText(L("Add &Station"));
+    addEdgeAction_->setText(L("Add &Edge"));
+    drawLineAction_->setText(L("&Draw Line"));
+    deleteAction_->setText(L("&Delete"));
+    finishLineAction_->setText(L("&Finish Line"));
+    removeLastStopAction_->setText(L("Remove Last &Stop"));
+    transferAction_->setText(L("Transfer &Times..."));
+    fitAction_->setText(L("&Fit Content"));
+    aboutAction_->setText(L("&About"));
+
+    fileMenu_->setTitle(L("&File"));
+    editMenu_->setTitle(L("&Edit"));
+    modeMenu_->setTitle(L("&Mode"));
+    lineMenu_->setTitle(L("&Line"));
+    viewMenu_->setTitle(L("&View"));
+    settingsMenu_->setTitle(L("&Settings"));
+    languageMenu_->setTitle(L("&Language"));
+    helpMenu_->setTitle(L("&Help"));
+
+    toolbar_->setWindowTitle(L("Main"));
+    networkDock_->setWindowTitle(L("Network"));
+    linesGroup_->setTitle(L("Lines"));
+    routeGroup_->setTitle(L("Route"));
+    fromLabel_->setText(L("From"));
+    toLabel_->setText(L("To"));
+    departLabel_->setText(L("Depart"));
+    editLineButton_->setText(L("Edit..."));
+    deleteLineButton_->setText(L("Delete"));
+    transferButton_->setText(L("Transfers..."));
+    routeButton_->setText(L("Find Route"));
+    routeOutput_->setPlaceholderText(L("Route details appear here"));
+    chineseAction_->setChecked(currentLanguage() == Language::Chinese);
+    englishAction_->setChecked(currentLanguage() == Language::English);
+
+    updateTitle();
+    refreshPanels();
+    updateActions();
+}
+
 void MainWindow::updateTitle() {
-    const QString name = mapPath_.isEmpty() ? tr("Untitled") : QFileInfo(mapPath_).fileName();
+    const QString name = mapPath_.isEmpty() ? L("Untitled") : QFileInfo(mapPath_).fileName();
     const QString suffix = editor_.isDirty() ? QString(" *") : QString();
     setWindowTitle(QString("Concept UrbanChain v0.3 - ") + name + suffix);
 }
@@ -515,18 +603,18 @@ void MainWindow::updateActions() {
     undoAction_->setEnabled(editor_.canUndo());
     redoAction_->setEnabled(editor_.canRedo());
 
-    QString mode = "Select";
+    QString mode = L("Select");
     if (addStationAction_->isChecked()) {
-        mode = "Add station";
+        mode = L("Add station");
     } else if (addEdgeAction_->isChecked()) {
-        mode = "Add edge";
+        mode = L("Add edge");
     } else if (drawLineAction_->isChecked()) {
-        mode = "Draw line";
+        mode = L("Draw line");
     } else if (deleteAction_->isChecked()) {
-        mode = "Delete";
+        mode = L("Delete");
     }
     if (modeLabel_ != nullptr) {
-        modeLabel_->setText(QString("%1 | %2 stations | %3 lines")
+        modeLabel_->setText(L("%1 | %2 stations | %3 lines")
                                 .arg(mode)
                                 .arg(editor_.network().map().stationCount())
                                 .arg(static_cast<int>(editor_.network().lines().size())));
@@ -578,7 +666,7 @@ void MainWindow::refreshLineList() {
             swatch.fill(lineColor(line.color()));
             auto* item = new QListWidgetItem(
                 QIcon(swatch),
-                QString("%1 (%2 stops)")
+                L("%1 (%2 stops)")
                     .arg(QString::fromUtf8(line.name().c_str()))
                     .arg(line.stationCount()));
             item->setData(Qt::UserRole, static_cast<int>(i));
@@ -682,20 +770,20 @@ void MainWindow::editLine(int lineIndex) {
         if (editor_.replaceLine(lineIndex, updated, &error)) {
             break;
         }
-        QMessageBox::warning(this, tr("Invalid line"), QString::fromUtf8(error.c_str()));
+        QMessageBox::warning(this, L("Invalid line"), localizeMessage(QString::fromUtf8(error.c_str())));
         current = updated;
     }
     view_->refresh();
     updateTitle();
     updateActions();
     refreshPanels();
-    statusBar()->showMessage(tr("Line updated"), 3000);
+    statusBar()->showMessage(L("Line updated"), 3000);
 }
 
 void MainWindow::deleteLine(int lineIndex) {
     std::string error;
     if (!editor_.removeLine(lineIndex, &error)) {
-        QMessageBox::warning(this, tr("Delete failed"), QString::fromUtf8(error.c_str()));
+        QMessageBox::warning(this, L("Delete failed"), localizeMessage(QString::fromUtf8(error.c_str())));
         return;
     }
     view_->selectLine(-1);
@@ -703,7 +791,7 @@ void MainWindow::deleteLine(int lineIndex) {
     updateTitle();
     updateActions();
     refreshPanels();
-    statusBar()->showMessage(tr("Line deleted"), 3000);
+    statusBar()->showMessage(L("Line deleted"), 3000);
 }
 
 void MainWindow::editTransfers() {
@@ -713,15 +801,15 @@ void MainWindow::editTransfers() {
     }
     std::string error;
     if (!editor_.setTransferTimes(dialog.records(), &error)) {
-        QMessageBox::warning(this, tr("Transfer update failed"),
-                             QString::fromUtf8(error.c_str()));
+        QMessageBox::warning(this, L("Transfer update failed"),
+                             localizeMessage(QString::fromUtf8(error.c_str())));
         return;
     }
     view_->refresh();
     updateTitle();
     updateActions();
     refreshPanels();
-    statusBar()->showMessage(tr("Transfer times updated"), 3000);
+    statusBar()->showMessage(L("Transfer times updated"), 3000);
 }
 
 void MainWindow::computeRoute() {
@@ -730,7 +818,7 @@ void MainWindow::computeRoute() {
         return;
     }
     if (!fromCombo_->currentData().isValid() || !toCombo_->currentData().isValid()) {
-        routeOutput_->setPlainText(tr("No stations available."));
+        routeOutput_->setPlainText(L("No stations available."));
         return;
     }
     const Index from = editor_.network().map().findStation(
@@ -738,7 +826,7 @@ void MainWindow::computeRoute() {
     const Index to = editor_.network().map().findStation(
         toCombo_->currentData().toString().toUtf8().constData());
     if (from == kInvalidIndex || to == kInvalidIndex) {
-        routeOutput_->setPlainText(tr("Selected station no longer exists."));
+        routeOutput_->setPlainText(L("Selected station no longer exists."));
         return;
     }
     const double departTime = timeEdit_->time().msecsSinceStartOfDay() / 1000.0;
@@ -748,17 +836,17 @@ void MainWindow::computeRoute() {
 
     if (!journey.found) {
         routeOutput_->setPlainText(
-            tr("No route found for %1 at this time.").arg(stationName(editor_.network(), to)));
+            L("No route found for %1 at this time.").arg(stationName(editor_.network(), to)));
         return;
     }
 
-    QString text = tr("Depart %1   Arrive %2   Transfers %3\n\n")
+    QString text = L("Depart %1   Arrive %2   Transfers %3\n\n")
                        .arg(formatClock(journey.departTime), formatClock(journey.arriveTime))
                        .arg(journey.transfers);
     for (std::size_t i = 0; i < journey.legs.size(); ++i) {
         const JourneyLeg& leg = journey.legs[i];
         const Line& line = editor_.network().lines()[static_cast<std::size_t>(leg.line)];
-        text += QString("%1. %2\n   %3 -> %4\n   %5 - %6\n")
+        text += L("%1. %2\n   %3 -> %4\n   %5 - %6\n")
                     .arg(static_cast<int>(i) + 1)
                     .arg(QString::fromUtf8(line.name().c_str()))
                     .arg(stationName(editor_.network(), leg.fromStation),

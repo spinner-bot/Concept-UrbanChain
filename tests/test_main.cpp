@@ -1,6 +1,7 @@
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <string>
 
 #include "core/network.h"
@@ -251,7 +252,7 @@ void testIoRoundTrip() {
     network.addLine(line);
     CHECK(network.setTransferTime(b, 0, 1, 90.0));
 
-    const std::string mapPath = "uc_test_roundtrip.cuc3m";
+    const std::string mapPath = "uc_test_roundtrip.cuc3m3";
     const std::string linePath = "uc_test_roundtrip.cuc3l";
     std::string error;
 
@@ -326,6 +327,64 @@ uc::Network makeTwoLineNetwork() {
     network.addLine(second);
     network.setTransferTime(c, 0, 1, 120.0);
     return network;
+}
+
+void testMapFormatCompatibility() {
+    std::string error;
+    uc::Map source;
+    source.addStation(makeStation("A", 0.0, 0.0));
+    source.addStation(makeStation("B", 1.0, 0.0));
+    source.addStation(makeStation("C", 2.0, 0.0));
+    source.addEdge(0, 1, 1.0);
+    source.addEdge(1, 2, 1.0);
+
+    uc::BackgroundFeature lake;
+    lake.id = "lake";
+    lake.kind = uc::BackgroundKind::Water;
+    lake.closed = true;
+    lake.points.push_back(uc::Vec2{0.0, 0.0});
+    lake.points.push_back(uc::Vec2{1.0, 0.0});
+    lake.points.push_back(uc::Vec2{0.5, 1.0});
+    source.addBackgroundFeature(lake);
+
+    const std::string v2Path = "uc_test_compat.cuc3m2";
+    CHECK(uc::io::saveMap(v2Path, source, &error));
+    uc::Map loaded;
+    CHECK(uc::io::loadMap(v2Path, loaded, &error));
+    CHECK(loaded.stationCount() == 3);
+    CHECK(loaded.backgroundFeatures().size() == 1);
+    CHECK(loaded.backgroundFeatures()[0].kind == uc::BackgroundKind::Water);
+
+    // 旧 .cuc3m 仍可读取。
+    const std::string legacyPath = "uc_test_legacy.cuc3m";
+    {
+        std::ofstream legacy(legacyPath);
+        legacy << "CUC3M 1\n"
+               << "BACKGROUND 0\n"
+               << "STATION A 0 0 Alpha\n"
+               << "STATION B 1 0 Beta\n"
+               << "EDGE A B 1 1\n"
+               << "END\n";
+    }
+    uc::Map legacyMap;
+    CHECK(uc::io::loadMap(legacyPath, legacyMap, &error));
+    CHECK(legacyMap.stationCount() == 2);
+    CHECK(std::fabs(legacyMap.edgeCost(0, 1) - 1.0) < 1e-9);
+
+    // 旧扩展名不再用于保存。
+    CHECK(!uc::io::saveMap("uc_test_legacy_save.cuc3m", source, &error));
+
+    // 带宽度背景不能写成 v2。
+    uc::BackgroundFeature river = lake;
+    river.id = "river";
+    river.kind = uc::BackgroundKind::River;
+    river.closed = false;
+    river.width = 0.1;
+    source.addBackgroundFeature(river);
+    CHECK(!uc::io::saveMap("uc_test_width.cuc3m2", source, &error));
+
+    std::filesystem::remove(v2Path);
+    std::filesystem::remove(legacyPath);
 }
 
 void testRouter() {
@@ -437,7 +496,7 @@ void testEditor() {
     CHECK(editor.removeLine(0, &error));
     CHECK(editor.network().lines().empty());
 
-    const std::string mapPath = "uc_test_editor.cuc3m";
+    const std::string mapPath = "uc_test_editor.cuc3m3";
     const std::string linePath = "uc_test_editor.cuc3l";
     CHECK(editor.save(mapPath, linePath, &error));
     CHECK(!editor.isDirty());
@@ -542,7 +601,7 @@ void testEditorPersistence() {
     updated.ops().headway[0].headwaySec = 240;
     CHECK(editor.replaceLine(red, updated, &error));
 
-    const std::string mapPath = "uc_test_persist.cuc3m";
+    const std::string mapPath = "uc_test_persist.cuc3m3";
     const std::string linePath = "uc_test_persist.cuc3l";
     CHECK(editor.save(mapPath, linePath, &error));
 
@@ -577,6 +636,7 @@ int main() {
     testMapAndLine();
     testNetwork();
     testIoRoundTrip();
+    testMapFormatCompatibility();
     testRouter();
     testEditor();
     testEditorDeletionAndLineUpdate();

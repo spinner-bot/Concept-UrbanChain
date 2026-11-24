@@ -1,5 +1,6 @@
 #include "io/map_io.h"
 
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -214,6 +215,37 @@ bool loadMap(const std::string& path, Map& map, std::string* error) {
 }
 
 bool saveMap(const std::string& path, const Map& map, std::string* error) {
+    std::string lowerPath = path;
+    for (std::size_t i = 0; i < lowerPath.size(); ++i) {
+        lowerPath[i] = static_cast<char>(
+            std::tolower(static_cast<unsigned char>(lowerPath[i])));
+    }
+    const bool endsWithM2 =
+        lowerPath.size() >= 7 && lowerPath.compare(lowerPath.size() - 7, 7, ".cuc3m2") == 0;
+    const bool endsWithM3 =
+        lowerPath.size() >= 7 && lowerPath.compare(lowerPath.size() - 7, 7, ".cuc3m3") == 0;
+    const bool endsWithM1 =
+        lowerPath.size() >= 6 && lowerPath.compare(lowerPath.size() - 6, 6, ".cuc3m") == 0;
+
+    if (endsWithM1 && !endsWithM2 && !endsWithM3) {
+        if (error != nullptr) {
+            *error = "map files must use .cuc3m2 or .cuc3m3 extension";
+        }
+        return false;
+    }
+
+    const int version = endsWithM2 ? 2 : 3;
+    if (version == 2) {
+        for (std::size_t i = 0; i < map.backgroundFeatures().size(); ++i) {
+            if (map.backgroundFeatures()[i].width > 0.0) {
+                if (error != nullptr) {
+                    *error = "CUC3M2 cannot store background widths; save as .cuc3m3";
+                }
+                return false;
+            }
+        }
+    }
+
     std::ofstream output(std::filesystem::u8path(path),
                          std::ios::out | std::ios::binary | std::ios::trunc);
     if (!output) {
@@ -223,15 +255,17 @@ bool saveMap(const std::string& path, const Map& map, std::string* error) {
         return false;
     }
 
-    output << "CUC3M 3\n";
+    output << "CUC3M " << version << '\n';
     output << std::setprecision(17);
     output << "BACKGROUND " << map.backgroundFeatures().size() << '\n';
     for (std::size_t i = 0; i < map.backgroundFeatures().size(); ++i) {
         const BackgroundFeature& feature = map.backgroundFeatures()[i];
         output << "BG " << backgroundKindName(feature.kind) << ' '
                << (feature.closed ? 1 : 0) << ' '
-               << (feature.id.empty() ? std::string("bg") : feature.id) << ' '
-               << feature.width;
+               << (feature.id.empty() ? std::string("bg") : feature.id);
+        if (version >= 3) {
+            output << ' ' << feature.width;
+        }
         for (std::size_t j = 0; j < feature.points.size(); ++j) {
             output << ' ' << feature.points[j].x << ' ' << feature.points[j].y;
         }

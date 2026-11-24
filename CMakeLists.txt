@@ -16,6 +16,9 @@ add_library(uc_core
     src/core/map.cpp
     src/core/line.cpp
     src/core/network.cpp
+    src/io/map_io.cpp
+    src/io/line_io.cpp
+    src/nav/router.cpp
 )
 
 target_include_directories(uc_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)

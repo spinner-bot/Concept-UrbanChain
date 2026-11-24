@@ -1,3 +1,12 @@
 __pycache__/
 *.py[cod]
 .claude/
+
+# CMake / C++ build artifacts
+build/
+out/
+cmake-build-*/
+*.exe
+*.obj
+*.pdb
+*.ilk

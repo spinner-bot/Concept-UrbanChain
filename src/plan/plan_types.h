@@ -1,0 +1,96 @@
+#pragma once
+
+#include "core/types.h"
+#include "ds/dynamic_array.h"
+
+namespace uc {
+namespace plan {
+
+enum class GlobalCenterMode {
+    StationMean,
+    ClusterMean,
+    Custom,
+};
+
+enum class WeightNormalization {
+    Mean,
+    Sum,
+};
+
+enum class UnreachablePolicy {
+    Exclude,
+    Penalty,
+    Infinite,
+};
+
+struct WeightParams {
+    int clusters = 3;
+    double regionalExponent = 1.0;
+    double epsilon = 1e-3;
+    GlobalCenterMode globalCenterMode = GlobalCenterMode::StationMean;
+    Vec2 customCenter;
+    WeightNormalization normalization = WeightNormalization::Mean;
+    int seed = 1;
+};
+
+struct DemandParams {
+    double beta = 1.0;
+    bool forceBetaOneWhenMultipleClusters = true;
+    bool normalizeTotal = false;
+};
+
+struct OpsDefaults {
+    double segmentRunSec = 120.0;
+    double dwellSec = 30.0;
+    int headwaySec = 300;
+    double initialTimeSec = 8.0 * 3600.0;
+    double transferSec = 120.0;
+};
+
+struct EvalParams {
+    double kStation = 1.0;
+    double shortAlpha = 1.0;
+    double shortBeta = 2.0;
+    UnreachablePolicy unreachable = UnreachablePolicy::Penalty;
+    double unreachablePenaltySec = 3600.0;
+    bool overrideLineOps = true;
+    OpsDefaults ops;
+};
+
+struct WeightResult {
+    DynamicArray<double> weights;
+    DynamicArray<int> clusterOf;
+    DynamicArray<Vec2> centers;
+    Vec2 globalCenter;
+    double scaleR = 1.0;
+    int clusterCount = 0;
+    int iterations = 0;
+};
+
+struct DemandResult {
+    DynamicArray<double> od;  // 行优先 n*n，对称
+    int stationCount = 0;
+    double total = 0.0;
+    double effectiveBeta = 1.0;
+};
+
+struct Metrics {
+    bool valid = true;
+    double r1 = 0.0;
+    double r2 = 0.0;
+    double r3 = 0.0;
+    double r4 = 0.0;
+    double r5 = 0.0;
+    double r6 = 0.0;
+
+    int stationCount = 0;
+    int lineCount = 0;
+    int odPairs = 0;
+    int reachablePairs = 0;
+    int unreachablePairs = 0;
+    double odTotal = 0.0;
+    double elapsedMs = 0.0;
+};
+
+}  // namespace plan
+}  // namespace uc

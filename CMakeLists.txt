@@ -25,6 +25,16 @@ add_library(uc_core
 
 target_include_directories(uc_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
+add_library(uc_plan STATIC
+    src/plan/weights.cpp
+    src/plan/demand.cpp
+    src/plan/evaluator.cpp
+)
+target_link_libraries(uc_plan PUBLIC uc_core)
+
+add_executable(plan_lab tools/plan_lab.cpp)
+target_link_libraries(plan_lab PRIVATE uc_plan)
+
 option(UC_BUILD_GUI "Build the Qt Widgets GUI" ON)
 if(UC_BUILD_GUI)
     find_package(Qt6 QUIET COMPONENTS Widgets)
@@ -84,6 +94,10 @@ enable_testing()
 add_executable(uc_tests tests/test_main.cpp)
 target_link_libraries(uc_tests PRIVATE uc_core)
 add_test(NAME uc_tests COMMAND uc_tests)
+
+add_executable(uc_plan_tests tests/plan_tests.cpp)
+target_link_libraries(uc_plan_tests PRIVATE uc_plan)
+add_test(NAME uc_plan_tests COMMAND uc_plan_tests)
 
 if(TARGET uc_ui_tests)
     add_test(NAME uc_ui_tests COMMAND uc_ui_tests)

@@ -397,6 +397,67 @@ void testEditor() {
     std::filesystem::remove(linePath);
 }
 
+void testEditorDeletionAndLineUpdate() {
+    uc::Editor editor;
+    std::string error;
+    const uc::Index a = editor.addStation("A", 0.0, 0.0, &error);
+    const uc::Index b = editor.addStation("B", 1.0, 0.0, &error);
+    const uc::Index c = editor.addStation("C", 2.0, 0.0, &error);
+    const uc::Index d = editor.addStation("D", 3.0, 0.0, &error);
+    CHECK(editor.addEdge(a, b, &error));
+    CHECK(editor.addEdge(b, c, &error));
+    CHECK(editor.addEdge(c, d, &error));
+    CHECK(editor.addEdge(a, d, &error));
+
+    const int line = editor.addLine("BC", 0x00ff00u, &error);
+    CHECK(editor.appendStop(line, b, &error));
+    CHECK(editor.appendStop(line, c, &error));
+
+    CHECK(!editor.removeEdge(b, c, &error));
+    CHECK(!editor.removeStation(b, &error));
+    CHECK(editor.removeEdge(a, d, &error));
+    CHECK(!editor.network().map().hasEdge(a, d));
+
+    uc::Line updated = editor.network().lines()[0];
+    updated.setName("Renamed");
+    updated.ops().dwellSec = 45.0;
+    CHECK(editor.replaceLine(line, updated, &error));
+    CHECK(editor.network().lines()[0].name() == "Renamed");
+    CHECK(std::fabs(editor.network().lines()[0].ops().dwellSec - 45.0) < 1e-9);
+    CHECK(editor.undo());
+    CHECK(editor.network().lines()[0].name() == "BC");
+
+    CHECK(editor.removeLine(line, &error));
+    CHECK(editor.removeEdge(b, c, &error));
+
+    uc::Editor remapEditor;
+    const uc::Index ra = remapEditor.addStation("A", 0.0, 0.0, &error);
+    const uc::Index rb = remapEditor.addStation("B", 1.0, 0.0, &error);
+    const uc::Index rc = remapEditor.addStation("C", 2.0, 0.0, &error);
+    const uc::Index rd = remapEditor.addStation("D", 3.0, 0.0, &error);
+    CHECK(remapEditor.addEdge(ra, rb, &error));
+    CHECK(remapEditor.addEdge(rb, rc, &error));
+    CHECK(remapEditor.addEdge(rc, rd, &error));
+    const int remapLine = remapEditor.addLine("B-C", 0x0000ffu, &error);
+    CHECK(remapEditor.appendStop(remapLine, rb, &error));
+    CHECK(remapEditor.appendStop(remapLine, rc, &error));
+    const int remapLine2 = remapEditor.addLine("C-D", 0x00ffffu, &error);
+    CHECK(remapEditor.appendStop(remapLine2, rc, &error));
+    CHECK(remapEditor.appendStop(remapLine2, rd, &error));
+    CHECK(remapEditor.setTransferTime(rc, 0, 1, 90.0, &error));
+
+    CHECK(remapEditor.removeStation(ra, &error));
+    CHECK(remapEditor.network().map().stationCount() == 3);
+    CHECK(remapEditor.network().lines()[0].stations()[0] == 0);
+    CHECK(remapEditor.network().lines()[0].stations()[1] == 1);
+    CHECK(remapEditor.network().lines()[1].stations()[0] == 1);
+    CHECK(remapEditor.network().lines()[1].stations()[1] == 2);
+    CHECK(remapEditor.network().map().hasEdge(0, 1));
+    CHECK(remapEditor.network().map().hasEdge(1, 2));
+    CHECK(std::fabs(remapEditor.network().transferTime(1, 0, 1) - 90.0) < 1e-9);
+    CHECK(remapEditor.validate(&error));
+}
+
 }  // namespace
 
 int main() {
@@ -410,6 +471,7 @@ int main() {
     testIoRoundTrip();
     testRouter();
     testEditor();
+    testEditorDeletionAndLineUpdate();
 
     if (failures == 0) {
         std::printf("all tests passed\n");

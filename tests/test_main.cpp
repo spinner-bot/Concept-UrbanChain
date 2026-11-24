@@ -474,6 +474,57 @@ void testEditorDeletionAndLineUpdate() {
     CHECK(remapEditor.validate(&error));
 }
 
+void testEditorPersistence() {
+    uc::Editor editor;
+    std::string error;
+    const uc::Index a = editor.addStation("A", 0.0, 0.0, &error);
+    const uc::Index b = editor.addStation("B", 1.0, 0.0, &error);
+    const uc::Index c = editor.addStation("C", 2.0, 0.0, &error);
+    const uc::Index d = editor.addStation("D", 3.0, 0.0, &error);
+    CHECK(editor.addEdge(a, b, &error));
+    CHECK(editor.addEdge(b, c, &error));
+    CHECK(editor.addEdge(c, d, &error));
+
+    const int red = editor.addLine("Red", 0x112233u, &error);
+    CHECK(editor.appendStop(red, a, &error));
+    CHECK(editor.appendStop(red, b, &error));
+    CHECK(editor.appendStop(red, c, &error));
+    const int blue = editor.addLine("Blue", 0x445566u, &error);
+    CHECK(editor.appendStop(blue, c, &error));
+    CHECK(editor.appendStop(blue, d, &error));
+
+    CHECK(editor.setEdgeWeight(a, b, 2.5, 3.5, &error));
+    CHECK(editor.setTransferTime(c, red, blue, 75.0, &error));
+
+    uc::Line updated = editor.network().lines()[static_cast<std::size_t>(red)];
+    updated.setName("Red Edited");
+    updated.ops().dwellSec = 42.0;
+    updated.ops().segmentRunSec[0] = 99.0;
+    updated.ops().headway[0].headwaySec = 240;
+    CHECK(editor.replaceLine(red, updated, &error));
+
+    const std::string mapPath = "uc_test_persist.cuc3m";
+    const std::string linePath = "uc_test_persist.cuc3l";
+    CHECK(editor.save(mapPath, linePath, &error));
+
+    uc::Editor loaded;
+    CHECK(loaded.load(mapPath, linePath, &error));
+    CHECK(loaded.network().map().stationCount() == 4);
+    CHECK(std::fabs(loaded.network().map().edgeCost(a, b) - 2.5) < 1e-9);
+    CHECK(std::fabs(loaded.network().map().edgeLength(a, b) - 3.5) < 1e-9);
+    CHECK(std::fabs(loaded.network().transferTime(c, red, blue) - 75.0) < 1e-9);
+    CHECK(loaded.network().lines().size() == 2);
+    const uc::Line& loadedRed = loaded.network().lines()[0];
+    CHECK(loadedRed.name() == "Red Edited");
+    CHECK(loadedRed.color() == 0x112233u);
+    CHECK(std::fabs(loadedRed.ops().dwellSec - 42.0) < 1e-9);
+    CHECK(std::fabs(loadedRed.ops().segmentRunSec[0] - 99.0) < 1e-9);
+    CHECK(loadedRed.ops().headway[0].headwaySec == 240);
+
+    std::filesystem::remove(mapPath);
+    std::filesystem::remove(linePath);
+}
+
 }  // namespace
 
 int main() {
@@ -489,6 +540,7 @@ int main() {
     testRouter();
     testEditor();
     testEditorDeletionAndLineUpdate();
+    testEditorPersistence();
 
     if (failures == 0) {
         std::printf("all tests passed\n");

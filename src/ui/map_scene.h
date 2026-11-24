@@ -1,14 +1,17 @@
 #pragma once
 
 #include <QGraphicsScene>
+#include <QPainterPath>
 #include <QPointF>
 
+#include "core/map.h"
 #include "core/types.h"
 #include "ds/dynamic_array.h"
 
 namespace uc {
 
 class Editor;
+class Line;
 class Network;
 class StationItem;
 
@@ -47,6 +50,9 @@ protected:
 
 private:
     QPointF displayPoint(const Network& network, Index station) const;
+    DynamicArray<Vec2> lineSamples(const Line& line) const;
+    QPainterPath buildLinePath(const Line& line, const QPointF* extra = nullptr) const;
+    void paintBackgroundFeatures(QPainter* painter, const Map& map) const;
 
     Editor& editor_;
     DynamicArray<StationItem*> stationItems_;

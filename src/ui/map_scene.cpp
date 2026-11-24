@@ -9,6 +9,7 @@
 #include <cmath>
 
 #include "core/network.h"
+#include "core/spline.h"
 #include "edit/editor.h"
 #include "ui/station_item.h"
 
@@ -54,7 +55,20 @@ void MapScene::refresh() {
     double minY = 0.0;
     double maxX = 0.0;
     double maxY = 0.0;
-    bool hasStation = false;
+    bool hasBounds = false;
+
+    auto extendBounds = [&](double x, double y) {
+        if (!hasBounds) {
+            minX = maxX = x;
+            minY = maxY = y;
+            hasBounds = true;
+        } else {
+            minX = std::min(minX, x);
+            maxX = std::max(maxX, x);
+            minY = std::min(minY, y);
+            maxY = std::max(maxY, y);
+        }
+    };
 
     for (Index i = 0; i < map.stationCount(); ++i) {
         const Station& station = map.station(i);
@@ -63,20 +77,16 @@ void MapScene::refresh() {
         item->setPos(station.position.x, sceneY);
         addItem(item);
         stationItems_.push_back(item);
-
-        if (!hasStation) {
-            minX = maxX = station.position.x;
-            minY = maxY = sceneY;
-            hasStation = true;
-        } else {
-            minX = std::min(minX, station.position.x);
-            maxX = std::max(maxX, station.position.x);
-            minY = std::min(minY, sceneY);
-            maxY = std::max(maxY, sceneY);
+        extendBounds(station.position.x, sceneY);
+    }
+    for (std::size_t i = 0; i < map.backgroundFeatures().size(); ++i) {
+        const BackgroundFeature& feature = map.backgroundFeatures()[i];
+        for (std::size_t j = 0; j < feature.points.size(); ++j) {
+            extendBounds(feature.points[j].x, -feature.points[j].y);
         }
     }
 
-    if (hasStation) {
+    if (hasBounds) {
         const double span = std::max(maxX - minX, maxY - minY);
         const double margin = std::max(0.5, span * 0.12);
         setSceneRect(QRectF(minX - margin, minY - margin,
@@ -174,6 +184,125 @@ QPointF MapScene::displayPoint(const Network& network, Index station) const {
     return stationPoint(network, station);
 }
 
+DynamicArray<Vec2> MapScene::lineSamples(const Line& line) const {
+    const Network& network = editor_.network();
+    DynamicArray<Vec2> keys;
+    for (std::size_t i = 0; i < line.stations().size(); ++i) {
+        const QPointF point = displayPoint(network, line.stations()[i]);
+        keys.push_back(Vec2{point.x(), point.y()});
+    }
+    return catmullRomSpline(keys, 24, 0.5);
+}
+
+QPainterPath MapScene::buildLinePath(const Line& line, const QPointF* extra) const {
+    const Network& network = editor_.network();
+    DynamicArray<Vec2> keys;
+    for (std::size_t i = 0; i < line.stations().size(); ++i) {
+        const QPointF point = displayPoint(network, line.stations()[i]);
+        keys.push_back(Vec2{point.x(), point.y()});
+    }
+    if (extra != nullptr) {
+        keys.push_back(Vec2{extra->x(), extra->y()});
+    }
+    const DynamicArray<Vec2> samples = catmullRomSpline(keys, 24, 0.5);
+    QPainterPath path;
+    if (!samples.empty()) {
+        path.moveTo(samples[0].x, samples[0].y);
+        for (std::size_t i = 1; i < samples.size(); ++i) {
+            path.lineTo(samples[i].x, samples[i].y);
+        }
+    }
+    return path;
+}
+
+void MapScene::paintBackgroundFeatures(QPainter* painter, const Map& map) const {
+    const DynamicArray<BackgroundFeature>& features = map.backgroundFeatures();
+    if (features.empty()) {
+        return;
+    }
+
+    // 区域填充先画，避免遮住河流、边界与线网。
+    QColor regionFill(232, 224, 205, 150);
+    QPen regionPen(QColor("#cdbfa7"));
+    regionPen.setCosmetic(true);
+    regionPen.setWidthF(1.0);
+    for (std::size_t i = 0; i < features.size(); ++i) {
+        const BackgroundFeature& feature = features[i];
+        if (feature.kind != BackgroundKind::Region || !feature.closed ||
+            feature.points.size() < 3) {
+            continue;
+        }
+        QPainterPath path;
+        path.moveTo(feature.points[0].x, -feature.points[0].y);
+        for (std::size_t j = 1; j < feature.points.size(); ++j) {
+            path.lineTo(feature.points[j].x, -feature.points[j].y);
+        }
+        path.closeSubpath();
+        painter->setPen(regionPen);
+        painter->setBrush(regionFill);
+        painter->drawPath(path);
+    }
+    painter->setBrush(Qt::NoBrush);
+
+    for (std::size_t i = 0; i < features.size(); ++i) {
+        const BackgroundFeature& feature = features[i];
+        if (feature.kind == BackgroundKind::Region && feature.closed) {
+            continue;
+        }
+        QPen pen(QColor("#b9aa90"));
+        pen.setCosmetic(true);
+        pen.setWidthF(1.5);
+        switch (feature.kind) {
+            case BackgroundKind::River:
+                pen.setColor(QColor("#7fb3d5"));
+                pen.setWidthF(4.5);
+                pen.setStyle(Qt::SolidLine);
+                break;
+            case BackgroundKind::Coast:
+                pen.setColor(QColor("#4f86a6"));
+                pen.setWidthF(3.5);
+                break;
+            case BackgroundKind::Mountain:
+                pen.setColor(QColor("#a1886f"));
+                pen.setWidthF(2.0);
+                pen.setStyle(Qt::DashLine);
+                break;
+            case BackgroundKind::Boundary:
+                pen.setColor(QColor("#b9aa90"));
+                pen.setStyle(Qt::DashLine);
+                break;
+            case BackgroundKind::Region:
+                pen.setColor(QColor("#cdbfa7"));
+                break;
+        }
+        if (feature.points.size() < 2) {
+            continue;
+        }
+        DynamicArray<Vec2> keys;
+        for (std::size_t j = 0; j < feature.points.size(); ++j) {
+            keys.push_back(Vec2{feature.points[j].x, -feature.points[j].y});
+        }
+        const bool smooth = !feature.closed &&
+                            (feature.kind == BackgroundKind::River ||
+                             feature.kind == BackgroundKind::Coast ||
+                             feature.kind == BackgroundKind::Mountain);
+        const DynamicArray<Vec2> samples =
+            smooth ? catmullRomSpline(keys, 12, 0.5) : keys;
+        QPainterPath path;
+        if (!samples.empty()) {
+            path.moveTo(samples[0].x, samples[0].y);
+            for (std::size_t j = 1; j < samples.size(); ++j) {
+                path.lineTo(samples[j].x, samples[j].y);
+            }
+        }
+        if (feature.closed) {
+            path.closeSubpath();
+        }
+        painter->setPen(pen);
+        painter->drawPath(path);
+    }
+}
+
 int MapScene::edgeAt(const QPointF& scenePos, double threshold) const {
     const Network& network = editor_.network();
     const Map& map = network.map();
@@ -201,10 +330,10 @@ int MapScene::lineAt(const QPointF& scenePos, double threshold) const {
         if (line.stationCount() < 2) {
             continue;
         }
-        for (int i = 0; i + 1 < line.stationCount(); ++i) {
-            const QPointF a = stationPoint(network, line.stations()[static_cast<std::size_t>(i)]);
-            const QPointF b =
-                stationPoint(network, line.stations()[static_cast<std::size_t>(i + 1)]);
+        const DynamicArray<Vec2> samples = lineSamples(line);
+        for (std::size_t i = 0; i + 1 < samples.size(); ++i) {
+            const QPointF a(samples[i].x, samples[i].y);
+            const QPointF b(samples[i + 1].x, samples[i + 1].y);
             const double distance = distanceToSegment(scenePos, a, b);
             if (distance < bestDistance) {
                 bestDistance = distance;
@@ -224,6 +353,8 @@ void MapScene::paintNetwork(QPainter* painter, const QRectF& rect) const {
     const Network& network = editor_.network();
     const Map& map = network.map();
 
+    paintBackgroundFeatures(painter, map);
+
     QPen edgePen(QColor("#9ca3af"));
     edgePen.setCosmetic(true);
     edgePen.setWidthF(2.0);
@@ -238,11 +369,7 @@ void MapScene::paintNetwork(QPainter* painter, const QRectF& rect) const {
         if (line.stationCount() < 2) {
             continue;
         }
-        QPainterPath path;
-        path.moveTo(displayPoint(network, line.stations()[0]));
-        for (int i = 1; i < line.stationCount(); ++i) {
-            path.lineTo(displayPoint(network, line.stations()[static_cast<std::size_t>(i)]));
-        }
+        const QPainterPath path = buildLinePath(line);
         const QColor color = lineColor(line.color());
         if (static_cast<int>(lineIndex) == selectedLine_) {
             QColor halo = color;
@@ -294,14 +421,7 @@ void MapScene::paintOverlay(QPainter* painter, const QRectF& rect) const {
         pen.setCapStyle(Qt::RoundCap);
         painter->setPen(pen);
 
-        QPainterPath path;
-        if (line.stationCount() > 0) {
-            path.moveTo(stationPoint(network, line.stations()[0]));
-            for (int i = 1; i < line.stationCount(); ++i) {
-                path.lineTo(stationPoint(network, line.stations()[static_cast<std::size_t>(i)]));
-            }
-            path.lineTo(previewPos_);
-        }
+        const QPainterPath path = buildLinePath(line, &previewPos_);
         painter->drawPath(path);
     }
 }

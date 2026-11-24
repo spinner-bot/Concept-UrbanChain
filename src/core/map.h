@@ -2,6 +2,7 @@
 
 #include <string>
 
+#include "core/background.h"
 #include "core/station.h"
 #include "core/types.h"
 #include "ds/dynamic_array.h"
@@ -53,6 +54,13 @@ public:
 
     bool isConnected() const;
 
+    void addBackgroundFeature(BackgroundFeature feature);
+    const DynamicArray<BackgroundFeature>& backgroundFeatures() const {
+        return background_;
+    }
+    DynamicArray<BackgroundFeature>& backgroundFeatures() { return background_; }
+    void clearBackground() { background_.clear(); }
+
     void clear();
 
 private:
@@ -64,6 +72,7 @@ private:
     DynamicArray<EdgeRecord> edges_;
     DynamicArray<double> matrixCost_;
     DynamicArray<double> matrixLength_;
+    DynamicArray<BackgroundFeature> background_;
 };
 
 }  // namespace uc

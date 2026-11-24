@@ -50,6 +50,9 @@ bool loadMap(const std::string& path, Map& map, std::string* error) {
     std::size_t lineNumber = 0;
     bool headerSeen = false;
     bool finished = false;
+    bool backgroundSeen = false;
+    int version = 0;
+    int expectedBackground = 0;
 
     while (std::getline(input, line)) {
         ++lineNumber;
@@ -71,8 +74,7 @@ bool loadMap(const std::string& path, Map& map, std::string* error) {
             if (keyword != "CUC3M") {
                 return setError(error, lineNumber, "expected CUC3M header");
             }
-            int version = 0;
-            if (!(stream >> version) || version != 1) {
+            if (!(stream >> version) || (version != 1 && version != 2)) {
                 return setError(error, lineNumber, "unsupported CUC3M version");
             }
             headerSeen = true;
@@ -85,13 +87,51 @@ bool loadMap(const std::string& path, Map& map, std::string* error) {
         }
 
         if (keyword == "BACKGROUND") {
-            int layerCount = 0;
-            if (!(stream >> layerCount)) {
+            if (backgroundSeen) {
+                return setError(error, lineNumber, "duplicate BACKGROUND line");
+            }
+            if (!(stream >> expectedBackground) || expectedBackground < 0) {
                 return setError(error, lineNumber, "BACKGROUND expects a layer count");
             }
-            if (layerCount != 0) {
-                return setError(error, lineNumber, "background layers are not supported in v3");
+            if (version < 2 && expectedBackground != 0) {
+                return setError(error, lineNumber, "background layers require CUC3M 2");
             }
+            backgroundSeen = true;
+            continue;
+        }
+
+        if (keyword == "BG") {
+            if (version < 2) {
+                return setError(error, lineNumber, "background layers require CUC3M 2");
+            }
+            if (!backgroundSeen) {
+                return setError(error, lineNumber, "BG appears before BACKGROUND");
+            }
+            if (static_cast<int>(loaded.backgroundFeatures().size()) >= expectedBackground) {
+                return setError(error, lineNumber, "more BG lines than BACKGROUND count");
+            }
+            std::string kind;
+            int closed = 0;
+            BackgroundFeature feature;
+            if (!(stream >> kind >> closed >> feature.id)) {
+                return setError(error, lineNumber, "BG expects kind, closed flag and id");
+            }
+            if (!parseBackgroundKind(kind, &feature.kind)) {
+                return setError(error, lineNumber, "unknown background kind: " + kind);
+            }
+            feature.closed = closed != 0;
+            double x = 0.0;
+            double y = 0.0;
+            while (stream >> x >> y) {
+                feature.points.push_back(Vec2{x, y});
+            }
+            if (feature.points.size() < 2) {
+                return setError(error, lineNumber, "BG needs at least 2 points");
+            }
+            if (feature.closed && feature.points.size() < 3) {
+                return setError(error, lineNumber, "closed BG needs at least 3 points");
+            }
+            loaded.addBackgroundFeature(static_cast<BackgroundFeature&&>(feature));
             continue;
         }
 
@@ -155,6 +195,13 @@ bool loadMap(const std::string& path, Map& map, std::string* error) {
         }
         return false;
     }
+    if (backgroundSeen &&
+        static_cast<int>(loaded.backgroundFeatures().size()) != expectedBackground) {
+        if (error != nullptr) {
+            *error = "BACKGROUND count does not match BG lines";
+        }
+        return false;
+    }
 
     map = static_cast<Map&&>(loaded);
     return true;
@@ -170,9 +217,19 @@ bool saveMap(const std::string& path, const Map& map, std::string* error) {
         return false;
     }
 
-    output << "CUC3M 1\n";
-    output << "BACKGROUND 0\n";
+    output << "CUC3M 2\n";
     output << std::setprecision(17);
+    output << "BACKGROUND " << map.backgroundFeatures().size() << '\n';
+    for (std::size_t i = 0; i < map.backgroundFeatures().size(); ++i) {
+        const BackgroundFeature& feature = map.backgroundFeatures()[i];
+        output << "BG " << backgroundKindName(feature.kind) << ' '
+               << (feature.closed ? 1 : 0) << ' '
+               << (feature.id.empty() ? std::string("bg") : feature.id);
+        for (std::size_t j = 0; j < feature.points.size(); ++j) {
+            output << ' ' << feature.points[j].x << ' ' << feature.points[j].y;
+        }
+        output << '\n';
+    }
     for (std::size_t i = 0; i < map.stations().size(); ++i) {
         const Station& station = map.stations()[i];
         output << "STATION " << station.id << ' ' << station.position.x << ' '

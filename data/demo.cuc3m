@@ -1,5 +1,10 @@
-CUC3M 1
-BACKGROUND 0
+CUC3M 2
+BACKGROUND 5
+BG region 1 district -1.8 -1.4 1.8 -1.4 1.8 1.6 -1.8 1.6
+BG river 0 river -1.9 -0.6 -1.0 -0.3 -0.2 0.0 0.6 0.4 1.9 0.9
+BG boundary 0 ring-road -1.6 0.9 1.6 0.9
+BG mountain 0 hills -1.7 1.35 -1.2 1.5 -0.6 1.35
+BG coast 0 coast 1.9 -1.4 1.72 -0.7 1.9 0 1.72 0.8 1.9 1.6
 STATION CENTRAL 0 0 Central
 STATION WEST -1 0 West
 STATION EAST 1 0 East

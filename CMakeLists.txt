@@ -16,6 +16,7 @@ add_library(uc_core
     src/core/map.cpp
     src/core/line.cpp
     src/core/network.cpp
+    src/core/spline.cpp
     src/io/map_io.cpp
     src/io/line_io.cpp
     src/nav/router.cpp

@@ -190,6 +190,10 @@ bool Map::isConnected() const {
     return sets.count() == 1;
 }
 
+void Map::addBackgroundFeature(BackgroundFeature feature) {
+    background_.push_back(static_cast<BackgroundFeature&&>(feature));
+}
+
 void Map::clear() {
     stations_.clear();
     stationIndex_.clear();
@@ -197,6 +201,7 @@ void Map::clear() {
     edges_.clear();
     matrixCost_.clear();
     matrixLength_.clear();
+    background_.clear();
 }
 
 void Map::resizeMatrix(Index oldCount, Index newCount) {

@@ -168,6 +168,9 @@ bool Editor::removeStation(Index station, std::string* error) {
             return fail(error, "failed to rebuild edges while removing station");
         }
     }
+    for (std::size_t i = 0; i < oldMap.backgroundFeatures().size(); ++i) {
+        newMap.addBackgroundFeature(oldMap.backgroundFeatures()[i]);
+    }
 
     Network staged;
     staged.map() = static_cast<Map&&>(newMap);

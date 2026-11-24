@@ -1,0 +1,1229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Concept UrbanChain v3 技术文档</title>
+<style>
+:root{
+  --bg:#eef2f7;
+  --paper:#ffffff;
+  --paper-2:#f8fafc;
+  --ink:#111827;
+  --ink-2:#334155;
+  --muted:#64748b;
+  --faint:#94a3b8;
+  --line:#dbe3ee;
+  --line-2:#c7d2e1;
+  --nav:#0b1220;
+  --nav-2:#111c31;
+  --teal:#0f766e;
+  --teal-soft:#e6f4f1;
+  --amber:#b45309;
+  --amber-soft:#fdf3e3;
+  --indigo:#4338ca;
+  --indigo-soft:#eef0ff;
+  --red:#b91c1c;
+  --red-soft:#fdecec;
+  --code:#0b1220;
+  --code-ink:#dbe7f5;
+  --radius:14px;
+  --shadow:0 1px 2px rgba(15,23,42,.04),0 12px 30px -18px rgba(15,23,42,.25);
+  --sans:"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans SC",system-ui,sans-serif;
+  --mono:"Cascadia Code","JetBrains Mono",Consolas,"SFMono-Regular",monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:var(--sans);font-size:15px;line-height:1.8;
+  -webkit-font-smoothing:antialiased;
+}
+::selection{background:rgba(15,118,110,.18)}
+a{color:var(--indigo);text-decoration:none}
+a:hover{text-decoration:underline}
+code,kbd,pre{font-family:var(--mono)}
+
+/* progress */
+#progress{position:fixed;top:0;left:0;height:3px;width:0;z-index:999;
+  background:linear-gradient(90deg,var(--teal),var(--indigo),var(--amber));
+  transition:width .08s linear}
+
+/* hero */
+.hero{
+  position:relative;overflow:hidden;color:#eaf1ff;
+  background:
+    radial-gradient(900px 500px at 82% 0%,rgba(67,56,202,.35),transparent 60%),
+    radial-gradient(700px 420px at 8% 100%,rgba(15,118,110,.30),transparent 62%),
+    linear-gradient(145deg,#08101f 0%,#0d1a30 55%,#091222 100%);
+  padding:58px 56px 48px;border-bottom:1px solid rgba(255,255,255,.08);
+}
+.hero::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background-image:linear-gradient(rgba(255,255,255,.045) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(255,255,255,.045) 1px,transparent 1px);
+  background-size:52px 52px;
+  mask-image:radial-gradient(ellipse 80% 90% at 40% 30%,#000 20%,transparent 100%);
+  -webkit-mask-image:radial-gradient(ellipse 80% 90% at 40% 30%,#000 20%,transparent 100%);
+}
+.hero-inner{position:relative;z-index:2;max-width:1180px;margin:0 auto}
+.hero .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.3em;text-transform:uppercase;color:#7dd3c7}
+.hero h1{font-size:clamp(34px,5vw,58px);line-height:1.08;margin:12px 0 12px;font-weight:650;letter-spacing:-.02em}
+.hero h1 span{color:#8fa8ff}
+.hero .lead{max-width:780px;color:#aebbd0;font-size:15.5px;margin:0 0 24px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.chip{font-family:var(--mono);font-size:11.5px;color:#cbd8ee;background:rgba(255,255,255,.055);
+  border:1px solid rgba(255,255,255,.11);border-radius:999px;padding:5px 11px}
+.hero .watermark{position:absolute;right:4%;bottom:-24px;font-family:var(--mono);font-size:180px;
+  font-weight:700;color:rgba(255,255,255,.035);letter-spacing:-.08em;pointer-events:none}
+
+/* layout */
+.shell{display:grid;grid-template-columns:276px minmax(0,1fr);max-width:1500px;margin:0 auto}
+.sidebar{
+  position:sticky;top:0;height:100vh;overflow:auto;background:var(--nav);color:#cbd5e1;
+  border-right:1px solid rgba(255,255,255,.06);padding:22px 18px 30px;
+}
+.brand{display:flex;align-items:baseline;gap:8px;padding:0 8px 18px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:14px}
+.brand b{font-size:16px;letter-spacing:.02em;color:#fff}
+.brand span{font-family:var(--mono);font-size:11px;color:#7dd3c7;border:1px solid rgba(125,211,199,.3);border-radius:5px;padding:1px 5px}
+.sidebar nav{display:flex;flex-direction:column;gap:2px}
+.sidebar a{display:flex;gap:10px;align-items:baseline;color:#aebbd0;font-size:13px;padding:6px 9px;border-radius:7px;text-decoration:none}
+.sidebar a .n{font-family:var(--mono);font-size:10.5px;color:#5f7291;width:22px;flex:none}
+.sidebar a:hover{background:rgba(255,255,255,.05);color:#fff}
+.sidebar a.active{background:linear-gradient(90deg,rgba(15,118,110,.28),rgba(67,56,202,.16));color:#fff}
+.sidebar a.active .n{color:#7dd3c7}
+.sidebar .side-note{margin-top:18px;padding:12px;border:1px solid rgba(255,255,255,.08);border-radius:9px;font-size:11.5px;color:#7f8fa9;line-height:1.7}
+.sidebar .side-note b{color:#cbd5e1}
+
+.content{padding:34px 44px 90px;max-width:1180px;width:100%}
+section{
+  background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);
+  padding:30px 34px 34px;margin:0 0 26px;box-shadow:var(--shadow);scroll-margin-top:20px;
+}
+.section-head{display:flex;gap:14px;align-items:flex-start;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.section-head .num{font-family:var(--mono);font-size:12px;color:var(--teal);background:var(--teal-soft);
+  border:1px solid #cce8e3;border-radius:6px;padding:3px 8px;flex:none;margin-top:3px}
+.section-head h2{margin:0;font-size:24px;line-height:1.3;letter-spacing:-.01em}
+.section-head p{margin:4px 0 0;color:var(--muted);font-size:13px}
+h3{font-size:17.5px;margin:26px 0 10px;color:#0f172a}
+h4{font-size:14.5px;margin:20px 0 8px;color:#1e293b}
+p{margin:9px 0}
+ul,ol{margin:8px 0 8px 22px;padding:0}
+li{margin:4px 0}
+.muted{color:var(--muted)}
+.small{font-size:12.5px}
+.mono{font-family:var(--mono)}
+
+/* code */
+pre{
+  background:var(--code);color:var(--code-ink);border-radius:10px;padding:16px 18px;
+  overflow:auto;font-size:12.5px;line-height:1.65;margin:12px 0;border:1px solid #1c2b45;
+}
+pre .c{color:#7d8ca6}
+code.inline{background:#eef2f7;border:1px solid var(--line);border-radius:4px;
+  padding:1px 5px;font-size:12.5px;color:#334155}
+kbd{background:#f1f5f9;border:1px solid var(--line-2);border-bottom-width:2px;border-radius:4px;
+  padding:0 5px;font-size:11.5px}
+
+/* tables */
+.table-wrap{overflow-x:auto;margin:12px 0;border:1px solid var(--line);border-radius:9px}
+table{border-collapse:collapse;width:100%;font-size:13px;background:#fff}
+th,td{padding:8px 11px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{background:var(--paper-2);color:#475569;font-weight:600;font-size:12.5px;white-space:nowrap}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#fbfdff}
+td code{white-space:nowrap}
+
+/* callouts */
+.note,.warn,.insight,.danger{border-radius:9px;padding:12px 14px;margin:14px 0;font-size:13.5px;border:1px solid}
+.note{background:#f4f8ff;border-color:#d7e4ff;color:#1e3a5f}
+.warn{background:var(--amber-soft);border-color:#f3d9ac;color:#6b3d08}
+.insight{background:var(--teal-soft);border-color:#cce8e3;color:#134e4a}
+.danger{background:var(--red-soft);border-color:#f5cdcd;color:#7f1d1d}
+.note b,.warn b,.insight b,.danger b{font-weight:700}
+
+/* diagrams */
+.diagram{margin:16px 0;padding:18px;background:var(--paper-2);border:1px dashed var(--line-2);border-radius:10px}
+.layers{display:flex;flex-direction:column;gap:9px}
+.layer{display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:8px;border:1px solid var(--line-2);background:#fff}
+.layer .tag{font-family:var(--mono);font-size:10.5px;color:#fff;background:var(--teal);border-radius:4px;padding:2px 7px;flex:none}
+.layer:nth-child(2) .tag{background:var(--indigo)}
+.layer:nth-child(3) .tag{background:var(--amber)}
+.layer:nth-child(4) .tag{background:#475569}
+.layer b{font-size:13px}
+.layer span{font-size:12px;color:var(--muted)}
+.arrow-down{text-align:center;color:var(--faint);font-size:16px;line-height:1}
+
+.flow{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;align-items:stretch}
+.flow .box{background:#fff;border:1px solid var(--line-2);border-radius:8px;padding:11px;font-size:12.5px}
+.flow .box b{display:block;font-size:12.5px;margin-bottom:3px}
+.flow .box small{color:var(--muted)}
+
+/* qa */
+details{border:1px solid var(--line);border-radius:9px;margin:9px 0;background:#fff}
+details summary{cursor:pointer;padding:11px 14px;font-weight:600;font-size:13.5px;color:#1e293b;list-style:none}
+details summary::-webkit-details-marker{display:none}
+details summary::before{content:"Q";display:inline-block;font-family:var(--mono);font-size:10px;color:#fff;background:var(--indigo);border-radius:4px;padding:1px 6px;margin-right:9px;vertical-align:2px}
+details[open] summary{border-bottom:1px solid var(--line);background:var(--paper-2)}
+details .a{padding:12px 15px 14px;font-size:13.5px}
+details .a::before{content:"A";display:inline-block;font-family:var(--mono);font-size:10px;color:#fff;background:var(--teal);border-radius:4px;padding:1px 6px;margin-right:9px;vertical-align:2px}
+
+/* misc */
+.badge{display:inline-block;font-family:var(--mono);font-size:10.5px;padding:1px 6px;border-radius:4px;border:1px solid}
+.ok{color:#166534;background:#ecfdf3;border-color:#bbf7d0}
+.warnb{color:#92400e;background:#fffbeb;border-color:#fde68a}
+.todo{color:#6b7280;background:#f3f4f6;border-color:#e5e7eb}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.card{background:var(--paper-2);border:1px solid var(--line);border-radius:9px;padding:13px 15px}
+.card b{display:block;font-size:13.5px;margin-bottom:4px}
+.card p{margin:0;font-size:12.5px;color:var(--muted)}
+.kv{display:grid;grid-template-columns:150px 1fr;gap:6px 12px;font-size:13px}
+.kv dt{color:var(--muted)}
+.kv dd{margin:0}
+.toc-inline{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0}
+.toc-inline a{font-size:12px;background:var(--paper-2);border:1px solid var(--line);border-radius:999px;padding:3px 10px;color:var(--ink-2);text-decoration:none}
+.toc-inline a:hover{border-color:var(--teal);color:var(--teal)}
+hr{border:none;border-top:1px solid var(--line);margin:26px 0}
+.footer{color:var(--muted);font-size:12px;text-align:center;padding:18px 0 0}
+
+@media (max-width:1080px){
+  .shell{grid-template-columns:1fr}
+  .sidebar{position:relative;height:auto;padding:14px 16px}
+  .sidebar nav{display:grid;grid-template-columns:1fr 1fr;gap:2px 8px}
+  .content{padding:22px 16px 60px}
+  .hero{padding:42px 22px}
+  .grid2,.grid3,.flow{grid-template-columns:1fr}
+}
+@media print{
+  #progress,.sidebar{display:none}
+  .shell{display:block}
+  .content{padding:0;max-width:none}
+  section{box-shadow:none;break-inside:avoid-page;border-color:#ccc}
+  details{border-color:#ccc}
+  details[open] .a{display:block}
+}
+</style>
+</head>
+<body>
+<div id="progress"></div>
+
+<header class="hero">
+  <div class="hero-inner">
+    <div class="kicker">Data Structures Course Project · Technical Dossier</div>
+    <h1>Concept UrbanChain <span>v3</span></h1>
+    <p class="lead">模拟城市轨道交通线网编辑、时间相关导航与地图化渲染。<br>
+      本文档从构建、数据结构、核心模型、文件格式、编辑控制器、路径算法、渲染交互到测试与答辩问答，逐层记录 v3 的实现细节。</p>
+    <div class="chips">
+      <span class="chip">C++17</span>
+      <span class="chip">Qt 6.8.3 Widgets</span>
+      <span class="chip">CMake + Ninja + MSVC 2022</span>
+      <span class="chip">自写数据结构</span>
+      <span class="chip">时间相关最短路</span>
+      <span class="chip">中文 / English</span>
+      <span class="chip">7,348 lines</span>
+    </div>
+  </div>
+  <div class="watermark">v3</div>
+</header>
+
+<div class="shell">
+<aside class="sidebar">
+  <div class="brand"><b>UC v3</b><span>MANUAL</span></div>
+  <nav id="nav">
+    <a href="#overview"><span class="n">01</span>系统总览</a>
+    <a href="#build"><span class="n">02</span>构建与运行</a>
+    <a href="#ds"><span class="n">03</span>数据结构层</a>
+    <a href="#model"><span class="n">04</span>核心模型</a>
+    <a href="#format"><span class="n">05</span>文件格式</a>
+    <a href="#editor"><span class="n">06</span>编辑控制器</a>
+    <a href="#router"><span class="n">07</span>时间相关导航</a>
+    <a href="#render"><span class="n">08</span>渲染与交互</a>
+    <a href="#ui"><span class="n">09</span>界面架构</a>
+    <a href="#i18n"><span class="n">10</span>双语系统</a>
+    <a href="#tests"><span class="n">11</span>测试体系</a>
+    <a href="#course"><span class="n">12</span>课程映射</a>
+    <a href="#limits"><span class="n">13</span>限制与取舍</a>
+    <a href="#qa"><span class="n">14</span>答辩问答</a>
+    <a href="#appendix"><span class="n">15</span>附录与索引</a>
+  </nav>
+  <div class="side-note">
+    <b>阅读方式</b><br>
+    先看 01–05 建立整体模型；06–09 是答辩最常被追问的实现细节；14 是可直接使用的问答速查。
+  </div>
+</aside>
+
+<main class="content">
+
+<!-- ================= 01 ================= -->
+<section id="overview">
+  <div class="section-head">
+    <div class="num">01</div>
+    <div><h2>系统总览</h2><p>目标、边界、分层与运行时生命周期</p></div>
+  </div>
+
+  <p><strong>Concept UrbanChain v3</strong> 是一个用 C++17 与 Qt 6 Widgets 实现的城市轨道交通线网桌面工具。输入是一张<strong>模拟城市地图</strong>（带权站点图 + 矢量背景），用户可以编辑站点、区间、线路和运营参数，查询任意时刻的出行路径，并把结果保存回文件。所有核心数据结构（除栈和队列外）均为自行实现。</p>
+
+  <h3>1.1 v3 的边界</h3>
+  <div class="grid2">
+    <div class="card"><b>本版包含</b><p>地图/线路/线网模型、文件读写、图形编辑、时间相关导航、背景渲染、平滑线路、双语界面、撤销重做、单元测试与 UI 自动化测试。</p></div>
+    <div class="card"><b>本版不包含</b><p>自动规划（站权重、OD、R1–R6、模拟退火）、增量规划、真实地理数据、背景图形编辑器、可编辑精细轨迹点。</p></div>
+  </div>
+
+  <div class="note"><b>定位：</b>v3 是“可运行、可编辑、可导航、可测试”的底座；v4 的自动规划只通过 <code class="inline">Network</code> 与 <code class="inline">Router</code> 的只读接口接入，不修改 v3 数据结构。</div>
+
+  <h3>1.2 分层架构</h3>
+  <div class="diagram">
+    <div class="layers">
+      <div class="layer"><span class="tag">UI</span><b>Qt Widgets 图形层</b><span>MainWindow · MapView · MapScene · StationItem · 属性对话框 · 双语</span></div>
+      <div class="arrow-down">↓ 调用 / 回调</div>
+      <div class="layer"><span class="tag">EDIT</span><b>编辑控制器</b><span>Editor：事务式修改、撤销/重做、保存前校验</span></div>
+      <div class="arrow-down">↓ 读写</div>
+      <div class="layer"><span class="tag">CORE</span><b>核心模型与算法</b><span>Network · Map · Line · Background · Router · IO · Catmull-Rom</span></div>
+      <div class="arrow-down">↓ 复用</div>
+      <div class="layer"><span class="tag">DS</span><b>自写基础数据结构</b><span>DynamicArray · HashMap · BinaryMinHeap · UnionFind · Queue · Stack · QuickSort</span></div>
+    </div>
+  </div>
+
+  <h3>1.3 依赖方向</h3>
+  <div class="table-wrap"><table>
+    <tr><th>模块</th><th>允许依赖</th><th>不应依赖</th></tr>
+    <tr><td><code>src/ds</code></td><td>标准库基础类型</td><td>core / ui / Qt</td></tr>
+    <tr><td><code>src/core</code></td><td>ds</td><td>Qt / io / nav / edit / ui</td></tr>
+    <tr><td><code>src/io</code></td><td>core / ds</td><td>Qt / ui</td></tr>
+    <tr><td><code>src/nav</code></td><td>core / ds</td><td>Qt / ui</td></tr>
+    <tr><td><code>src/edit</code></td><td>core / io / ds</td><td>Qt / ui</td></tr>
+    <tr><td><code>src/ui</code></td><td>edit / core / nav / io / ds / Qt</td><td>—</td></tr>
+    <tr><td><code>tests/test_main.cpp</code></td><td>core / io / nav / edit / ds</td><td>Qt</td></tr>
+    <tr><td><code>tests/ui_smoke.cpp</code></td><td>ui / Qt Test</td><td>—</td></tr>
+  </table></div>
+
+  <h3>1.4 目录与规模</h3>
+  <div class="table-wrap"><table>
+    <tr><th>目录</th><th>文件</th><th>职责</th><th>行数</th></tr>
+    <tr><td rowspan="7"><code>src/ds</code></td><td>dynamic_array.h</td><td>动态数组</td><td>176</td></tr>
+    <tr><td>hash_map.h</td><td>链地址哈希表</td><td>229</td></tr>
+    <tr><td>binary_heap.h</td><td>二叉最小堆</td><td>98</td></tr>
+    <tr><td>union_find.h</td><td>并查集</td><td>66</td></tr>
+    <tr><td>queue.h / stack.h</td><td>队列 / 栈</td><td>66 / 41</td></tr>
+    <tr><td>sort.h</td><td>快速排序</td><td>81</td></tr>
+    <tr><td colspan="2">小计</td><td><strong>757</strong></td></tr>
+    <tr><td rowspan="7"><code>src/core</code></td><td>types.h / station.h</td><td>基础类型与站点</td><td>25 / 16</td></tr>
+    <tr><td>map.h / map.cpp</td><td>地图、带权图、背景要素</td><td>78 / 233</td></tr>
+    <tr><td>line.h / line.cpp</td><td>线路与运营参数</td><td>71 / 125</td></tr>
+    <tr><td>network.h / network.cpp</td><td>线网、换乘表</td><td>52 / 108</td></tr>
+    <tr><td>background.h</td><td>背景要素定义</td><td>88</td></tr>
+    <tr><td>spline.h / spline.cpp</td><td>Catmull-Rom 样条</td><td>14 / 98</td></tr>
+    <tr><td colspan="2">小计</td><td><strong>908</strong></td></tr>
+    <tr><td><code>src/io</code></td><td>map_io / line_io</td><td>.cuc3m2/3 与 .cuc3l 读写</td><td>585</td></tr>
+    <tr><td><code>src/nav</code></td><td>router.h / router.cpp</td><td>时间相关最短路</td><td>212</td></tr>
+    <tr><td><code>src/edit</code></td><td>editor.h / editor.cpp</td><td>文档编辑、撤销重做</td><td>563</td></tr>
+    <tr><td><code>src/ui</code></td><td>语言 / 主窗口 / 视图 / 场景 / 对话框</td><td>Qt 图形层</td><td>3,455</td></tr>
+    <tr><td><code>tests</code></td><td>test_main.cpp / ui_smoke.cpp</td><td>核心与 UI 测试</td><td>651 / 217</td></tr>
+  </table></div>
+  <p class="small muted">总计约 7,348 行；其中源码约 6,480 行，测试约 868 行。</p>
+
+  <h3>1.5 运行时生命周期</h3>
+  <div class="diagram">
+    <div class="flow">
+      <div class="box"><b>1 启动</b><small>QApplication · 组织名 · 语言 · MainWindow</small></div>
+      <div class="box"><b>2 加载示例</b><small>尝试 data/demo.cuc3m3 → .cuc3m2 → .cuc3m</small></div>
+      <div class="box"><b>3 渲染</b><small>MapScene 重建站点图元，绘制背景/区间/线路</small></div>
+      <div class="box"><b>4 交互</b><small>鼠标/菜单 → MapView → Editor → refresh</small></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 02 ================= -->
+<section id="build">
+  <div class="section-head">
+    <div class="num">02</div>
+    <div><h2>构建与运行</h2><p>工具链、CMake 目标、自动部署与启动器</p></div>
+  </div>
+
+  <h3>2.1 工具链</h3>
+  <dl class="kv">
+    <dt>编译器</dt><dd>MSVC 14.44（Visual Studio Community 2022，安装于 <code class="inline">D:\VisualStudio\Packages</code>）</dd>
+    <dt>构建系统</dt><dd>CMake 3.31 + Ninja</dd>
+    <dt>图形库</dt><dd>Qt 6.8.3 LTS / MSVC 2022 64 位，安装于 <code class="inline">F:\dev-tools\6.8.3\msvc2022_64</code></dd>
+    <dt>语言标准</dt><dd>C++17，MSVC 编译选项 <code class="inline">/W4 /utf-8</code></dd>
+    <dt>测试</dt><dd>自写测试框架 + Qt Test + CTest</dd>
+  </dl>
+
+  <h3>2.2 CMake 目标</h3>
+  <div class="table-wrap"><table>
+    <tr><th>目标</th><th>类型</th><th>源文件</th><th>说明</th></tr>
+    <tr><td><code>uc_core</code></td><td>静态库</td><td>core / io / nav / edit / spline</td><td>不依赖 Qt 的业务核心</td></tr>
+    <tr><td><code>uc_ui</code></td><td>静态库</td><td>ui 下的窗口、视图、场景、对话框、语言</td><td>依赖 <code>uc_core</code> + <code>Qt6::Widgets</code></td></tr>
+    <tr><td><code>urbanchain</code></td><td>WIN32 可执行文件</td><td>src/ui/main.cpp + uc_ui</td><td>正式图形程序</td></tr>
+    <tr><td><code>uc_tests</code></td><td>控制台可执行文件</td><td>tests/test_main.cpp</td><td>核心/IO/导航/编辑测试</td></tr>
+    <tr><td><code>uc_ui_tests</code></td><td>控制台可执行文件</td><td>tests/ui_smoke.cpp</td><td>Qt Test 图形交互测试</td></tr>
+  </table></div>
+
+  <h3>2.3 tools/build.bat 流程</h3>
+  <pre><code>1. 解析 VSPATH：UC_VSPATH → D:\VisualStudio\Packages → vswhere
+2. 调用 vcvars64.bat 初始化 MSVC 环境
+3. 解析 CMAKE：VS 自带 CMake
+4. 解析 QT_PATH：UC_QT_PATH → F:\dev-tools\6.8.3\msvc2022_64
+5. 将 Qt bin 加入 PATH，传入 -DCMAKE_PREFIX_PATH
+6. cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+7. cmake --build build
+8. 构建后 windeployqt 部署 Qt DLL
+9. 复制 qtbase_zh_CN.qm 到 build/translations</code></pre>
+
+  <div class="warn"><b>已知构建现象：</b>在 Windows + Ninja 下修改 <code class="inline">CMakeLists.txt</code> 后，增量构建偶尔会在“Re-running CMake”阶段失败并只显示 <code class="inline">CreateProcessW failed</code>。当前规避方式是删除 <code class="inline">build/</code> 后重新构建；源码和构建结果本身没有问题。</div>
+
+  <h3>2.4 启动器</h3>
+  <p><code class="inline">start_v3.bat</code>：如果 <code class="inline">build\urbanchain.exe</code> 不存在，先调用 <code class="inline">tools\build.bat</code>；随后用 <code class="inline">start "" /D "%~dp0" "%~dp0build\urbanchain.exe"</code> 启动，工作目录固定为项目根目录，因此能自动找到 <code class="inline">data/demo.*</code>。</p>
+  <pre><code>start_v3.bat              # 构建（如缺失）并启动
+start_v3.bat --rebuild    # 强制重新编译后启动</code></pre>
+
+  <h3>2.5 测试命令</h3>
+  <pre><code>tools\build.bat
+build\uc_tests.exe
+build\uc_ui_tests.exe
+ctest --test-dir build --output-on-failure</code></pre>
+</section>
+
+<!-- ================= 03 ================= -->
+<section id="ds">
+  <div class="section-head">
+    <div class="num">03</div>
+    <div><h2>数据结构层</h2><p>自写容器与算法：实现、复杂度、使用位置</p></div>
+  </div>
+
+  <p>课程约束要求除栈和队列外的基础数据结构自行实现。v3 的业务核心（core / io / nav / edit）不使用 <code class="inline">std::vector</code>、<code class="inline">std::unordered_map</code>、<code class="inline">std::priority_queue</code> 等容器，统一使用 <code class="inline">src/ds</code>。Qt 层允许使用 Qt 容器/控件用于界面。</p>
+
+  <h3>3.1 DynamicArray&lt;T&gt;</h3>
+  <div class="table-wrap"><table>
+    <tr><th>项目</th><th>实现</th></tr>
+    <tr><td>存储</td><td>连续堆数组 <code class="inline">T* data_</code>，<code>size_</code>、<code>capacity_</code></td></tr>
+    <tr><td>扩容</td><td>空数组首次 8；之后容量 ×2，直到满足需求；元素移动构造</td></tr>
+    <tr><td>拷贝/移动</td><td>深拷贝；移动接管指针并把源置空</td></tr>
+    <tr><td>常用操作</td><td><code>push_back</code>、<code>pop_back</code>、<code>erase(index)</code>、<code>resize</code>、<code>reserve</code>、<code>at</code>（越界抛出 <code>std::out_of_range</code>）</td></tr>
+    <tr><td>复杂度</td><td>随机访问 O(1)；尾部插入均摊 O(1)；中间删除 O(n)；扩容 O(n)</td></tr>
+    <tr><td>约束</td><td>元素需可默认构造（<code>resize</code> 使用 <code>T()</code>）</td></tr>
+  </table></div>
+  <p>使用位置：站点表、边表、线路站点序列、区段运行时间、候选路径链、撤销栈、邻接表等。</p>
+
+  <h3>3.2 HashMap&lt;K,V,Hash&gt;</h3>
+  <div class="table-wrap"><table>
+    <tr><th>项目</th><th>实现</th></tr>
+    <tr><td>冲突处理</td><td>链地址法：每个桶是 <code>Node*</code> 链表</td></tr>
+    <tr><td>哈希</td><td><code>Fnv1aHash</code>（字符串）、<code>IntHash</code>（64 位混合哈希）</td></tr>
+    <tr><td>扩容</td><td>装载因子 &gt; 0.75 时桶数 ×2，节点重新挂链</td></tr>
+    <tr><td>接口</td><td><code>insert</code> / <code>set</code> / <code>find</code> / <code>contains</code> / <code>clear</code> / <code>forEach</code></td></tr>
+    <tr><td>复杂度</td><td>平均 O(1)，最坏 O(n)（全部冲突）</td></tr>
+  </table></div>
+  <p>使用位置：<code class="inline">Map::stationIndex_</code>（站点字符串 ID → 下标）、<code class="inline">Network::transfers_</code>（64 位换乘键 → 秒数）。</p>
+
+  <h3>3.3 BinaryMinHeap</h3>
+  <p>完全二叉树顺序存储在 <code class="inline">DynamicArray&lt;HeapItem&gt;</code> 中，<code>HeapItem{double key; int value;}</code>。比较规则：先比 key，key 相同比 value。Dijkstra 使用惰性删除：每次松弛都 push，弹出时若 key 大于当前 dist 则跳过。</p>
+  <p>复杂度：push/pop O(log n)，top O(1)。</p>
+
+  <h3>3.4 UnionFind</h3>
+  <p>并查集采用按秩合并 + 两遍路径压缩。<code>find</code> 先找到根，再把路径上所有节点直接挂到根；<code>unite</code> 按秩合并并维护连通分量计数。用于 <code class="inline">Map::isConnected()</code>。</p>
+  <p>复杂度：均摊 O(α(n))，α 为反阿克曼函数，实际近似常数。</p>
+
+  <h3>3.5 Queue / Stack</h3>
+  <p>队列用动态数组 + 头指针，出队只移动 head，超过 64 且超过总长一半时压缩；栈直接复用动态数组尾部。两者均为 O(1) 均摊。v3 生产路径主要用它们做课程结构演示，核心测试覆盖其行为。</p>
+
+  <h3>3.6 QuickSort</h3>
+  <p>实现对 <code class="inline">DynamicArray</code> 的原地排序：三数取中选枢轴，Hoare 式双指针分区，小区间（&lt; 16）改用插入排序，递归较小区间、循环较大区间以控制栈深。平均 O(n log n)，最坏 O(n²)，原地 O(log n) 栈空间。</p>
+  <p>使用位置：<code class="inline">Network::transferRecords()</code> 按“站点 → 来源线路 → 目标线路”排序，保证保存出的 `.cuc3l` 中 TRANSFER 行顺序稳定。</p>
+
+  <h3>3.7 课程映射</h3>
+  <div class="table-wrap"><table>
+    <tr><th>课程内容</th><th>v3 落点</th><th>体现</th></tr>
+    <tr><td>线性表 / 动态数组</td><td>DynamicArray</td><td>容量增长、移动语义、中间删除</td></tr>
+    <tr><td>栈 / 队列</td><td>Stack / Queue</td><td>课程要求的基础结构；测试覆盖</td></tr>
+    <tr><td>树</td><td>BinaryMinHeap（完全二叉树）</td><td>Dijkstra 优先队列</td></tr>
+    <tr><td>图</td><td>Map 的矩阵 + 邻接表 + 边表</td><td>存储、遍历、连通性</td></tr>
+    <tr><td>查找</td><td>HashMap（哈希查找）</td><td>站点 ID、状态/换乘键</td></tr>
+    <tr><td>排序</td><td>QuickSort</td><td>换乘记录确定性输出</td></tr>
+    <tr><td>集合合并</td><td>UnionFind</td><td>地图连通性</td></tr>
+  </table></div>
+</section>
+
+<!-- ================= 04 ================= -->
+<section id="model">
+  <div class="section-head">
+    <div class="num">04</div>
+    <div><h2>核心模型</h2><p>站点、地图、背景、线路、线网与样条</p></div>
+  </div>
+
+  <h3>4.1 基础类型与站点</h3>
+  <pre><code>// src/core/types.h
+using Index = int;
+constexpr Index kInvalidIndex = -1;
+constexpr double kInfinity = std::numeric_limits&lt;double&gt;::infinity();
+
+struct Vec2 { double x = 0.0; double y = 0.0; };
+double euclideanDistance(const Vec2&amp; a, const Vec2&amp; b);
+
+// src/core/station.h
+struct Station {
+    std::string id;    // 稳定外部 ID，文件与线路引用
+    std::string name;  // 展示名称
+    Vec2 position;     // 模拟城市平面坐标
+    int type = 0;      // 预留
+};</code></pre>
+
+  <h3>4.2 Map：三种图表示同时维护</h3>
+  <p><code class="inline">Map</code> 是最核心的数据结构：它保存站点数组、站点 ID 哈希表、邻接表、边表、两个 n×n 矩阵（成本/长度），以及背景要素数组。</p>
+
+  <div class="table-wrap"><table>
+    <tr><th>成员</th><th>类型</th><th>用途</th></tr>
+    <tr><td><code>stations_</code></td><td>DynamicArray&lt;Station&gt;</td><td>站点数组，下标即内部 Index</td></tr>
+    <tr><td><code>stationIndex_</code></td><td>HashMap&lt;string, Index&gt;</td><td>外部 ID → 内部下标</td></tr>
+    <tr><td><code>adjacency_</code></td><td>DynamicArray&lt;DynamicArray&lt;AdjEdge&gt;&gt;</td><td>邻接表，遍历与路径算法</td></tr>
+    <tr><td><code>edges_</code></td><td>DynamicArray&lt;EdgeRecord&gt;</td><td>边表，保存/统计；边 ID 即下标</td></tr>
+    <tr><td><code>matrixCost_</code></td><td>扁平 DynamicArray&lt;double&gt;</td><td>n×n 建设成本矩阵，O(1) 判边</td></tr>
+    <tr><td><code>matrixLength_</code></td><td>扁平 DynamicArray&lt;double&gt;</td><td>n×n 几何长度矩阵</td></tr>
+    <tr><td><code>background_</code></td><td>DynamicArray&lt;BackgroundFeature&gt;</td><td>背景矢量要素</td></tr>
+  </table></div>
+
+  <h4>为什么同时维护三种图表示</h4>
+  <ul>
+    <li><strong>邻接矩阵</strong>：<code>hasEdge(u,v)</code>、<code>edgeCost</code>、线路合法性校验需要 O(1) 判边；地图通常较稠密，n 不大。</li>
+    <li><strong>邻接表</strong>：遍历邻边、Dijkstra 只访问存在的边，避免扫描 n²。</li>
+    <li><strong>边表</strong>：保存文件、统计边数、删除边时重建；边 ID 与边表下标一致。</li>
+  </ul>
+
+  <h4>关键操作与复杂度</h4>
+  <div class="table-wrap"><table>
+    <tr><th>操作</th><th>行为</th><th>复杂度</th></tr>
+    <tr><td><code>addStation</code></td><td>追加站点、更新哈希、扩容邻接表与两个矩阵</td><td>O(n²)（矩阵复制）</td></tr>
+    <tr><td><code>addEdge</code></td><td>写入边表、双向邻接表、矩阵；拒绝自环/重复/负成本</td><td>O(1)</td></tr>
+    <tr><td><code>removeEdge</code></td><td>从边表删除，重建邻接表与矩阵，更新边 ID</td><td>O(n² + m)</td></tr>
+    <tr><td><code>setEdgeWeight</code></td><td>同时更新边表、双向邻接项、矩阵</td><td>O(deg(u)+deg(v))</td></tr>
+    <tr><td><code>isConnected</code></td><td>并查集合并所有边</td><td>O((n+m)·α(n))</td></tr>
+    <tr><td><code>findStation</code></td><td>哈希查找</td><td>平均 O(1)</td></tr>
+  </table></div>
+
+  <div class="warn"><b>一致性不变量：</b>对每条边，边表记录、两个方向的邻接项、矩阵的对称两个格子必须同时存在且 cost/length 一致；边 ID 必须等于边表下标。<code>removeEdge</code> 通过整体重建保证这一点。</div>
+
+  <h3>4.3 BackgroundFeature：背景矢量要素</h3>
+  <pre><code>enum class BackgroundKind {
+    Region, Water, Park, Road, River, Coast, Boundary, Mountain
+};
+
+struct BackgroundFeature {
+    std::string id;
+    BackgroundKind kind = BackgroundKind::Boundary;
+    bool closed = false;
+    double width = 0.0;          // 线状要素的数据宽度
+    DynamicArray&lt;Vec2&gt; points;   // 折线/多边形顶点
+};</code></pre>
+  <div class="table-wrap"><table>
+    <tr><th>类型</th><th>闭合</th><th>宽度语义</th><th>渲染</th></tr>
+    <tr><td><code>region</code></td><td>是</td><td>忽略</td><td>城市地面浅色填充 + 细边</td></tr>
+    <tr><td><code>water</code></td><td>是</td><td>忽略</td><td>湖泊/闭合水面填充</td></tr>
+    <tr><td><code>park</code></td><td>是</td><td>忽略</td><td>绿地填充 + 描边</td></tr>
+    <tr><td><code>road</code></td><td>否</td><td>路面宽度（数据坐标）</td><td>深色外框 + 浅色路面</td></tr>
+    <tr><td><code>river</code></td><td>否</td><td>河宽（数据坐标）</td><td>河岸 + 水面</td></tr>
+    <tr><td><code>coast</code></td><td>否</td><td>海岸线宽度</td><td>蓝色线</td></tr>
+    <tr><td><code>boundary</code></td><td>可闭合</td><td>忽略</td><td>虚线行政边界</td></tr>
+    <tr><td><code>mountain</code></td><td>否</td><td>忽略</td><td>棕灰虚线/等高线</td></tr>
+  </table></div>
+  <p>背景只参与显示：不进入导航、长度、成本或图算法。渲染时按“地面 → 水体/公园 → 道路 → 河流 → 海岸 → 边界/山体”的图层顺序绘制；道路、河流、海岸会被裁剪到 <code class="inline">region</code> 多边形内。</p>
+
+  <h3>4.4 Line 与 LineOps</h3>
+  <p>线路是地图上的简单路径：<strong>不允许重复站点</strong>、<strong>相邻站点必须有地图边</strong>、<strong>至少 2 个站点</strong>。线路存储站点内部下标，保存时再映射回字符串 ID。</p>
+  <pre><code>struct HeadwayPeriod { int startSec; int endSec; int headwaySec; };
+
+struct LineOps {
+    DynamicArray&lt;double&gt; segmentRunSec;  // 长度 = 站点数 - 1
+    double dwellSec = 30.0;
+    DynamicArray&lt;HeadwayPeriod&gt; headway; // 有序、不重叠
+    int headwayAt(int timeSec) const;    // 无可用时段返回 0
+};</code></pre>
+  <div class="table-wrap"><table>
+    <tr><th>校验项</th><th>规则</th></tr>
+    <tr><td>站点数</td><td>≥ 2（<code>kMinStationsPerLine = 2</code>）</td></tr>
+    <tr><td>站点下标</td><td>必须在地图范围内</td></tr>
+    <tr><td>重复站点</td><td>禁止（简单路径）</td></tr>
+    <tr><td>相邻边</td><td>每一对相邻站点必须 <code>map.hasEdge</code></td></tr>
+    <tr><td>区段运行时间</td><td>数量 = 站点数 − 1，且非负</td></tr>
+    <tr><td>停站时间</td><td>非负</td></tr>
+    <tr><td>发车间隔</td><td>至少一段；start &lt; end；interval &gt; 0；有序不重叠</td></tr>
+  </table></div>
+  <p><code>headwayAt</code> 使用线性扫描，返回 <code>timeSec ∈ [startSec, endSec)</code> 的 interval；否则返回 0，表示该时刻不可乘车。</p>
+
+  <h3>4.5 Network 与换乘表</h3>
+  <p><code class="inline">Network</code> = <code class="inline">Map</code> + <code class="inline">DynamicArray&lt;Line&gt;</code> + 换乘哈希表。线路没有单独的持久化 ID：<strong>线路序号就是它在数组中的下标</strong>，文件中的 <code class="inline">LINE</code> 顺序决定序号。</p>
+  <pre><code>struct TransferRecord {
+    Index station = kInvalidIndex;
+    int fromLine = -1;
+    int toLine = -1;
+    double seconds = 0.0;
+};</code></pre>
+  <p>换乘键编码为 64 位：</p>
+  <pre><code>key = (station &lt;&lt; 42) | (fromLine &lt;&lt; 21) | toLine</code></pre>
+  <p>隐含限制：站点数、线路数均小于 2²¹。默认换乘时间 120 秒；<code>transferTime</code> 未命中时返回默认值。</p>
+  <p><code>removeLine(index)</code> 会：删除线路 → 重排后续线路的 id → 读取全部换乘记录 → 清空换乘表 → 对每条记录，若 from/to 等于被删线路则丢弃，否则把大于 index 的线路号减 1 → 重新写入。</p>
+  <p><code>validate()</code> 只校验每条线路，不强制地图连通；v3 编辑过程中允许孤立站点，导航对不可达返回“无路径”。</p>
+
+  <h3>4.6 Catmull-Rom 样条</h3>
+  <p>线路显示使用向心 Catmull-Rom（<code class="inline">alpha = 0.5</code>），曲线精确经过所有站点。实现位于 <code class="inline">src/core/spline.cpp</code>，仅用于渲染与命中检测，不参与长度、时间或规划。</p>
+  <pre><code>输入关键点 P0..Pn
+1. 首尾各加一个反射虚拟点
+2. 用相邻点距离的 alpha 次幂构造节点向量 t
+3. 对每个真实段 [P1,P2]，在 t 上采样 S 个参数
+4. 用 de Casteljau 式线性插值求点
+5. 拼接输出；线渲染每段 S = 24</code></pre>
+  <p>复杂度：O(n·S)，S 固定；对线路长度 P 的线段，渲染点是 O(P)。</p>
+</section>
+
+<!-- ================= 05 ================= -->
+<section id="format">
+  <div class="section-head">
+    <div class="num">05</div>
+    <div><h2>文件格式</h2><p>.cuc3m3 / .cuc3m2 / .cuc3m 与 .cuc3l 的语法、兼容与读写流程</p></div>
+  </div>
+
+  <h3>5.1 扩展名与版本策略</h3>
+  <div class="table-wrap"><table>
+    <tr><th>扩展名</th><th>文件头</th><th>内容</th><th>保存</th><th>读取</th></tr>
+    <tr><td><code>.cuc3m3</code></td><td><code>CUC3M 3</code></td><td>站点/区间 + 背景要素 + 线宽</td><td><span class="badge ok">默认</span></td><td><span class="badge ok">支持</span></td></tr>
+    <tr><td><code>.cuc3m2</code></td><td><code>CUC3M 2</code></td><td>站点/区间 + 背景要素，无宽度字段</td><td><span class="badge ok">可选</span></td><td><span class="badge ok">支持</span></td></tr>
+    <tr><td><code>.cuc3m</code></td><td><code>CUC3M 1</code></td><td>仅站点/区间</td><td><span class="badge todo">拒绝保存</span></td><td><span class="badge ok">兼容读取</span></td></tr>
+    <tr><td><code>.cuc3l</code></td><td><code>CUC3L 1</code></td><td>线路与运营参数</td><td><span class="badge ok">支持</span></td><td><span class="badge ok">支持</span></td></tr>
+  </table></div>
+  <div class="insight"><b>版本由内容头决定，读取不依赖扩展名。</b>打开 `.cuc3m` 旧文件后编辑，直接“保存”会转到“另存为”，避免覆盖旧格式。保存时由扩展名决定写 v2 还是 v3；v2 无法保存线状背景宽度。</div>
+
+  <h3>5.2 地图文件语法</h3>
+  <pre><code>CUC3M 3
+BACKGROUND &lt;数量&gt;
+BG &lt;类型&gt; &lt;闭合 0/1&gt; &lt;ID&gt; &lt;宽度&gt; &lt;x1&gt; &lt;y1&gt; &lt;x2&gt; &lt;y2&gt; ...
+STATION &lt;站点ID&gt; &lt;x&gt; &lt;y&gt; &lt;名称...&gt;
+EDGE &lt;站点ID1&gt; &lt;站点ID2&gt; &lt;成本&gt; [长度]
+...
+END</code></pre>
+  <p>示例（节选）：</p>
+  <pre><code>CUC3M 3
+BACKGROUND 19
+BG region 1 district 0 -2.2 -1.7 -1.8 -1.9 0.5 -1.85 2.0 -1.5 ...
+BG water 1 lake-east 0 1.45 -1.65 1.9 -1.55 2.05 -1.1 1.85 -0.7 ...
+BG road 0 ring-road 0.06 -2.0 0.9 2.0 0.9
+BG river 0 river 0.14 -2.3 -0.9 -1.3 -0.6 -0.3 -0.2 0.7 0.2 1.7 0.6 2.3 0.95
+STATION CENTRAL 0 0 Central
+STATION WEST -1 0 West
+EDGE WEST CENTRAL 1 1
+END</code></pre>
+
+  <div class="table-wrap"><table>
+    <tr><th>字段</th><th>说明</th></tr>
+    <tr><td><code>BACKGROUND n</code></td><td>v2/v3 必须出现；n 为后续 BG 行数。v1 只允许 <code>BACKGROUND 0</code></td></tr>
+    <tr><td><code>BG kind closed id width ...</code></td><td>v3 格式；v2 无 <code>width</code>；v1 不允许 BG</td></tr>
+    <tr><td>闭合</td><td><code>1</code> 表示多边形/闭合线；非闭合线状要素至少 2 点，闭合要素至少 3 点</td></tr>
+    <tr><td>宽度</td><td>数据坐标单位，仅对道路/河流/海岸等线状要素有意义；v3 必填且非负</td></tr>
+    <tr><td><code>STATION</code></td><td>ID 不含空格；名称取本行剩余全部内容，可含空格；名称为空时用 ID</td></tr>
+    <tr><td><code>EDGE</code></td><td>无向边；成本为规划/成本口径，长度为几何口径；省略长度时长度 = 成本</td></tr>
+  </table></div>
+
+  <h3>5.3 线路文件语法</h3>
+  <pre><code>CUC3L 1
+LINE &lt;颜色&gt; &lt;名称...&gt;
+STOPS &lt;站点ID...&gt;
+RUN &lt;区段运行秒数...&gt;
+DWELL &lt;停站秒数&gt;
+HEADWAY &lt;开始秒&gt; &lt;结束秒&gt; &lt;发车间隔秒&gt;
+...
+TRANSFER &lt;站点ID&gt; &lt;来源线路序号&gt; &lt;目标线路序号&gt; &lt;秒数&gt;
+...
+END</code></pre>
+  <ul>
+    <li><strong>线路序号 = LINE 出现顺序</strong>，从 0 开始；TRANSFER 使用这个序号。</li>
+    <li><code>STOPS</code> 顺序即行驶顺序；相邻站点必须在地图中有边，且不允许重复。</li>
+    <li><code>RUN</code> 数量必须等于站点数 − 1；<code>DWELL</code> 是中间站停站时间。</li>
+    <li><code>HEADWAY</code> 可重复；区间为 <code>[start, end)</code>，必须有序、不重叠，至少一段。</li>
+    <li><code>TRANSFER</code> 是有向记录；同一换乘站每条线路分别记录到其他线路的时间。</li>
+    <li>线路颜色支持 <code>0xRRGGBB</code> 或十进制；保存输出大写十六进制。</li>
+  </ul>
+
+  <h3>5.4 读取流程</h3>
+  <ol>
+    <li>按 UTF-8 读取，首行去 BOM，行尾去 CR；跳过空行和 <code>#</code> 注释。</li>
+    <li>读取版本头，只接受 1/2/3；根据版本决定是否解析 BG 和 width。</li>
+    <li>地图先解析到临时 <code>Map</code>；站点 ID 重复、边引用未知站点、BG 数量不匹配都会带行号报错。</li>
+    <li>线路先解析到临时 <code>DynamicArray&lt;Line&gt;</code> 与临时换乘记录；构建临时 <code>Network</code>，复制地图，加入线路和换乘，调用 <code>validate()</code>。</li>
+    <li>全部成功后才替换当前文档；<code>Editor::load</code> 会清空撤销/重做并重置 dirty。</li>
+  </ol>
+
+  <h3>5.5 保存流程</h3>
+  <ol>
+    <li><code>Editor::save</code> 先调用 <code>network_.validate()</code>，线路非法则拒绝保存。</li>
+    <li>根据扩展名选择版本：<code>.cuc3m2</code> → v2，<code>.cuc3m3</code> → v3；旧 <code>.cuc3m</code> 拒绝写出。</li>
+    <li>v2 若存在任何 <code>width &gt; 0</code> 的背景要素，直接拒绝并提示改用 v3。</li>
+    <li>浮点统一 17 位有效数字；站点/边按内部数组顺序写出；换乘记录排序后写出。</li>
+    <li>文件打开失败/写入失败返回错误字符串，由 UI 弹出“保存失败”。</li>
+  </ol>
+
+  <div class="warn"><b>已知格式限制：</b>名称取整行剩余内容，不支持换行/转义；背景 ID 与站点 ID 都是不含空格的 token；线路序号隐式依赖 LINE 顺序；v2 无宽度字段；旧程序不能读取新文件。</div>
+
+  <h3>5.6 兼容矩阵</h3>
+  <div class="table-wrap"><table>
+    <tr><th>程序版本</th><th>读 .cuc3m</th><th>读 .cuc3m2</th><th>读 .cuc3m3</th><th>写 .cuc3m</th><th>写 .cuc3m2</th><th>写 .cuc3m3</th></tr>
+    <tr><td>v3 当前</td><td>是</td><td>是</td><td>是</td><td>否</td><td>是（无宽度时）</td><td>是</td></tr>
+    <tr><td>旧 v3 早期（仅 v1）</td><td>是</td><td>否</td><td>否</td><td>是</td><td>否</td><td>否</td></tr>
+  </table></div>
+</section>
+
+<!-- ================= 06 ================= -->
+<section id="editor">
+  <div class="section-head">
+    <div class="num">06</div>
+    <div><h2>编辑控制器</h2><p>与界面无关的文档层：事务、撤销、索引重映射</p></div>
+  </div>
+
+  <p><code class="inline">Editor</code> 是 UI 与核心模型之间的唯一文档入口。它拥有一个 <code class="inline">Network</code>、两个 <code class="inline">DynamicArray&lt;Network&gt;</code>（撤销/重做）和一个 <code class="inline">dirty_</code> 标志。Qt 层不直接修改 <code class="inline">Network</code>。</p>
+
+  <h3>6.1 API 分组</h3>
+  <div class="table-wrap"><table>
+    <tr><th>分组</th><th>方法</th><th>说明</th></tr>
+    <tr><td>文档</td><td><code>newDocument</code> / <code>load</code> / <code>save</code> / <code>validate</code> / <code>isDirty</code></td><td>新建清空历史；加载/保存事务化</td></tr>
+    <tr><td>站点</td><td><code>nextStationId</code> / <code>addStation</code> / <code>moveStation</code> / <code>renameStation</code> / <code>removeStation</code></td><td>删除会重建索引映射</td></tr>
+    <tr><td>区间</td><td><code>addEdge</code> / <code>removeEdge</code> / <code>setEdgeWeight</code></td><td>默认成本/长度 = 欧氏距离</td></tr>
+    <tr><td>线路</td><td><code>addLine</code> / <code>removeLine</code> / <code>appendStop</code> / <code>removeLastStop</code> / <code>setLineStations</code> / <code>replaceLine</code></td><td>append 默认 120 秒区段；addLine 默认 30 秒停站、300 秒间隔</td></tr>
+    <tr><td>换乘</td><td><code>setTransferTime</code> / <code>setTransferTimes</code></td><td>批量版本只产生一次撤销快照</td></tr>
+    <tr><td>历史</td><td><code>canUndo</code> / <code>canRedo</code> / <code>undo</code> / <code>redo</code></td><td>整网快照</td></tr>
+  </table></div>
+
+  <h3>6.2 撤销 / 重做模型</h3>
+  <pre><code>修改前：
+  pushUndo(): undo_.push_back(network_); redo_.clear();
+  若修改失败：rollbackUndo(): undo_.pop_back();
+  成功：dirty_ = true;
+
+撤销：
+  redo_.push_back(std::move(network_));
+  network_ = std::move(undo_.back());
+  undo_.pop_back(); dirty_ = true;
+
+重做：
+  undo_.push_back(std::move(network_));
+  network_ = std::move(redo_.back());
+  redo_.pop_back(); dirty_ = true;</code></pre>
+  <div class="insight"><b>为什么用整网快照：</b>v3 地图规模小，快照实现简单、绝对可靠；代价是每次编辑 O(V+E+L) 内存。若后续追求大图性能，可换成命令模式或差量快照。</div>
+
+  <h3>6.3 删除站点的索引重映射</h3>
+  <p>删除站点不是简单 <code>erase</code>：站点下标会整体左移，所有线路站点、区间端点、换乘键都要同步。算法：</p>
+  <ol>
+    <li>检查该站点是否被任何线路使用；若使用则拒绝，提示先从线路移除。</li>
+    <li>建立 <code>oldIndex → newIndex</code> 映射，被删站点为 <code>kInvalidIndex</code>。</li>
+    <li>新建 <code>Map</code>：按旧顺序加入除被删站点外的所有站点；加入不涉及被删站点的边，端点用映射转换。</li>
+    <li>复制全部背景要素（这一步最初遗漏，后补上）。</li>
+    <li>新建 <code>Network</code>，按旧线路顺序复制线路，站点序列用映射转换；运营参数原样保留。</li>
+    <li>复制换乘记录：跳过涉及被删站点的记录，其余站点键用映射转换；线路号不变。</li>
+    <li>对临时线网调用 <code>validate()</code>，通过后压入撤销栈并替换当前网络。</li>
+  </ol>
+  <p>复杂度 O(V + E + L·S + T)，其中 S 为单线站数，T 为换乘记录数。</p>
+
+  <h3>6.4 保存前校验</h3>
+  <p><code class="inline">Editor::save</code> 先调用 <code class="inline">network_.validate()</code>，检查每条线路：站点数、下标、重复站、相邻边、区段运行时间数量/符号、停站时间、发车间隔。校验失败时不会写文件，UI 显示具体错误。</p>
+
+  <h3>6.5 事务化编辑模式</h3>
+  <p>所有修改方法遵循同一模式：</p>
+  <pre><code>bool Editor::op(...) {
+    if (!前置检查) return false;
+    pushUndo();
+    if (!底层操作) { rollbackUndo(); return false; }
+    dirty_ = true;
+    return true;
+}</code></pre>
+  <p>因此失败操作不会留下“半个修改”，也不会污染撤销栈。</p>
+</section>
+
+<!-- ================= 07 ================= -->
+<section id="router">
+  <div class="section-head">
+    <div class="num">07</div>
+    <div><h2>时间相关导航</h2><p>状态图、等待模型、Dijkstra、路径重建与 FIFO 限制</p></div>
+  </div>
+
+  <h3>7.1 为什么不能只在站点图上跑 Dijkstra</h3>
+  <p>换乘代价取决于“从哪条线来、换到哪条线”；同一站点在不同线路上是不同状态。若只存站点距离，无法区分“在 Red 上到达 Central”和“在 Blue 上到达 Central”。因此状态定义为：</p>
+  <pre><code>state = (station, currentLine)
+stateId = station * lineCount + lineIndex</code></pre>
+  <div class="diagram">
+    <div class="flow">
+      <div class="box"><b>起点</b><small>对每条经过起点的线路，计算初始等待并进入状态</small></div>
+      <div class="box"><b>乘车</b><small>沿线路前/后移动：停站时间 + 区段运行时间</small></div>
+      <div class="box"><b>换乘</b><small>同站换到另一条线：走行时间 + 目标线等待</small></div>
+      <div class="box"><b>终点</b><small>在所有线路的终点状态中取最小到达时间</small></div>
+    </div>
+  </div>
+
+  <h3>7.2 时间模型</h3>
+  <div class="table-wrap"><table>
+    <tr><th>事件</th><th>代价</th><th>说明</th></tr>
+    <tr><td>初始等待</td><td><code>headwayAt(departSec) / 2</code></td><td>乘客到达站台时刻的期望等待</td></tr>
+    <tr><td>乘车</td><td><code>dwellSec + segmentRunSec[i]</code></td><td>停站 + 区段运行；起点段也加一次停站</td></tr>
+    <tr><td>换乘</td><td><code>transferWalk + headwayAt(floor(arrival+walk)) / 2</code></td><td>先走到站台，再按到达站台时刻查目标线间隔</td></tr>
+    <tr><td>到达</td><td>状态时间</td><td>不再加终点停站</td></tr>
+  </table></div>
+  <p>所有时间以秒为单位存为 double，内部保留秒级精度；界面显示时四舍五入到分钟。</p>
+
+  <h3>7.3 Dijkstra 伪代码</h3>
+  <pre><code>findRoute(network, origin, destination, departTime):
+  dist[state] = INF, prev[state] = -1
+  heap = empty
+  for each line L serving origin:
+      h = L.headwayAt(floor(departTime))
+      if h &gt; 0:
+          relax(origin, L, departTime + h/2, from = -1)
+
+  while heap not empty:
+      (t, state) = heap.pop()
+      if t &gt; dist[state] + EPS: continue
+      (s, l) = decode(state)
+      pos = index of s in line l
+      if pos+1 exists:
+          relax(next, l, t + dwell + run[pos], state)
+      if pos-1 exists:
+          relax(prevStop, l, t + dwell + run[pos-1], state)
+      for each other line L2 at s:
+          walk = transferTime(s, l, L2)
+          h = L2.headwayAt(floor(t + walk))
+          if h &gt; 0:
+              relax(s, L2, t + walk + h/2, state)
+
+  best = min over lines of dist[(destination, line)]
+  reconstruct via prev[] and group consecutive same-line states into legs</code></pre>
+  <p>复杂度：状态数 O(n·L)，每个状态松弛 O(L) 条换乘边，使用二叉堆，时间约 O(nL·(L + log(nL)))，空间 O(nL)。v3 地图规模小，完全可接受。</p>
+
+  <h3>7.4 示例时间线</h3>
+  <p>示例线网：Red（WEST → CENTRAL → EAST → NE，间隔 300 秒，停站 30 秒，区段 120 秒），Blue（NORTH → CENTRAL → SOUTH → SE，间隔 420 秒），CENTRAL 双向换乘走行 90 秒。查询 WEST → SE，08:00 出发：</p>
+  <div class="table-wrap"><table>
+    <tr><th>步骤</th><th>计算</th><th>时刻</th></tr>
+    <tr><td>初始等待 Red</td><td>300 / 2</td><td>08:02:30 上车</td></tr>
+    <tr><td>WEST → CENTRAL</td><td>30 停站 + 120 运行</td><td>08:05:00 到达</td></tr>
+    <tr><td>CENTRAL 换乘</td><td>90 走行 + Blue 420/2</td><td>08:10:00 上 Blue</td></tr>
+    <tr><td>CENTRAL → SOUTH</td><td>30 + 120</td><td>08:12:30</td></tr>
+    <tr><td>SOUTH → SE</td><td>30 + 120</td><td>08:15:00 到达</td></tr>
+  </table></div>
+  <p>结果：1 次换乘，两段行程；界面按分钟显示为 08:03–08:05 与 08:10–08:15。</p>
+
+  <h3>7.5 路径重建</h3>
+  <p><code class="inline">prev[state]</code> 保存前驱状态；从最优终点状态回溯到起点，得到状态链；再把连续同一线路的状态合并为 <code class="inline">JourneyLeg</code>。换乘次数 = 行程段数 − 1。</p>
+
+  <h3>7.6 FIFO 限制（答辩重点）</h3>
+  <p>Dijkstra 的正确性依赖 FIFO：晚到达站台不应导致更早出发/到达。v3 的等待函数是 <code class="inline">w(t) = H(t)/2</code>，在分时段间隔的边界，<code class="inline">H(t)</code> 可能突然变小，导致 <code class="inline">t + w(t)</code> 非单调，于是“首次弹出即最优”的假设可能失效。</p>
+  <div class="warn"><b>v3 的实际处理：</b>演示数据使用单一发车间隔，FIFO 成立；代码按 Dijkstra 实现。分时段边界、非 FIFO 的处理（限制参数域、允许自愿等待、标签修正/时间离散）明确留给 v4 实验决定。文档和答辩中应主动说明这一边界，而不是声称任意参数下都严格最优。</div>
+
+  <h3>7.7 其他边界</h3>
+  <ul>
+    <li>起点 = 终点：直接返回 found、到达时间 = 出发时间、0 段。</li>
+    <li>没有线路 / 起点不在任何线路 / 起点时刻不在运营窗口：返回未找到。</li>
+    <li>换乘时目标线路在该时刻无班次：该换乘边不生成。</li>
+    <li>并列最短路径：当前实现按状态编号扫描取第一个最小值，没有做“时间相同取换乘更少”的字典序。</li>
+    <li>线路双向行驶：乘车边同时向前和向后松弛。</li>
+  </ul>
+</section>
+
+<!-- ================= 08 ================= -->
+<section id="render">
+  <div class="section-head">
+    <div class="num">08</div>
+    <div><h2>渲染与交互</h2><p>坐标系、背景图层、Catmull-Rom、命中检测与编辑状态机</p></div>
+  </div>
+
+  <h3>8.1 坐标系</h3>
+  <p>数据坐标 y 轴向上，Qt 场景坐标 y 轴向下。所有地图坐标在进入渲染前转换为 <code class="inline">(x, -y)</code>；新增站点、拖动站点在提交给 Editor 前再转回 <code class="inline">(x, -y)</code>。站点图元使用 <code class="inline">ItemIgnoresTransformations</code>，大小固定为屏幕像素；线路/背景宽度使用场景数据单位，随缩放变化。</p>
+
+  <h3>8.2 背景渲染流水线</h3>
+  <div class="table-wrap"><table>
+    <tr><th>顺序</th><th>要素</th><th>样式</th></tr>
+    <tr><td>1</td><td><code>region</code></td><td>浅色地面填充 + 细描边</td></tr>
+    <tr><td>2</td><td><code>park</code> / <code>water</code></td><td>绿地/水面填充 + 描边</td></tr>
+    <tr><td>3</td><td><code>road</code></td><td>外框宽 <code>width+max(0.012, 0.18w)</code>，路面宽 <code>0.72w</code></td></tr>
+    <tr><td>4</td><td><code>river</code></td><td>河岸宽 <code>w+max(0.02,0.18w)</code>，水面宽 <code>w</code>，Catmull 平滑</td></tr>
+    <tr><td>5</td><td><code>coast</code></td><td>蓝色数据宽度线，Catmull 平滑</td></tr>
+    <tr><td>6</td><td><code>boundary</code> / <code>mountain</code></td><td>1.1px/1.0px 虚线（cosmetic）</td></tr>
+  </table></div>
+  <p>道路、河流、海岸在绘制前设置 <code class="inline">QPainter</code> 裁剪路径为所有 <code>region</code> 多边形的并集，防止伸到城市边界外。背景要素的坐标也参与场景包围盒计算，因此 Fit 会包含整张地图。</p>
+
+  <h3>8.3 线路平滑与命中检测</h3>
+  <ul>
+    <li>每条线路把站点场景坐标送入 <code class="inline">catmullRomSpline(points, 24, 0.5)</code>，再拼成 <code class="inline">QPainterPath</code>。</li>
+    <li>选中线路用更宽的半透明光晕 + 6.5px 线；普通线路 5px；均为 cosmetic 笔画。</li>
+    <li>绘制预览（Draw Line）把鼠标位置作为额外关键点加入样条，形成实时曲线。</li>
+    <li><code>lineAt(scenePos, threshold)</code> 遍历采样点折线，用点到线段距离判断；阈值是“12 屏幕像素 / 当前缩放”，因此不同缩放下手感一致。</li>
+    <li>地图区间（灰色基础设施线）仍是直线，使用 10 像素阈值做删除命中。</li>
+  </ul>
+
+  <h3>8.4 交互状态机</h3>
+  <div class="table-wrap"><table>
+    <tr><th>模式</th><th>左键</th><th>右键</th><th>双击</th></tr>
+    <tr><td>Select / Move</td><td>命中站点→选中并开始拖动；命中线路→选中；空白→清除选择</td><td>上下文菜单：站点重命名/删除；线路编辑/删除；区间编辑/删除；空白“在此添加站点”</td><td>站点重命名；线路打开属性对话框</td></tr>
+    <tr><td>Add Station</td><td>空白处弹窗输入名称并添加</td><td>取消/菜单</td><td>—</td></tr>
+    <tr><td>Add Edge</td><td>第一次点站记录起点；第二次点另一站添加区间</td><td>取消 pending</td><td>—</td></tr>
+    <tr><td>Draw Line</td><td>点站点建线/追加站；首次自动创建线路</td><td>结束线路</td><td>结束线路</td></tr>
+    <tr><td>Delete</td><td>依次尝试删除站点 → 线路 → 区间</td><td>上下文菜单</td><td>—</td></tr>
+  </table></div>
+  <p>拖动过程中，<code class="inline">MapScene</code> 用 <code class="inline">draggedStation_/draggedPosition_</code> 覆盖该站点的显示位置，线路曲线实时跟随；鼠标释放时才调用 <code class="inline">Editor::moveStation</code>，只产生一次撤销快照。</p>
+
+  <h3>8.5 视图操作</h3>
+  <ul>
+    <li>滚轮缩放，锚点在鼠标下；总缩放限制在 0.001–1000。</li>
+    <li>中键拖动平移，通过滚动条位置实现；光标切换为 ClosedHand。</li>
+    <li><code>F</code> / 菜单“适应窗口”调用 <code>fitInView(sceneRect)</code>；启动后第一次 show 时用 0ms 定时器再 fit 一次，避免构造期 viewport 尺寸未定导致地图过小。</li>
+    <li>刷新时重建站点图元；选中站点/线路按索引恢复；场景包围盒由站点 + 背景要素共同决定。</li>
+  </ul>
+
+  <h3>8.6 StationItem</h3>
+  <p>站点图元是 14×14 像素椭圆，<code>ItemIgnoresTransformations</code> 使其不随缩放变大；子项 <code>QGraphicsSimpleTextItem</code> 显示站名（9pt），并设置 tooltip。选中时填充变为琥珀色、描边加粗。图元只负责显示，不处理拖动；拖动由 MapView 统一命中。</p>
+</section>
+
+<!-- ================= 09 ================= -->
+<section id="ui">
+  <div class="section-head">
+    <div class="num">09</div>
+    <div><h2>界面架构</h2><p>主窗口、动作、侧边栏、对话框与文件流程</p></div>
+  </div>
+
+  <h3>9.1 入口 main.cpp</h3>
+  <pre><code>QApplication app(argc, argv);
+设置组织名/应用名；
+QStyleFactory::create("Fusion")；
+initializeLanguage()；
+解析 --lang zh|en；
+构造 MainWindow；
+解析 --screenshot / --screenshot-route / --screenshot-line / --screenshot-transfers；
+app.exec();</code></pre>
+  <p>截图参数只用于开发自检，会以定时器抓取窗口或模态对话框后退出。正式启动不传参数即可。</p>
+
+  <h3>9.2 MainWindow 的职责</h3>
+  <div class="table-wrap"><table>
+    <tr><th>区域</th><th>内容</th></tr>
+    <tr><td>文件</td><td>新建、打开（三扩展名）、保存、另存为（v3/v2 格式选择）</td></tr>
+    <tr><td>编辑</td><td>撤销、重做；未保存修改提示</td></tr>
+    <tr><td>模式</td><td>选择/移动、加站、加边、画线、删除；工具栏同步</td></tr>
+    <tr><td>线路</td><td>结束线路、删除最后站、换乘时间对话框</td></tr>
+    <tr><td>视图</td><td>适应窗口</td></tr>
+    <tr><td>设置</td><td>语言子菜单（中文 / English）</td></tr>
+    <tr><td>右侧停靠栏</td><td>线路列表 + 编辑/删除/换乘按钮；导航起终点、出发时间、查询按钮、结果面板</td></tr>
+    <tr><td>状态栏</td><td>模式、站点数、线路数、临时提示</td></tr>
+  </table></div>
+  <p>MainWindow 持有唯一 <code class="inline">Editor</code>，MapView 只持有 Editor 引用；所有编辑都通过 Editor。刷新顺序通常是：<code class="inline">view_->refresh()</code> → <code class="inline">updateTitle()</code> → <code class="inline">updateActions()</code> → <code class="inline">refreshPanels()</code>。</p>
+
+  <h3>9.3 文件打开 / 保存流程</h3>
+  <ul>
+    <li><b>打开：</b>先选地图（<code>*.cuc3m3 *.cuc3m2 *.cuc3m</code>），优先自动寻找同名 <code>.cuc3l</code>；找不到再弹线路选择。加载成功后刷新视图、适应窗口、重建侧栏。</li>
+    <li><b>保存：</b>若当前路径是旧 <code>.cuc3m</code> 或未知扩展名，转到“另存为”；否则直接 <code>Editor::save</code>。</li>
+    <li><b>另存为：</b>QFileDialog 提供 v3/v2 两个过滤器；根据过滤器设置默认后缀，用户未输入后缀时自动补齐；线路文件默认与地图同基名 <code>.cuc3l</code>。</li>
+    <li><b>覆盖保护：</b>关闭/新建/打开前若 dirty，弹出保存/放弃/取消三选一。</li>
+  </ul>
+
+  <h3>9.4 对话框</h3>
+  <div class="table-wrap"><table>
+    <tr><th>对话框</th><th>可编辑内容</th><th>校验/结果</th></tr>
+    <tr><td>线路属性 LineDialog</td><td>名称、颜色、停站时间、站点顺序（删除/上移/下移）、区段运行时间、发车间隔时段（增删）</td><td>返回新 Line，由 <code>Editor::replaceLine</code> 校验；失败则保留编辑内容重开</td></tr>
+    <tr><td>换乘时间 TransferDialog</td><td>共享站点的每个有向线路对的走行秒数</td><td>一次性 <code>setTransferTimes</code>，产生一个撤销快照</td></tr>
+    <tr><td>区间属性</td><td>成本、长度</td><td><code>Editor::setEdgeWeight</code></td></tr>
+    <tr><td>站点名称</td><td>新增/重命名输入框</td><td>空名称回退为自动 ID</td></tr>
+  </table></div>
+
+  <h3>9.5 导航面板</h3>
+  <p>起终点下拉框存的是<strong>站点 ID 字符串</strong>，不是索引；这样删除/重排站点后仍能按 ID 恢复选择。查询时把 ID 解析成当前索引，调用 <code class="inline">Router::findRoute</code>，结果按“出发/到达/换乘数 + 每段线路、起止站、上下车时间”格式化。找不到时显示“该时刻无法到达”。</p>
+
+  <h3>9.6 回调而非信号槽</h3>
+  <p>为减少 QObject 元对象依赖，MapView 使用 <code class="inline">std::function</code> 向 MainWindow 汇报：状态栏消息、文档变化、请求编辑线路、线路选择变化。这样 UI 层与 Controller 的耦合也更容易替换为 Web 前端。</p>
+</section>
+
+<!-- ================= 10 ================= -->
+<section id="i18n">
+  <div class="section-head">
+    <div class="num">10</div>
+    <div><h2>双语系统</h2><p>英文键词典、QSettings、Qt 标准对话框翻译与动态重译</p></div>
+  </div>
+
+  <h3>10.1 语言状态</h3>
+  <pre><code>enum class Language { Chinese, English };
+Language currentLanguage();
+void setLanguage(Language, bool persist = true);
+QString L(const char* englishKey);
+QString localizeMessage(const QString& english);</code></pre>
+  <p><code class="inline">L("&amp;File")</code> 以英文原文为键；中文时在静态词典中查找中文，找不到则回退英文。词典覆盖菜单、动作、按钮、表头、状态提示、对话框标题、固定错误信息。</p>
+
+  <h3>10.2 持久化与默认值</h3>
+  <ul>
+    <li>QSettings 组织/应用名均为 <code class="inline">ConceptUrbanChain</code>，键为 <code class="inline">ui/language</code>，值 <code>zh</code>/<code>en</code>。</li>
+    <li>首次启动无设置时跟随系统语言：<code>QLocale::system().language() == Chinese</code> 则中文，否则英文。</li>
+    <li>设置菜单切换立即生效并持久化；测试使用应用名 <code>ConceptUrbanChainTests</code> 且 <code>persist=false</code>，避免污染用户设置。</li>
+  </ul>
+
+  <h3>10.3 Qt 标准对话框</h3>
+  <p>中文模式下安装 <code class="inline">qtbase_zh_CN.qm</code>：搜索 <code>应用目录/translations</code>、<code>应用目录/../translations</code>、<code>QLibraryInfo::TranslationsPath</code>。因此 QFileDialog、QMessageBox、QInputDialog、QDialogButtonBox 的“确定/取消”等按钮也会中文。切换回英文时移除翻译器。构建后 CMake 会把 <code class="inline">qtbase_zh_CN.qm</code> 复制到 <code>build/translations</code>。</p>
+
+  <h3>10.4 动态重译</h3>
+  <p>切换语言后调用 <code class="inline">MainWindow::retranslateUi()</code>，按固定顺序更新：所有 QAction 文本 → 所有菜单标题 → 工具栏/停靠栏/分组框 → 表单标签与按钮 → 语言勾选状态 → 标题/侧栏/动作状态。线路列表通过 <code class="inline">refreshPanels()</code> 重建，因此“站”等单位也会切换。已打开的模态对话框不参与重译（切换语言通常不在对话框内进行）。</p>
+
+  <h3>10.5 核心错误本地化</h3>
+  <p>核心层只返回英文错误字符串。UI 显示前调用 <code class="inline">localizeMessage()</code>：先查固定词典，再匹配前缀模式，如：</p>
+  <pre><code>"line 12: unknown keyword: XYZ"
+  → "第 12 行：未知关键字：XYZ"
+
+"station is used by line Red; remove it from the line first"
+  → "该站点仍被线路 Red 使用；请先从该线路中移除"
+
+"cannot save: line has fewer than 2 stations"
+  → "无法保存：线路少于两个站点"</code></pre>
+</section>
+
+<!-- ================= 11 ================= -->
+<section id="tests">
+  <div class="section-head">
+    <div class="num">11</div>
+    <div><h2>测试体系</h2><p>核心测试、UI 自动化、格式兼容与运行结果</p></div>
+  </div>
+
+  <h3>11.1 核心测试 test_main.cpp</h3>
+  <div class="table-wrap"><table>
+    <tr><th>测试函数</th><th>覆盖内容</th></tr>
+    <tr><td><code>testDynamicArray</code></td><td>push、扩容、拷贝、resize、容量不变量</td></tr>
+    <tr><td><code>testHashMap</code></td><td>插入/重复、查找、1000 项扩容、整数键</td></tr>
+    <tr><td><code>testBinaryHeap</code></td><td>乱序 push、按 key 弹出、空堆</td></tr>
+    <tr><td><code>testSpline</code></td><td>端点精确、经过中间关键点、采样数</td></tr>
+    <tr><td><code>testSort</code></td><td>含重复值的快排、边界、单调性</td></tr>
+    <tr><td><code>testUnionFind</code></td><td>合并、重复合并、连通分量计数</td></tr>
+    <tr><td><code>testQueueStack</code></td><td>FIFO/LIFO、front/top、pop</td></tr>
+    <tr><td><code>testMapAndLine</code></td><td>站点/边、重复 ID/边、成本与长度、连通性、线路校验、重复站</td></tr>
+    <tr><td><code>testNetwork</code></td><td>线路添加、换乘默认值、整体校验</td></tr>
+    <tr><td><code>testIoRoundTrip</code></td><td>v3 地图/线路保存→加载、背景宽度、换乘往返</td></tr>
+    <tr><td><code>testMapFormatCompatibility</code></td><td>v1 读取、v2 保存/读取、旧扩展名拒绝保存、v2 拒绝宽度</td></tr>
+    <tr><td><code>testRouter</code></td><td>直达、换乘、反向、同起终点、无班次</td></tr>
+    <tr><td><code>testEditor</code></td><td>增删站点/边/线、撤销重做、保存加载、dirty</td></tr>
+    <tr><td><code>testEditorDeletionAndLineUpdate</code></td><td>删除限制、删除后索引重映射、线路替换、换乘重映射</td></tr>
+    <tr><td><code>testEditorPersistence</code></td><td>边权、换乘、线路运营参数保存/加载往返</td></tr>
+  </table></div>
+
+  <h3>11.2 UI 测试 ui_smoke.cpp</h3>
+  <div class="table-wrap"><table>
+    <tr><th>用例</th><th>动作</th><th>断言</th></tr>
+    <tr><td><code>initTestCase</code></td><td>设置测试专用 QSettings 组织/应用名；切换英文</td><td>隔离用户设置</td></tr>
+    <tr><td><code>selectionAndRoute</code></td><td>点击红/蓝线中点；选择 WEST→SE；点击查询</td><td>列表选中行同步、编辑按钮可用、结果包含 Arrive/Transfers/Red/Blue</td></tr>
+    <tr><td><code>editingWorkflow</code></td><td>加站弹窗自动填写；删除站点并撤销；加边；画线并结束；删除线路并撤销；打开线路属性并确认</td><td>站点数/线路数/状态消息/对话框流程正确</td></tr>
+    <tr><td><code>languageSwitch</code></td><td>触发中文/英文语言动作</td><td>New 文本、File 菜单标题、Network 停靠栏标题切换正确</td></tr>
+  </table></div>
+
+  <h3>11.3 运行结果</h3>
+  <pre><code>tools\build.bat        → [build] OK
+build\uc_tests.exe     → all tests passed
+build\uc_ui_tests.exe  → 5 passed, 0 failed
+ctest                  → 2/2 tests passed</code></pre>
+
+  <h3>11.4 测试空白</h3>
+  <ul>
+    <li>没有随机/属性测试；地图与线网规模偏小。</li>
+    <li>保存/打开的系统文件对话框没有自动化点击（涉及原生对话框）。</li>
+    <li>FIFO 非单调、极端时间边界没有专门测试，属于 v4 实验内容。</li>
+    <li>性能/大数据集基准未纳入 v3。</li>
+  </ul>
+</section>
+
+<!-- ================= 12 ================= -->
+<section id="course">
+  <div class="section-head">
+    <div class="num">12</div>
+    <div><h2>课程映射与答辩要点</h2><p>自写结构的落点、算法深度与讲解顺序</p></div>
+  </div>
+
+  <h3>12.1 自写数据结构落点</h3>
+  <div class="table-wrap"><table>
+    <tr><th>结构</th><th>文件</th><th>真实用途</th><th>复杂度</th></tr>
+    <tr><td>动态数组</td><td>ds/dynamic_array.h</td><td>站点、边、线路、撤销栈、邻接表</td><td>尾部插入均摊 O(1)</td></tr>
+    <tr><td>哈希表</td><td>ds/hash_map.h</td><td>站点 ID、换乘键</td><td>平均 O(1)</td></tr>
+    <tr><td>二叉堆</td><td>ds/binary_heap.h</td><td>Dijkstra 优先队列</td><td>O(log n)</td></tr>
+    <tr><td>并查集</td><td>ds/union_find.h</td><td>地图连通性</td><td>O(α(n))</td></tr>
+    <tr><td>队列/栈</td><td>ds/queue.h / stack.h</td><td>课程结构展示、测试</td><td>O(1) 均摊</td></tr>
+    <tr><td>快速排序</td><td>ds/sort.h</td><td>换乘记录确定性输出</td><td>平均 O(n log n)</td></tr>
+    <tr><td>图</td><td>core/map.*</td><td>邻接矩阵 + 邻接表 + 边表</td><td>—</td></tr>
+  </table></div>
+
+  <h3>12.2 算法深度</h3>
+  <ul>
+    <li><strong>时间相关最短路</strong>：状态图 + 期望等待 + 换乘 + 路径重建，不是简单最短路。</li>
+    <li><strong>事务式编辑与撤销</strong>：每次修改先快照，失败回滚；删除站点做全局索引重映射。</li>
+    <li><strong>Catmull-Rom</strong>：可视化平滑，且命中检测按采样曲线做几何距离。</li>
+    <li><strong>格式版本化</strong>：v1/v2/v3 兼容读取，扩展名决定保存版本，v2 拒绝宽度丢失。</li>
+    <li><strong>UI 与业务分离</strong>：Editor 可被 Web 前端复用；v4 规划模块只读接入。</li>
+  </ul>
+
+  <h3>12.3 讲解建议</h3>
+  <ol>
+    <li>先展示“地图 → 编辑 → 导航 → 保存”完整链路，证明软件可运行。</li>
+    <li>再讲三层结构：UI / Editor / Network，强调为什么编辑逻辑不放在 Qt 里。</li>
+    <li>重点讲状态图导航和撤销/重映射，这两处最能体现数据结构与算法能力。</li>
+    <li>最后讲文件版本、双语、测试与已知限制，主动说明 FIFO 等边界。</li>
+  </ol>
+</section>
+
+<!-- ================= 13 ================= -->
+<section id="limits">
+  <div class="section-head">
+    <div class="num">13</div>
+    <div><h2>已知限制与设计取舍</h2><p>当前版本明确不解决的问题</p></div>
+  </div>
+
+  <div class="table-wrap"><table>
+    <tr><th>限制</th><th>影响</th><th>可能的后续</th></tr>
+    <tr><td>时间相关 Dijkstra 假设 FIFO</td><td>分时段间隔边界可能非最优</td><td>v4 实验：限参/自愿等待/标签修正/时间离散</td></tr>
+    <tr><td>精细轨迹点未存储</td><td>线路只能自动平滑，不能逐点编辑</td><td>扩展 .cuc3l TRAJECTORY 字段</td></tr>
+    <tr><td>背景只有矢量要素</td><td>没有真实地理底图/栅格瓦片</td><td>项目定位为模拟城市，不需要</td></tr>
+    <tr><td>背景无图形编辑</td><td>只能手写 .cuc3m3 文件</td><td>背景要素编辑器</td></tr>
+    <tr><td>线路序号隐式</td><td>重排线路要同步改换乘序号</td><td>显式线路 ID + 引用表</td></tr>
+    <tr><td>v2 无背景宽度</td><td>带宽度地图不能保存 v2</td><td>保持现状；v3 为默认</td></tr>
+    <tr><td>地图允许不连通</td><td>孤立站点可以保存，导航返回无路径</td><td>可选连通性告警/约束</td></tr>
+    <tr><td>名称不支持换行/转义</td><td>名称占整行剩余内容</td><td>引号/转义或 JSON</td></tr>
+    <tr><td>换乘键 21 位限制</td><td>站点/线路数须 &lt; 2²¹</td><td>课程规模足够；可改 128 位/字符串键</td></tr>
+    <tr><td>撤销是整网快照</td><td>大图内存 O(编辑次数×图规模)</td><td>命令模式/差量快照</td></tr>
+    <tr><td>无增量评价/规划</td><td>v3 不涉及；v4 再设计</td><td>v4 完整/增量评价</td></tr>
+    <tr><td>并列最短路径无字典序</td><td>时间相同可能换乘更多</td><td>引入 (time, transfers) 字典序</td></tr>
+    <tr><td>线路最少 2 站</td><td>2 站单区间线路合法</td><td>课程默认；v4 实验可调</td></tr>
+  </table></div>
+
+  <div class="note"><b>取舍原则：</b>v3 优先保证“模型清晰、可编辑、可验证、可解释”。性能优化和研究性决策（FIFO、规划、增量）显式留给 v4，避免把未确认的假设固化进实现。</div>
+</section>
+
+<!-- ================= 14 ================= -->
+<section id="qa">
+  <div class="section-head">
+    <div class="num">14</div>
+    <div><h2>答辩问答速查</h2><p>按“结论 → 原因 → 代码落点”组织</p></div>
+  </div>
+
+  <details open><summary>为什么导航要建 (站点, 线路) 状态图，而不是直接在站点图上跑 Dijkstra？</summary>
+  <div class="a">换乘代价依赖“从哪条线来、换到哪条线”，同一站点在不同线路上是不同状态。状态图把线路身份编码进节点，换乘边只在同站不同线之间生成。实现：<code class="inline">Router::findRoute</code>，状态编号 <code class="inline">station*lineCount+lineIndex</code>。</div></details>
+
+  <details><summary>等待时间为什么是发车间隔的一半？</summary>
+  <div class="a">采用静态期望等待模型：乘客随机到达站台，若发车间隔为 H，平均等待 H/2。起始等待用出发时刻的 H；换乘等待用“到达站台时刻”的 H，而不是统一用出发时刻。代码中每次换乘先 <code class="inline">floor(t + walk)</code> 查 <code class="inline">headwayAt</code>。</div></details>
+
+  <details><summary>什么是 FIFO 问题？你的实现严格正确吗？</summary>
+  <div class="a">Dijkstra 要求“晚到达不会更早出发”。v3 的等待是 <code class="inline">H(t)/2</code>，分时段间隔在边界可能突然变小，使 <code class="inline">t+H(t)/2</code> 非单调。演示数据是单一间隔，FIFO 成立；代码按时间相关 Dijkstra 实现。分时段边界的情形明确留给 v4 实验处理，没有声称任意参数下都严格最优。</div></details>
+
+  <details><summary>为什么线路必须是简单路径、不允许环线？</summary>
+  <div class="a">v3 基础约束：线路内部不重复站点，避免线路内部绕圈导致状态图/行程重建歧义；线路首尾不闭合，避免绕行度与终点定义复杂化。不同线路可以共享站点和区间。约束在 <code class="inline">Line::validate</code> 与 <code class="inline">Editor::appendStop</code> 中检查。</div></details>
+
+  <details><summary>为什么同时维护邻接矩阵、邻接表和边表？</summary>
+  <div class="a">矩阵用于 O(1) 判边和线路合法性检查；邻接表用于遍历/Dijkstra；边表用于保存、统计和删除边时重建。三者由 <code class="inline">Map</code> 的增删改操作同步维护，<code class="inline">removeEdge</code> 通过整体重建保证边 ID 与矩阵/邻接一致。</div></details>
+
+  <details><summary>撤销/重做怎么实现？为什么不用命令模式？</summary>
+  <div class="a">每次修改前把整个 <code class="inline">Network</code> 拷入 <code class="inline">undo_</code> 栈并清空 redo；撤销/重做在栈之间移动快照；失败操作 rollback 弹出快照。v3 图规模小，快照简单可靠、天然支持所有操作。代价是内存 O(编辑次数×图规模)，后续可替换为命令模式。</div></details>
+
+  <details><summary>删除站点时索引怎么处理？</summary>
+  <div class="a">删除会改变所有后续站点下标。算法先检查站点未被线路使用，再建立 old→new 映射，重建 Map（站点、边、背景），重建线路站点序列，重映射换乘站点键，最后 validate 后提交。见 <code class="inline">Editor::removeStation</code>。</div></details>
+
+  <details><summary>换乘键怎么存？有什么限制？</summary>
+  <div class="a">64 位编码 <code class="inline">(station&lt;&lt;42)|(fromLine&lt;&lt;21)|toLine</code>，哈希表存秒数；默认 120 秒。隐含限制是站点/线路数都小于 2²¹，课程地图远小于此。保存时 <code class="inline">transferRecords()</code> 排序，输出确定。</div></details>
+
+  <details><summary>为什么地图文件改成 .cuc3m2/.cuc3m3？怎么兼容？</summary>
+  <div class="a">背景要素和线宽需要格式扩展。扩展名与版本绑定：v3 带宽度，v2 无宽度，旧 .cuc3m 只读。读取由文件头版本决定，三种都能读；保存默认 v3，v2 仅在没有宽度时允许；旧路径保存会转“另存为”。</div></details>
+
+  <details><summary>Catmull-Rom 平滑会影响导航/成本/规划吗？</summary>
+  <div class="a">不会。样条只在 <code class="inline">MapScene</code> 渲染与命中检测中使用；线路长度仍按地图边长度累计，导航按区段运行时间，成本按地图边权。平滑曲线可能轻微偏离直线区间，这是纯视觉效果。</div></details>
+
+  <details><summary>背景是怎么画出“地图感”的？</summary>
+  <div class="a">按图层：region 地面 → water/park 面 → road（外框+路面）→ river（河岸+水面）→ coast → boundary/mountain 虚线 → 地铁区间/线路 → 站点。道路/河流宽度用数据坐标，随缩放变化；所有线状要素裁剪到 region 多边形内。</div></details>
+
+  <details><summary>双语怎么做到即时切换？</summary>
+  <div class="a">英文原文作键的静态词典 + QSettings 持久化；切换后 <code class="inline">retranslateUi()</code> 统一刷新动作、菜单、停靠栏、按钮、标签；中文时安装 <code class="inline">qtbase_zh_CN.qm</code>，标准对话框按钮也中文。核心错误由 <code class="inline">localizeMessage</code> 做精确/前缀翻译。</div></details>
+
+  <details><summary>保存失败会不会损坏原文件？</summary>
+  <div class="a">不会。打开是事务式：先解析到临时 Map/Network，校验通过才替换内存文档；保存前先 validate，扩展名/宽度不合法会在打开文件流之前返回错误。写文件失败会报错，但不会把半个模型写进去。</div></details>
+
+  <details><summary>你的数据结构复杂度怎么样？</summary>
+  <div class="a">站点 ID 查找平均 O(1)；Dijkstra O(nL·(L+log(nL)))；撤销快照 O(图规模)；删除边 O(n²+m)；删除站点 O(V+E+L·S+T)；样条 O(线路站数×采样数)。课程规模下均可接受，瓶颈主要在撤销快照和全源/多OD 评价（后者属于 v4）。</div></details>
+
+  <details><summary>为什么没有用最小生成树？</summary>
+  <div class="a">课程设计早期曾考虑 MST，但 v3 的线网规划目标是覆盖/成本/时间/换乘/绕行/短线路惩罚的多目标组合，MST 只能给出最小连通骨架，无法表达线路集合与换乘结构；当前 v3 本身就是手动编辑 + 导航，MST 不是合适的主算法。后续 v4 的规划算法会按规格另做设计。</div></details>
+
+  <details><summary>如果地图很大，哪里最先成为瓶颈？</summary>
+  <div class="a">撤销快照的整网拷贝、<code class="inline">Map::addStation</code> 的 O(n²) 矩阵扩容、<code class="inline">removeEdge</code> 的 O(n²) 重建，以及未来 v4 的全 OD 路径评价。v3 面向课程规模（几十到几百站）；大图需要稀疏矩阵/差量撤销/增量评价。</div></details>
+</section>
+
+<!-- ================= 15 ================= -->
+<section id="appendix">
+  <div class="section-head">
+    <div class="num">15</div>
+    <div><h2>附录与索引</h2><p>常量、文件索引、术语与运行清单</p></div>
+  </div>
+
+  <h3>15.1 关键常量</h3>
+  <div class="table-wrap"><table>
+    <tr><th>常量</th><th>值</th><th>位置</th></tr>
+    <tr><td><code>kInvalidIndex</code></td><td>-1</td><td>core/types.h</td></tr>
+    <tr><td><code>kInfinity</code></td><td>double 无穷</td><td>core/types.h</td></tr>
+    <tr><td><code>kMinStationsPerLine</code></td><td>2</td><td>core/line.h</td></tr>
+    <tr><td><code>kDefaultTransferSeconds</code></td><td>120</td><td>core/network.h</td></tr>
+    <tr><td><code>kDefaultSegmentRunSec</code></td><td>120</td><td>edit/editor.h</td></tr>
+    <tr><td>默认停站时间</td><td>30 秒</td><td>Editor::addLine / LineOps</td></tr>
+    <tr><td>默认发车间隔</td><td>300 秒（0–86400）</td><td>Editor::addLine</td></tr>
+    <tr><td>线路采样</td><td>24 点/段，alpha=0.5</td><td>ui/map_scene.cpp</td></tr>
+    <tr><td>背景河流/海岸采样</td><td>16 点/段</td><td>ui/map_scene.cpp</td></tr>
+    <tr><td>命中阈值</td><td>线路 12px / 区间 10px</td><td>ui/map_view.cpp</td></tr>
+  </table></div>
+
+  <h3>15.2 文件索引</h3>
+  <div class="grid2">
+    <div class="card"><b>入口与构建</b><p>src/ui/main.cpp · CMakeLists.txt · tools/build.bat · start_v3.bat</p></div>
+    <div class="card"><b>数据结构</b><p>src/ds/dynamic_array.h · hash_map.h · binary_heap.h · union_find.h · queue.h · stack.h · sort.h</p></div>
+    <div class="card"><b>核心模型</b><p>src/core/types.h · station.h · background.h · map.* · line.* · network.* · spline.*</p></div>
+    <div class="card"><b>IO / 导航 / 编辑</b><p>src/io/map_io.* · line_io.* · src/nav/router.* · src/edit/editor.*</p></div>
+    <div class="card"><b>界面</b><p>src/ui/language.* · main_window.* · map_view.* · map_scene.* · station_item.* · line_dialog.* · transfer_dialog.*</p></div>
+    <div class="card"><b>测试与数据</b><p>tests/test_main.cpp · tests/ui_smoke.cpp · data/demo.cuc3m3 · data/demo.cuc3l</p></div>
+  </div>
+
+  <h3>15.3 术语</h3>
+  <div class="table-wrap"><table>
+    <tr><th>术语</th><th>含义</th></tr>
+    <tr><td>状态</td><td>(站点, 当前线路) 的二元组，导航图节点</td></tr>
+    <tr><td>区段</td><td>线路上相邻两站之间的运行段</td></tr>
+    <tr><td>换乘键</td><td>站点 + 来源线路 + 目标线路的有向 64 位编码</td></tr>
+    <tr><td>简单路径</td><td>不重复经过同一站点的路径</td></tr>
+    <tr><td>快照撤销</td><td>保存整个 Network 副本作为撤销单元</td></tr>
+    <tr><td>cosmetic 笔画</td><td>宽度以屏幕像素计，不随缩放变化的 QPen</td></tr>
+    <tr><td>数据宽度</td><td>以地图坐标计的线状要素宽度，随缩放变化</td></tr>
+  </table></div>
+
+  <h3>15.4 交付前检查清单</h3>
+  <ol>
+    <li><code>tools\build.bat</code> 成功，无编译错误。</li>
+    <li><code>ctest --test-dir build --output-on-failure</code> 2/2 通过。</li>
+    <li><code>start_v3.bat</code> 能加载 <code>data/demo.cuc3m3</code> 与同名 <code>.cuc3l</code>。</li>
+    <li>中文/英文切换后菜单、按钮、对话框按钮均正确。</li>
+    <li>WEST→SE 08:00 查询得到换乘 1 次、08:15 到达。</li>
+    <li>另存为 v3 成功；带宽度地图另存 v2 被明确拒绝并提示。</li>
+    <li>删除站点后背景、线路、换乘不被破坏；撤销可恢复。</li>
+  </ol>
+
+  <div class="footer">Concept UrbanChain v3 · 技术文档 · 2026-11-25</div>
+</section>
+
+</main>
+</div>
+
+<script>
+(function(){
+  const progress = document.getElementById('progress');
+  const links = Array.from(document.querySelectorAll('#nav a'));
+  const sections = links.map(a => document.querySelector(a.getAttribute('href'))).filter(Boolean);
+
+  function onScroll(){
+    const h = document.documentElement;
+    const max = h.scrollHeight - h.clientHeight;
+    progress.style.width = (max > 0 ? (h.scrollTop / max) * 100 : 0) + '%';
+
+    let current = sections[0];
+    for (const s of sections){
+      if (s.getBoundingClientRect().top <= 120) current = s;
+    }
+    links.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + current.id));
+  }
+  window.addEventListener('scroll', onScroll, {passive:true});
+  onScroll();
+})();
+</script>
+</body>
+</html>

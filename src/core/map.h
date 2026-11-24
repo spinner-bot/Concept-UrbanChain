@@ -41,6 +41,7 @@ public:
 
     bool addEdge(Index u, Index v, double cost, double length = -1.0);
     bool removeEdge(Index u, Index v);
+    bool setEdgeWeight(Index u, Index v, double cost, double length);
     bool hasEdge(Index u, Index v) const;
     double edgeCost(Index u, Index v) const;
     double edgeLength(Index u, Index v) const;

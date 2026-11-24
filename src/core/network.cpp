@@ -2,6 +2,8 @@
 
 #include <utility>
 
+#include "ds/sort.h"
+
 namespace uc {
 
 int Network::addLine(Line line) {
@@ -68,6 +70,15 @@ DynamicArray<TransferRecord> Network::transferRecords() const {
         record.seconds = seconds;
         records.push_back(record);
     });
+    quickSort(records, [](const TransferRecord& a, const TransferRecord& b) {
+        if (a.station != b.station) {
+            return a.station < b.station;
+        }
+        if (a.fromLine != b.fromLine) {
+            return a.fromLine < b.fromLine;
+        }
+        return a.toLine < b.toLine;
+    });
     return records;
 }
 
@@ -77,12 +88,8 @@ void Network::clearLines() {
 }
 
 bool Network::validate(std::string* error) const {
-    if (map_.stationCount() > 1 && !map_.isConnected()) {
-        if (error != nullptr) {
-            *error = "map graph is not connected";
-        }
-        return false;
-    }
+    // v3 编辑过程中允许暂时存在孤立站点；连通性由 Map::isConnected 单独检查，
+    // 导航对不可达站点返回“无路径”。
     for (std::size_t i = 0; i < lines_.size(); ++i) {
         if (!lines_[i].validate(map_, error)) {
             return false;

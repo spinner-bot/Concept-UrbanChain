@@ -107,6 +107,47 @@ bool Map::removeEdge(Index u, Index v) {
     return true;
 }
 
+bool Map::setEdgeWeight(Index u, Index v, double cost, double length) {
+    if (!hasEdge(u, v) || cost < 0.0 || length < 0.0) {
+        return false;
+    }
+    for (std::size_t i = 0; i < edges_.size(); ++i) {
+        EdgeRecord& edge = edges_[i];
+        const bool forward = edge.from == u && edge.to == v;
+        const bool backward = edge.from == v && edge.to == u;
+        if (!forward && !backward) {
+            continue;
+        }
+        edge.cost = cost;
+        edge.length = length;
+        for (std::size_t j = 0; j < adjacency_[static_cast<std::size_t>(u)].size(); ++j) {
+            AdjEdge& candidate = adjacency_[static_cast<std::size_t>(u)][j];
+            if (candidate.to == v && candidate.edgeId == static_cast<Index>(i)) {
+                candidate.cost = cost;
+                candidate.length = length;
+            }
+        }
+        for (std::size_t j = 0; j < adjacency_[static_cast<std::size_t>(v)].size(); ++j) {
+            AdjEdge& candidate = adjacency_[static_cast<std::size_t>(v)][j];
+            if (candidate.to == u && candidate.edgeId == static_cast<Index>(i)) {
+                candidate.cost = cost;
+                candidate.length = length;
+            }
+        }
+        const Index count = stationCount();
+        const std::size_t offset =
+            static_cast<std::size_t>(u) * count + static_cast<std::size_t>(v);
+        const std::size_t reverse =
+            static_cast<std::size_t>(v) * count + static_cast<std::size_t>(u);
+        matrixCost_[offset] = cost;
+        matrixCost_[reverse] = cost;
+        matrixLength_[offset] = length;
+        matrixLength_[reverse] = length;
+        return true;
+    }
+    return false;
+}
+
 bool Map::hasEdge(Index u, Index v) const {
     const Index count = stationCount();
     if (u < 0 || v < 0 || u >= count || v >= count || u == v) {

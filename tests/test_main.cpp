@@ -4,6 +4,7 @@
 #include <string>
 
 #include "core/network.h"
+#include "core/spline.h"
 #include "ds/binary_heap.h"
 #include "ds/dynamic_array.h"
 #include "ds/hash_map.h"
@@ -76,6 +77,28 @@ void testBinaryHeap() {
     CHECK(heap.pop().key == 3.0);
     CHECK(heap.pop().key == 5.0);
     CHECK(heap.empty());
+}
+
+void testSpline() {
+    uc::DynamicArray<uc::Vec2> points;
+    points.push_back(uc::Vec2{0.0, 0.0});
+    points.push_back(uc::Vec2{1.0, 0.0});
+    points.push_back(uc::Vec2{2.0, 1.0});
+    const uc::DynamicArray<uc::Vec2> samples = uc::catmullRomSpline(points, 8, 0.5);
+    CHECK(samples.size() > points.size());
+    CHECK(std::fabs(samples.front().x - 0.0) < 1e-9);
+    CHECK(std::fabs(samples.front().y - 0.0) < 1e-9);
+    CHECK(std::fabs(samples.back().x - 2.0) < 1e-9);
+    CHECK(std::fabs(samples.back().y - 1.0) < 1e-9);
+    bool passesMiddle = false;
+    for (std::size_t i = 0; i < samples.size(); ++i) {
+        if (std::fabs(samples[i].x - 1.0) < 1e-6 &&
+            std::fabs(samples[i].y - 0.0) < 1e-6) {
+            passesMiddle = true;
+            break;
+        }
+    }
+    CHECK(passesMiddle);
 }
 
 void testSort() {
@@ -212,6 +235,14 @@ void testIoRoundTrip() {
     CHECK(map.addEdge(a, b, 1.0, 1.5));
     CHECK(map.addEdge(b, c, 2.0, 2.5));
 
+    uc::BackgroundFeature river;
+    river.id = "river";
+    river.kind = uc::BackgroundKind::River;
+    river.closed = false;
+    river.points.push_back(uc::Vec2{0.0, 0.5});
+    river.points.push_back(uc::Vec2{2.0, 0.75});
+    map.addBackgroundFeature(river);
+
     uc::Line line = makeLine(a, b, c);
     line.ops().segmentRunSec[1] = 200.0;
     line.ops().dwellSec = 25.0;
@@ -233,6 +264,12 @@ void testIoRoundTrip() {
     CHECK(std::fabs(loadedMap.edgeLength(a, b) - 1.5) < 1e-9);
     CHECK(std::fabs(loadedMap.edgeCost(b, c) - 2.0) < 1e-9);
     CHECK(loadedMap.station(a).name == "A");
+    CHECK(loadedMap.backgroundFeatures().size() == 1);
+    CHECK(loadedMap.backgroundFeatures()[0].id == "river");
+    CHECK(loadedMap.backgroundFeatures()[0].kind == uc::BackgroundKind::River);
+    CHECK(!loadedMap.backgroundFeatures()[0].closed);
+    CHECK(loadedMap.backgroundFeatures()[0].points.size() == 2);
+    CHECK(std::fabs(loadedMap.backgroundFeatures()[0].points[1].y - 0.75) < 1e-9);
 
     uc::Network loadedNetwork;
     loadedNetwork.map() = loadedMap;
@@ -531,6 +568,7 @@ int main() {
     testDynamicArray();
     testHashMap();
     testBinaryHeap();
+    testSpline();
     testSort();
     testUnionFind();
     testQueueStack();

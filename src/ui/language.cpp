@@ -198,6 +198,19 @@ const Entry kEntries[] = {
     {"transfer time cannot be negative", "换乘时间不能为负"},
     {"failed to set transfer time", "设置换乘时间失败"},
     {"edge cost and length cannot be negative", "区间成本与长度不能为负"},
+    {"BACKGROUND expects a layer count", "BACKGROUND 需要要素数量"},
+    {"background layers require CUC3M 2", "背景图层需要 CUC3M 2 格式"},
+    {"duplicate BACKGROUND line", "重复的 BACKGROUND 行"},
+    {"BG appears before BACKGROUND", "BG 出现在 BACKGROUND 之前"},
+    {"more BG lines than BACKGROUND count", "BG 行数多于 BACKGROUND 声明数量"},
+    {"BG expects kind, closed flag and id", "BG 需要类型、闭合标志和 ID"},
+    {"BG needs at least 2 points", "BG 至少需要两个点"},
+    {"closed BG needs at least 3 points", "闭合 BG 至少需要三个点"},
+    {"BACKGROUND count does not match BG lines", "BACKGROUND 数量与 BG 行数不一致"},
+    {"STATION expects id, x, y", "STATION 需要 ID、x、y"},
+    {"EDGE expects two station ids and a cost", "EDGE 需要两个站点 ID 和成本"},
+    {"EDGE references an unknown station", "EDGE 引用了未知站点"},
+    {"invalid or duplicate EDGE", "EDGE 无效或重复"},
     {"expected CUC3M header", "缺少 CUC3M 文件头"},
     {"unsupported CUC3M version", "不支持的 CUC3M 版本"},
     {"expected CUC3L header", "缺少 CUC3L 文件头"},
@@ -258,6 +271,21 @@ void installQtTranslations(bool chinese) {
 }
 
 QString prefixLocalize(const QString& message) {
+    const QString linePrefix = "line ";
+    if (message.startsWith(linePrefix)) {
+        const int colon = message.indexOf(": ", linePrefix.size());
+        if (colon > static_cast<int>(linePrefix.size())) {
+            const QString number = message.mid(linePrefix.size(),
+                                               colon - linePrefix.size());
+            bool ok = false;
+            number.toInt(&ok);
+            if (ok) {
+                return QString("第 %1 行：").arg(number) +
+                       localizeMessage(message.mid(colon + 2));
+            }
+        }
+    }
+
     const QString stationPrefix = "station is used by line ";
     const QString stationSuffix = "; remove it from the line first";
     if (message.startsWith(stationPrefix) && message.endsWith(stationSuffix)) {
@@ -291,6 +319,14 @@ QString prefixLocalize(const QString& message) {
     if (message.startsWith(unknownKeyword)) {
         return QString("未知关键字：") + message.mid(unknownKeyword.size());
     }
+    const QString unknownBackground = "unknown background kind: ";
+    if (message.startsWith(unknownBackground)) {
+        return QString("未知背景类型：") + message.mid(unknownBackground.size());
+    }
+    const QString invalidColor = "invalid line color: ";
+    if (message.startsWith(invalidColor)) {
+        return QString("线路颜色无效：") + message.mid(invalidColor.size());
+    }
     const QString duplicateStation = "duplicate station id: ";
     if (message.startsWith(duplicateStation)) {
         return QString("重复的站点 ID：") + message.mid(duplicateStation.size());
@@ -302,6 +338,22 @@ QString prefixLocalize(const QString& message) {
     const QString openLines = "cannot open line file: ";
     if (message.startsWith(openLines)) {
         return QString("无法打开线路文件：") + message.mid(openLines.size());
+    }
+    const QString writeMap = "failed to write map file: ";
+    if (message.startsWith(writeMap)) {
+        return QString("写入地图文件失败：") + message.mid(writeMap.size());
+    }
+    const QString writeLines = "failed to write line file: ";
+    if (message.startsWith(writeLines)) {
+        return QString("写入线路文件失败：") + message.mid(writeLines.size());
+    }
+    const QString writeMapOpen = "cannot open map file for writing: ";
+    if (message.startsWith(writeMapOpen)) {
+        return QString("无法写入地图文件：") + message.mid(writeMapOpen.size());
+    }
+    const QString writeLinesOpen = "cannot open line file for writing: ";
+    if (message.startsWith(writeLinesOpen)) {
+        return QString("无法写入线路文件：") + message.mid(writeLinesOpen.size());
     }
     return message;
 }

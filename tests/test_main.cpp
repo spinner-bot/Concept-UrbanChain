@@ -10,6 +10,7 @@
 #include "ds/queue.h"
 #include "ds/stack.h"
 #include "ds/union_find.h"
+#include "edit/editor.h"
 #include "io/line_io.h"
 #include "io/map_io.h"
 #include "nav/router.h"
@@ -343,6 +344,59 @@ void testRouter() {
     CHECK(oneLine.legs.size() == 1);
 }
 
+void testEditor() {
+    uc::Editor editor;
+    std::string error;
+
+    const uc::Index a = editor.addStation("Alpha", 0.0, 0.0, &error);
+    const uc::Index b = editor.addStation("Bravo", 1.0, 0.0, &error);
+    const uc::Index c = editor.addStation("Charlie", 2.0, 0.0, &error);
+    CHECK(a == 0);
+    CHECK(b == 1);
+    CHECK(c == 2);
+    CHECK(editor.isDirty());
+    CHECK(editor.network().map().findStation("S1") == a);
+
+    CHECK(editor.addEdge(a, b, &error));
+    CHECK(editor.addEdge(b, c, &error));
+    CHECK(editor.network().map().hasEdge(a, b));
+
+    const int line = editor.addLine("Editor Line", 0x123456u, &error);
+    CHECK(line == 0);
+    CHECK(editor.appendStop(line, a, &error));
+    CHECK(editor.appendStop(line, b, &error));
+    CHECK(editor.appendStop(line, c, &error));
+    CHECK(editor.network().lines()[0].stationCount() == 3);
+    CHECK(editor.validate(&error));
+
+    CHECK(editor.undo());
+    CHECK(editor.network().lines()[0].stationCount() == 2);
+    CHECK(editor.redo());
+    CHECK(editor.network().lines()[0].stationCount() == 3);
+
+    CHECK(editor.moveStation(a, 5.0, 5.0, &error));
+    CHECK(std::fabs(editor.network().map().station(a).position.x - 5.0) < 1e-9);
+    CHECK(editor.undo());
+    CHECK(std::fabs(editor.network().map().station(a).position.x - 0.0) < 1e-9);
+
+    CHECK(editor.removeLine(0, &error));
+    CHECK(editor.network().lines().empty());
+
+    const std::string mapPath = "uc_test_editor.cuc3m";
+    const std::string linePath = "uc_test_editor.cuc3l";
+    CHECK(editor.save(mapPath, linePath, &error));
+    CHECK(!editor.isDirty());
+
+    uc::Editor loaded;
+    CHECK(loaded.load(mapPath, linePath, &error));
+    CHECK(!loaded.isDirty());
+    CHECK(loaded.network().map().stationCount() == 3);
+    CHECK(loaded.network().lines().empty());
+
+    std::filesystem::remove(mapPath);
+    std::filesystem::remove(linePath);
+}
+
 }  // namespace
 
 int main() {
@@ -355,6 +409,7 @@ int main() {
     testNetwork();
     testIoRoundTrip();
     testRouter();
+    testEditor();
 
     if (failures == 0) {
         std::printf("all tests passed\n");

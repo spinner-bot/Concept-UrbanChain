@@ -204,6 +204,7 @@ const Entry kEntries[] = {
     {"BG appears before BACKGROUND", "BG 出现在 BACKGROUND 之前"},
     {"more BG lines than BACKGROUND count", "BG 行数多于 BACKGROUND 声明数量"},
     {"BG expects kind, closed flag and id", "BG 需要类型、闭合标志和 ID"},
+    {"BG expects a non-negative width after id", "BG 的 ID 后需要非负宽度"},
     {"BG needs at least 2 points", "BG 至少需要两个点"},
     {"closed BG needs at least 3 points", "闭合 BG 至少需要三个点"},
     {"BACKGROUND count does not match BG lines", "BACKGROUND 数量与 BG 行数不一致"},

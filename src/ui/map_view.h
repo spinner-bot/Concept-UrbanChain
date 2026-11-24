@@ -9,6 +9,7 @@
 #include <functional>
 #include <string>
 
+class QContextMenuEvent;
 class QKeyEvent;
 class QMouseEvent;
 class QWheelEvent;
@@ -24,7 +25,7 @@ enum class EditMode {
     AddStation,
     AddEdge,
     DrawLine,
-    DeleteLine,
+    Delete,
 };
 
 class MapView : public QGraphicsView {
@@ -39,8 +40,13 @@ public:
     void finishLine();
     void removeLastStop();
 
+    void selectLine(int lineIndex);
+    int selectedLine() const { return selectedLine_; }
+
     void setStatusCallback(std::function<void(const QString&)> callback);
     void setChangeCallback(std::function<void()> callback);
+    void setEditLineCallback(std::function<void(int)> callback);
+    void setSelectionCallback(std::function<void(int)> callback);
 
 protected:
     void wheelEvent(QWheelEvent* event) override;
@@ -49,12 +55,25 @@ protected:
     void mouseReleaseEvent(QMouseEvent* event) override;
     void mouseDoubleClickEvent(QMouseEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
+    void contextMenuEvent(QContextMenuEvent* event) override;
+    void drawBackground(QPainter* painter, const QRectF& rect) override;
+    void drawForeground(QPainter* painter, const QRectF& rect) override;
 
 private:
     StationItem* stationAt(const QPoint& viewPosition) const;
     void handleLeftPress(const QPoint& viewPosition);
+    void createStationAt(const QPointF& scenePos);
+    void renameStationDialog(int stationIndex);
+    void deleteStation(int stationIndex);
+    void deleteLine(int lineIndex);
+    void deleteEdge(int edgeIndex);
+    void editEdgeDialog(int edgeIndex);
+    void clearSelection();
+    void updateCursor();
+    void showContextMenu(const QPoint& viewPosition, const QPoint& globalPosition);
     void notifyStatus(const QString& message);
     void notifyChanged();
+    void notifySelectionChanged();
     std::uint32_t nextLineColor() const;
 
     Editor& editor_;
@@ -72,10 +91,13 @@ private:
 
     int pendingStation_ = -1;
     int activeLine_ = -1;
+    int selectedLine_ = -1;
     QPointF previewPos_;
 
     std::function<void(const QString&)> statusCallback_;
     std::function<void()> changeCallback_;
+    std::function<void(int)> editLineCallback_;
+    std::function<void(int)> selectionCallback_;
 };
 
 }  // namespace uc

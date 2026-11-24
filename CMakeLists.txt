@@ -29,22 +29,37 @@ if(UC_BUILD_GUI)
     find_package(Qt6 QUIET COMPONENTS Widgets)
     if(Qt6_FOUND)
         set(CMAKE_AUTOMOC ON)
-        add_executable(urbanchain WIN32
-            src/ui/main.cpp
+
+        add_library(uc_ui STATIC
             src/ui/main_window.cpp
             src/ui/map_view.cpp
             src/ui/map_scene.cpp
             src/ui/station_item.cpp
+            src/ui/line_dialog.cpp
+            src/ui/transfer_dialog.cpp
         )
-        target_link_libraries(urbanchain PRIVATE uc_core Qt6::Widgets)
+        target_link_libraries(uc_ui PUBLIC uc_core Qt6::Widgets)
+
+        add_executable(urbanchain WIN32 src/ui/main.cpp)
+        target_link_libraries(urbanchain PRIVATE uc_ui)
 
         get_filename_component(_qt_prefix "${Qt6_DIR}/../../.." ABSOLUTE)
         find_program(WINDEPLOYQT_EXECUTABLE windeployqt HINTS "${_qt_prefix}/bin")
-        if(WINDEPLOYQT_EXECUTABLE)
-            add_custom_command(TARGET urbanchain POST_BUILD
-                COMMAND "${WINDEPLOYQT_EXECUTABLE}" --no-translations --no-opengl-sw
-                        "$<TARGET_FILE:urbanchain>"
-                COMMENT "Deploying Qt runtime")
+        function(uc_deploy_qt target)
+            if(WINDEPLOYQT_EXECUTABLE)
+                add_custom_command(TARGET ${target} POST_BUILD
+                    COMMAND "${WINDEPLOYQT_EXECUTABLE}" --no-translations --no-opengl-sw
+                            "$<TARGET_FILE:${target}>"
+                    COMMENT "Deploying Qt runtime for ${target}")
+            endif()
+        endfunction()
+        uc_deploy_qt(urbanchain)
+
+        find_package(Qt6 QUIET COMPONENTS Test)
+        if(Qt6Test_FOUND)
+            add_executable(uc_ui_tests tests/ui_smoke.cpp)
+            target_link_libraries(uc_ui_tests PRIVATE uc_ui Qt6::Test)
+            uc_deploy_qt(uc_ui_tests)
         endif()
     else()
         message(WARNING "Qt6 not found; set CMAKE_PREFIX_PATH to the Qt msvc2022_64 directory.")
@@ -56,3 +71,7 @@ enable_testing()
 add_executable(uc_tests tests/test_main.cpp)
 target_link_libraries(uc_tests PRIVATE uc_core)
 add_test(NAME uc_tests COMMAND uc_tests)
+
+if(TARGET uc_ui_tests)
+    add_test(NAME uc_ui_tests COMMAND uc_ui_tests)
+endif()

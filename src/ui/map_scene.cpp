@@ -37,7 +37,8 @@ double distanceToSegment(const QPointF& point, const QPointF& a, const QPointF& 
 
 QPointF stationPoint(const Network& network, Index station) {
     const Vec2& position = network.map().station(station).position;
-    return QPointF(position.x, position.y);
+    // 地图坐标 y 轴向上，Qt 场景坐标 y 轴向下。
+    return QPointF(position.x, -position.y);
 }
 
 }  // namespace
@@ -57,20 +58,21 @@ void MapScene::refresh() {
 
     for (Index i = 0; i < map.stationCount(); ++i) {
         const Station& station = map.station(i);
+        const double sceneY = -station.position.y;
         auto* item = new StationItem(i, QString::fromUtf8(station.name.c_str()));
-        item->setPos(station.position.x, station.position.y);
+        item->setPos(station.position.x, sceneY);
         addItem(item);
         stationItems_.push_back(item);
 
         if (!hasStation) {
             minX = maxX = station.position.x;
-            minY = maxY = station.position.y;
+            minY = maxY = sceneY;
             hasStation = true;
         } else {
             minX = std::min(minX, station.position.x);
             maxX = std::max(maxX, station.position.x);
-            minY = std::min(minY, station.position.y);
-            maxY = std::max(maxY, station.position.y);
+            minY = std::min(minY, sceneY);
+            maxY = std::max(maxY, sceneY);
         }
     }
 
@@ -91,6 +93,10 @@ void MapScene::refresh() {
             selectedStation_ = -1;
         }
     }
+    if (selectedLine_ < 0 ||
+        selectedLine_ >= static_cast<int>(editor_.network().lines().size())) {
+        selectedLine_ = -1;
+    }
     update();
 }
 
@@ -105,6 +111,14 @@ void MapScene::setSelectedStation(int stationIndex) {
     if (StationItem* current = stationItem(selectedStation_)) {
         current->setSelectedVisual(true);
     }
+    update();
+}
+
+void MapScene::setSelectedLine(int lineIndex) {
+    if (selectedLine_ == lineIndex) {
+        return;
+    }
+    selectedLine_ = lineIndex;
     update();
 }
 
@@ -142,6 +156,42 @@ void MapScene::setStationVisualPosition(int stationIndex, const QPointF& positio
     }
 }
 
+void MapScene::setDraggingStation(int stationIndex, const QPointF& scenePosition) {
+    draggedStation_ = stationIndex;
+    draggedPosition_ = scenePosition;
+    update();
+}
+
+void MapScene::clearDraggingStation() {
+    draggedStation_ = -1;
+    update();
+}
+
+QPointF MapScene::displayPoint(const Network& network, Index station) const {
+    if (station == draggedStation_) {
+        return draggedPosition_;
+    }
+    return stationPoint(network, station);
+}
+
+int MapScene::edgeAt(const QPointF& scenePos, double threshold) const {
+    const Network& network = editor_.network();
+    const Map& map = network.map();
+    int bestEdge = -1;
+    double bestDistance = threshold;
+    for (std::size_t i = 0; i < map.edges().size(); ++i) {
+        const EdgeRecord& edge = map.edges()[i];
+        const QPointF a = stationPoint(network, edge.from);
+        const QPointF b = stationPoint(network, edge.to);
+        const double distance = distanceToSegment(scenePos, a, b);
+        if (distance < bestDistance) {
+            bestDistance = distance;
+            bestEdge = static_cast<int>(i);
+        }
+    }
+    return bestEdge;
+}
+
 int MapScene::lineAt(const QPointF& scenePos, double threshold) const {
     const Network& network = editor_.network();
     int bestLine = -1;
@@ -166,6 +216,10 @@ int MapScene::lineAt(const QPointF& scenePos, double threshold) const {
 }
 
 void MapScene::drawBackground(QPainter* painter, const QRectF& rect) {
+    paintNetwork(painter, rect);
+}
+
+void MapScene::paintNetwork(QPainter* painter, const QRectF& rect) const {
     Q_UNUSED(rect);
     const Network& network = editor_.network();
     const Map& map = network.map();
@@ -176,7 +230,7 @@ void MapScene::drawBackground(QPainter* painter, const QRectF& rect) {
     painter->setPen(edgePen);
     for (std::size_t i = 0; i < map.edges().size(); ++i) {
         const EdgeRecord& edge = map.edges()[i];
-        painter->drawLine(stationPoint(network, edge.from), stationPoint(network, edge.to));
+        painter->drawLine(displayPoint(network, edge.from), displayPoint(network, edge.to));
     }
 
     for (std::size_t lineIndex = 0; lineIndex < network.lines().size(); ++lineIndex) {
@@ -185,13 +239,25 @@ void MapScene::drawBackground(QPainter* painter, const QRectF& rect) {
             continue;
         }
         QPainterPath path;
-        path.moveTo(stationPoint(network, line.stations()[0]));
+        path.moveTo(displayPoint(network, line.stations()[0]));
         for (int i = 1; i < line.stationCount(); ++i) {
-            path.lineTo(stationPoint(network, line.stations()[static_cast<std::size_t>(i)]));
+            path.lineTo(displayPoint(network, line.stations()[static_cast<std::size_t>(i)]));
         }
-        QPen pen(lineColor(line.color()));
+        const QColor color = lineColor(line.color());
+        if (static_cast<int>(lineIndex) == selectedLine_) {
+            QColor halo = color;
+            halo.setAlpha(90);
+            QPen haloPen(halo);
+            haloPen.setCosmetic(true);
+            haloPen.setWidthF(13.0);
+            haloPen.setCapStyle(Qt::RoundCap);
+            haloPen.setJoinStyle(Qt::RoundJoin);
+            painter->setPen(haloPen);
+            painter->drawPath(path);
+        }
+        QPen pen(color);
         pen.setCosmetic(true);
-        pen.setWidthF(5.0);
+        pen.setWidthF(static_cast<int>(lineIndex) == selectedLine_ ? 6.5 : 5.0);
         pen.setCapStyle(Qt::RoundCap);
         pen.setJoinStyle(Qt::RoundJoin);
         painter->setPen(pen);
@@ -200,6 +266,10 @@ void MapScene::drawBackground(QPainter* painter, const QRectF& rect) {
 }
 
 void MapScene::drawForeground(QPainter* painter, const QRectF& rect) {
+    paintOverlay(painter, rect);
+}
+
+void MapScene::paintOverlay(QPainter* painter, const QRectF& rect) const {
     Q_UNUSED(rect);
     const Network& network = editor_.network();
 

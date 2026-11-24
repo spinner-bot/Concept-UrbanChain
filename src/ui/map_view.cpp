@@ -1,8 +1,15 @@
 #include "ui/map_view.h"
 
+#include <QAction>
 #include <QColor>
+#include <QContextMenuEvent>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QDoubleSpinBox>
+#include <QFormLayout>
 #include <QInputDialog>
 #include <QKeyEvent>
+#include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QScrollBar>
@@ -30,18 +37,24 @@ const char* modeName(EditMode mode) {
             return "Add edge";
         case EditMode::DrawLine:
             return "Draw line";
-        case EditMode::DeleteLine:
-            return "Delete line";
+        case EditMode::Delete:
+            return "Delete";
     }
     return "Unknown";
 }
 
 QString fromUtf8(const std::string& text) { return QString::fromUtf8(text.c_str()); }
 
+double hitThreshold(const QGraphicsView& view, double pixels) {
+    const double scale = std::max(0.0001, view.transform().m11());
+    return pixels / scale;
+}
+
 }  // namespace
 
 MapView::MapView(Editor& editor, QWidget* parent) : QGraphicsView(parent), editor_(editor) {
     scene_ = new MapScene(editor_, this);
+    setObjectName("mapView");
     setScene(scene_);
     setRenderHint(QPainter::Antialiasing, true);
     setRenderHint(QPainter::TextAntialiasing, true);
@@ -52,7 +65,7 @@ MapView::MapView(Editor& editor, QWidget* parent) : QGraphicsView(parent), edito
     setFrameShape(QFrame::NoFrame);
     setBackgroundBrush(QColor("#f6f3ea"));
     setViewportUpdateMode(QGraphicsView::FullViewportUpdate);
-    setCursor(Qt::ArrowCursor);
+    updateCursor();
 }
 
 void MapView::setStatusCallback(std::function<void(const QString&)> callback) {
@@ -61,6 +74,14 @@ void MapView::setStatusCallback(std::function<void(const QString&)> callback) {
 
 void MapView::setChangeCallback(std::function<void()> callback) {
     changeCallback_ = static_cast<std::function<void()>&&>(callback);
+}
+
+void MapView::setEditLineCallback(std::function<void(int)> callback) {
+    editLineCallback_ = static_cast<std::function<void(int)>&&>(callback);
+}
+
+void MapView::setSelectionCallback(std::function<void(int)> callback) {
+    selectionCallback_ = static_cast<std::function<void(int)>&&>(callback);
 }
 
 void MapView::notifyStatus(const QString& message) {
@@ -75,8 +96,58 @@ void MapView::notifyChanged() {
     }
 }
 
+void MapView::notifySelectionChanged() {
+    if (selectionCallback_) {
+        selectionCallback_(selectedLine_);
+    }
+}
+
+void MapView::updateCursor() {
+    if (panning_) {
+        setCursor(Qt::ClosedHandCursor);
+        return;
+    }
+    switch (mode_) {
+        case EditMode::Select:
+            setCursor(Qt::ArrowCursor);
+            break;
+        case EditMode::AddStation:
+        case EditMode::DrawLine:
+        case EditMode::Delete:
+            setCursor(Qt::CrossCursor);
+            break;
+        case EditMode::AddEdge:
+            setCursor(Qt::PointingHandCursor);
+            break;
+    }
+}
+
+void MapView::selectLine(int lineIndex) {
+    if (lineIndex < -1 || lineIndex >= static_cast<int>(editor_.network().lines().size())) {
+        lineIndex = -1;
+    }
+    selectedLine_ = lineIndex;
+    scene_->setSelectedLine(lineIndex);
+    if (lineIndex >= 0) {
+        scene_->setSelectedStation(-1);
+    }
+    notifySelectionChanged();
+}
+
+void MapView::clearSelection() {
+    selectedLine_ = -1;
+    scene_->setSelectedLine(-1);
+    scene_->setSelectedStation(-1);
+    notifySelectionChanged();
+}
+
 void MapView::refresh() {
     scene_->refresh();
+    if (selectedLine_ >= static_cast<int>(editor_.network().lines().size())) {
+        selectedLine_ = -1;
+        notifySelectionChanged();
+    }
+    scene_->setSelectedLine(selectedLine_);
     scene_->setPreview(previewPos_, pendingStation_, activeLine_);
     update();
 }
@@ -90,25 +161,11 @@ void MapView::setMode(EditMode mode) {
     }
     if (mode != EditMode::AddEdge) {
         pendingStation_ = -1;
-        scene_->clearPreview();
     }
     mode_ = mode;
-    switch (mode_) {
-        case EditMode::Select:
-            setCursor(Qt::ArrowCursor);
-            break;
-        case EditMode::AddStation:
-        case EditMode::DrawLine:
-            setCursor(Qt::CrossCursor);
-            break;
-        case EditMode::AddEdge:
-            setCursor(Qt::PointingHandCursor);
-            break;
-        case EditMode::DeleteLine:
-            setCursor(Qt::CrossCursor);
-            break;
-    }
-    notifyStatus(QString("Mode: ") + modeName(mode_));
+    scene_->clearPreview();
+    updateCursor();
+    notifyStatus(QString("Mode: ") + QString::fromLatin1(modeName(mode_)));
 }
 
 void MapView::fitContent() {
@@ -119,8 +176,23 @@ void MapView::fitContent() {
     fitInView(scene_->sceneRect(), Qt::KeepAspectRatio);
 }
 
+void MapView::drawBackground(QPainter* painter, const QRectF& rect) {
+    QGraphicsView::drawBackground(painter, rect);
+    scene_->paintNetwork(painter, rect);
+}
+
+void MapView::drawForeground(QPainter* painter, const QRectF& rect) {
+    scene_->paintOverlay(painter, rect);
+    QGraphicsView::drawForeground(painter, rect);
+}
+
 void MapView::wheelEvent(QWheelEvent* event) {
     const double factor = std::pow(1.0015, static_cast<double>(event->angleDelta().y()));
+    const double next = transform().m11() * factor;
+    if (next < 0.001 || next > 1000.0) {
+        event->accept();
+        return;
+    }
     scale(factor, factor);
     event->accept();
 }
@@ -136,6 +208,133 @@ StationItem* MapView::stationAt(const QPoint& viewPosition) const {
     return nullptr;
 }
 
+void MapView::createStationAt(const QPointF& scenePos) {
+    bool accepted = false;
+    const QString name = QInputDialog::getText(this, "New station", "Station name:",
+                                               QLineEdit::Normal, QString(), &accepted);
+    if (!accepted) {
+        return;
+    }
+    std::string error;
+    const Index index = editor_.addStation(name.toUtf8().constData(), scenePos.x(),
+                                           -scenePos.y(), &error);
+    if (index == kInvalidIndex) {
+        notifyStatus(fromUtf8(error));
+        return;
+    }
+    refresh();
+    scene_->setSelectedStation(index);
+    selectedLine_ = -1;
+    scene_->setSelectedLine(-1);
+    notifySelectionChanged();
+    notifyStatus("Station added");
+    notifyChanged();
+}
+
+void MapView::renameStationDialog(int stationIndex) {
+    if (stationIndex < 0 || stationIndex >= editor_.network().map().stationCount()) {
+        return;
+    }
+    const Station& station = editor_.network().map().station(stationIndex);
+    bool accepted = false;
+    const QString name = QInputDialog::getText(
+        this, "Rename station", "Station name:", QLineEdit::Normal,
+        QString::fromUtf8(station.name.c_str()), &accepted);
+    if (!accepted || name.trimmed().isEmpty()) {
+        return;
+    }
+    std::string error;
+    if (!editor_.renameStation(stationIndex, name.toUtf8().constData(), &error)) {
+        notifyStatus(fromUtf8(error));
+        return;
+    }
+    refresh();
+    notifyStatus("Station renamed");
+    notifyChanged();
+}
+
+void MapView::deleteStation(int stationIndex) {
+    std::string error;
+    if (!editor_.removeStation(stationIndex, &error)) {
+        notifyStatus(fromUtf8(error));
+        return;
+    }
+    scene_->setSelectedStation(-1);
+    refresh();
+    notifyStatus("Station deleted");
+    notifyChanged();
+}
+
+void MapView::deleteLine(int lineIndex) {
+    std::string error;
+    if (!editor_.removeLine(lineIndex, &error)) {
+        notifyStatus(fromUtf8(error));
+        return;
+    }
+    selectedLine_ = -1;
+    scene_->setSelectedLine(-1);
+    refresh();
+    notifySelectionChanged();
+    notifyStatus("Line deleted");
+    notifyChanged();
+}
+
+void MapView::editEdgeDialog(int edgeIndex) {
+    if (edgeIndex < 0 ||
+        edgeIndex >= static_cast<int>(editor_.network().map().edges().size())) {
+        return;
+    }
+    const EdgeRecord edge =
+        editor_.network().map().edges()[static_cast<std::size_t>(edgeIndex)];
+
+    QDialog dialog(this);
+    dialog.setWindowTitle("Edge Properties");
+    auto* layout = new QFormLayout(&dialog);
+    auto* costSpin = new QDoubleSpinBox(&dialog);
+    costSpin->setRange(0.0, 1.0e9);
+    costSpin->setDecimals(3);
+    costSpin->setValue(edge.cost);
+    auto* lengthSpin = new QDoubleSpinBox(&dialog);
+    lengthSpin->setRange(0.0, 1.0e9);
+    lengthSpin->setDecimals(3);
+    lengthSpin->setValue(edge.length);
+    layout->addRow("Cost", costSpin);
+    layout->addRow("Length", lengthSpin);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addRow(buttons);
+
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+    std::string error;
+    if (!editor_.setEdgeWeight(edge.from, edge.to, costSpin->value(), lengthSpin->value(),
+                               &error)) {
+        notifyStatus(fromUtf8(error));
+        return;
+    }
+    refresh();
+    notifyStatus("Edge updated");
+    notifyChanged();
+}
+
+void MapView::deleteEdge(int edgeIndex) {
+    if (edgeIndex < 0 ||
+        edgeIndex >= static_cast<int>(editor_.network().map().edges().size())) {
+        return;
+    }
+    const EdgeRecord edge = editor_.network().map().edges()[static_cast<std::size_t>(edgeIndex)];
+    std::string error;
+    if (!editor_.removeEdge(edge.from, edge.to, &error)) {
+        notifyStatus(fromUtf8(error));
+        return;
+    }
+    refresh();
+    notifyStatus("Edge deleted");
+    notifyChanged();
+}
+
 void MapView::handleLeftPress(const QPoint& viewPosition) {
     const QPointF scenePos = mapToScene(viewPosition);
     StationItem* station = stationAt(viewPosition);
@@ -146,13 +345,24 @@ void MapView::handleLeftPress(const QPoint& viewPosition) {
             if (station != nullptr) {
                 const int index = station->stationIndex();
                 scene_->setSelectedStation(index);
+                if (selectedLine_ != -1) {
+                    selectedLine_ = -1;
+                    scene_->setSelectedLine(-1);
+                    notifySelectionChanged();
+                }
                 dragging_ = true;
                 dragMoved_ = false;
                 dragStation_ = index;
                 dragStartScene_ = scenePos;
                 dragStationStart_ = station->pos();
+                scene_->setDraggingStation(index, dragStationStart_);
             } else {
-                scene_->setSelectedStation(-1);
+                const int line = scene_->lineAt(scenePos, hitThreshold(*this, 12.0));
+                if (line >= 0) {
+                    selectLine(line);
+                } else {
+                    clearSelection();
+                }
             }
             break;
         }
@@ -161,22 +371,7 @@ void MapView::handleLeftPress(const QPoint& viewPosition) {
                 notifyStatus("Click an empty area to place a station");
                 break;
             }
-            bool accepted = false;
-            const QString name = QInputDialog::getText(this, "New station", "Station name:",
-                                                       QLineEdit::Normal, QString(), &accepted);
-            if (!accepted) {
-                break;
-            }
-            const Index index = editor_.addStation(name.toUtf8().constData(), scenePos.x(),
-                                                   scenePos.y(), &error);
-            if (index == kInvalidIndex) {
-                notifyStatus(fromUtf8(error));
-                break;
-            }
-            refresh();
-            scene_->setSelectedStation(index);
-            notifyStatus("Station added");
-            notifyChanged();
+            createStationAt(scenePos);
             break;
         }
         case EditMode::AddEdge: {
@@ -225,27 +420,85 @@ void MapView::handleLeftPress(const QPoint& viewPosition) {
                 notifyStatus(fromUtf8(error));
                 break;
             }
+            selectedLine_ = activeLine_;
             refresh();
+            notifySelectionChanged();
             notifyStatus("Station added to line; double-click or right-click to finish");
             notifyChanged();
             break;
         }
-        case EditMode::DeleteLine: {
-            const double scale = std::max(0.0001, transform().m11());
-            const int line = scene_->lineAt(scenePos, 10.0 / scale);
-            if (line < 0) {
-                notifyStatus("Click closer to a line");
+        case EditMode::Delete: {
+            if (station != nullptr) {
+                deleteStation(station->stationIndex());
                 break;
             }
-            if (!editor_.removeLine(line, &error)) {
-                notifyStatus(fromUtf8(error));
+            const int line = scene_->lineAt(scenePos, hitThreshold(*this, 12.0));
+            if (line >= 0) {
+                deleteLine(line);
                 break;
             }
-            refresh();
-            notifyStatus("Line deleted");
-            notifyChanged();
+            const int edge = scene_->edgeAt(scenePos, hitThreshold(*this, 10.0));
+            if (edge >= 0) {
+                deleteEdge(edge);
+                break;
+            }
+            notifyStatus("Nothing to delete here");
             break;
         }
+    }
+}
+
+void MapView::showContextMenu(const QPoint& viewPosition, const QPoint& globalPosition) {
+    const QPointF scenePos = mapToScene(viewPosition);
+    StationItem* station = stationAt(viewPosition);
+    const int line = station == nullptr
+                         ? scene_->lineAt(scenePos, hitThreshold(*this, 12.0))
+                         : -1;
+    const int edge = station == nullptr && line < 0
+                         ? scene_->edgeAt(scenePos, hitThreshold(*this, 10.0))
+                         : -1;
+
+    QMenu menu(this);
+    if (station != nullptr) {
+        const int stationIndex = station->stationIndex();
+        QAction* renameAction = menu.addAction("Rename Station...");
+        QAction* deleteAction = menu.addAction("Delete Station");
+        QAction* chosen = menu.exec(globalPosition);
+        if (chosen == renameAction) {
+            renameStationDialog(stationIndex);
+        } else if (chosen == deleteAction) {
+            deleteStation(stationIndex);
+        }
+        return;
+    }
+    if (line >= 0) {
+        QAction* editAction = menu.addAction("Edit Line...");
+        QAction* deleteAction = menu.addAction("Delete Line");
+        QAction* chosen = menu.exec(globalPosition);
+        if (chosen == editAction) {
+            if (editLineCallback_) {
+                editLineCallback_(line);
+            }
+        } else if (chosen == deleteAction) {
+            deleteLine(line);
+        }
+        return;
+    }
+    if (edge >= 0) {
+        QAction* editAction = menu.addAction("Edit Edge...");
+        QAction* deleteAction = menu.addAction("Delete Edge");
+        QAction* chosen = menu.exec(globalPosition);
+        if (chosen == editAction) {
+            editEdgeDialog(edge);
+        } else if (chosen == deleteAction) {
+            deleteEdge(edge);
+        }
+        return;
+    }
+
+    QAction* addAction = menu.addAction("Add Station Here");
+    if (menu.exec(globalPosition) == addAction) {
+        createStationAt(scenePos);
     }
 }
 
@@ -253,17 +506,7 @@ void MapView::mousePressEvent(QMouseEvent* event) {
     if (event->button() == Qt::MiddleButton) {
         panning_ = true;
         lastPan_ = event->pos();
-        setCursor(Qt::ClosedHandCursor);
-        event->accept();
-        return;
-    }
-    if (event->button() == Qt::RightButton) {
-        if (activeLine_ >= 0) {
-            finishLine();
-        } else {
-            pendingStation_ = -1;
-            scene_->clearPreview();
-        }
+        updateCursor();
         event->accept();
         return;
     }
@@ -290,7 +533,9 @@ void MapView::mouseMoveEvent(QMouseEvent* event) {
         if (std::abs(delta.x()) > 1e-6 || std::abs(delta.y()) > 1e-6) {
             dragMoved_ = true;
         }
-        scene_->setStationVisualPosition(dragStation_, dragStationStart_ + delta);
+        const QPointF visualPosition = dragStationStart_ + delta;
+        scene_->setStationVisualPosition(dragStation_, visualPosition);
+        scene_->setDraggingStation(dragStation_, visualPosition);
         event->accept();
         return;
     }
@@ -302,18 +547,19 @@ void MapView::mouseMoveEvent(QMouseEvent* event) {
 void MapView::mouseReleaseEvent(QMouseEvent* event) {
     if (event->button() == Qt::MiddleButton && panning_) {
         panning_ = false;
-        setCursor(mode_ == EditMode::Select ? Qt::ArrowCursor : Qt::CrossCursor);
+        updateCursor();
         event->accept();
         return;
     }
     if (event->button() == Qt::LeftButton && dragging_) {
         dragging_ = false;
+        scene_->clearDraggingStation();
         if (dragMoved_) {
             const QPointF scenePos = mapToScene(event->pos());
             const QPointF delta = scenePos - dragStartScene_;
             const QPointF target = dragStationStart_ + delta;
             std::string error;
-            if (!editor_.moveStation(dragStation_, target.x(), target.y(), &error)) {
+            if (!editor_.moveStation(dragStation_, target.x(), -target.y(), &error)) {
                 notifyStatus(fromUtf8(error));
             } else {
                 notifyStatus("Station moved");
@@ -330,10 +576,25 @@ void MapView::mouseReleaseEvent(QMouseEvent* event) {
 }
 
 void MapView::mouseDoubleClickEvent(QMouseEvent* event) {
-    if (event->button() == Qt::LeftButton && mode_ == EditMode::DrawLine && activeLine_ >= 0) {
-        finishLine();
-        event->accept();
-        return;
+    if (event->button() == Qt::LeftButton) {
+        if (mode_ == EditMode::DrawLine && activeLine_ >= 0) {
+            finishLine();
+            event->accept();
+            return;
+        }
+        if (mode_ == EditMode::Select) {
+            if (StationItem* station = stationAt(event->pos())) {
+                renameStationDialog(station->stationIndex());
+                event->accept();
+                return;
+            }
+            const int line = scene_->lineAt(mapToScene(event->pos()), hitThreshold(*this, 12.0));
+            if (line >= 0 && editLineCallback_) {
+                editLineCallback_(line);
+                event->accept();
+                return;
+            }
+        }
     }
     QGraphicsView::mouseDoubleClickEvent(event);
 }
@@ -345,7 +606,7 @@ void MapView::keyPressEvent(QKeyEvent* event) {
         } else {
             pendingStation_ = -1;
             scene_->clearPreview();
-            scene_->setSelectedStation(-1);
+            clearSelection();
         }
         event->accept();
         return;
@@ -353,27 +614,46 @@ void MapView::keyPressEvent(QKeyEvent* event) {
     QGraphicsView::keyPressEvent(event);
 }
 
+void MapView::contextMenuEvent(QContextMenuEvent* event) {
+    if (activeLine_ >= 0) {
+        finishLine();
+        event->accept();
+        return;
+    }
+    if (pendingStation_ >= 0) {
+        pendingStation_ = -1;
+        scene_->clearPreview();
+        notifyStatus("Edge creation cancelled");
+        event->accept();
+        return;
+    }
+    showContextMenu(event->pos(), event->globalPos());
+    event->accept();
+}
+
 void MapView::finishLine() {
     if (activeLine_ < 0) {
         return;
     }
-    const Network& network = editor_.network();
     const int line = activeLine_;
+    const bool tooShort =
+        line >= static_cast<int>(editor_.network().lines().size()) ||
+        editor_.network().lines()[static_cast<std::size_t>(line)].stationCount() < 2;
     activeLine_ = -1;
     pendingStation_ = -1;
     scene_->clearPreview();
 
     std::string error;
-    const bool tooShort =
-        line >= static_cast<int>(network.lines().size()) ||
-        network.lines()[static_cast<std::size_t>(line)].stationCount() < 2;
     if (tooShort) {
         editor_.removeLine(line, &error);
+        selectedLine_ = -1;
         notifyStatus("Line discarded: at least two stations are required");
     } else {
+        selectedLine_ = line;
         notifyStatus("Line finished");
     }
     refresh();
+    notifySelectionChanged();
     notifyChanged();
 }
 

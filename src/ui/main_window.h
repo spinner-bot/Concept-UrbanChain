@@ -8,7 +8,13 @@
 
 class QAction;
 class QCloseEvent;
+class QComboBox;
+class QShowEvent;
 class QLabel;
+class QListWidget;
+class QPlainTextEdit;
+class QPushButton;
+class QTimeEdit;
 
 namespace uc {
 
@@ -18,12 +24,14 @@ public:
 
 protected:
     void closeEvent(QCloseEvent* event) override;
+    void showEvent(QShowEvent* event) override;
 
 private:
     void createActions();
     void createMenus();
     void createToolBar();
     void createStatusBar();
+    void createSidePanel();
     void connectCallbacks();
 
     void loadDemoIfAvailable();
@@ -37,6 +45,16 @@ private:
     void setMode(EditMode mode);
     void updateTitle();
     void updateActions();
+    void refreshPanels();
+    void refreshLineList();
+    void refreshStationCombos();
+    void syncLineSelection(int lineIndex);
+    int currentLineFromList() const;
+    void editLine(int lineIndex);
+    void deleteLine(int lineIndex);
+    void editTransfers();
+    void computeRoute();
+    QString stationDisplay(int stationIndex) const;
 
     Editor editor_;
     MapView* view_ = nullptr;
@@ -54,12 +72,25 @@ private:
     QAction* addStationAction_ = nullptr;
     QAction* addEdgeAction_ = nullptr;
     QAction* drawLineAction_ = nullptr;
-    QAction* deleteLineAction_ = nullptr;
+    QAction* deleteAction_ = nullptr;
     QAction* finishLineAction_ = nullptr;
     QAction* removeLastStopAction_ = nullptr;
+    QAction* transferAction_ = nullptr;
     QAction* fitAction_ = nullptr;
     QAction* aboutAction_ = nullptr;
+
     QLabel* modeLabel_ = nullptr;
+    QListWidget* lineList_ = nullptr;
+    QPushButton* editLineButton_ = nullptr;
+    QPushButton* deleteLineButton_ = nullptr;
+    QPushButton* transferButton_ = nullptr;
+    QComboBox* fromCombo_ = nullptr;
+    QComboBox* toCombo_ = nullptr;
+    QTimeEdit* timeEdit_ = nullptr;
+    QPushButton* routeButton_ = nullptr;
+    QPlainTextEdit* routeOutput_ = nullptr;
+    bool updatingPanels_ = false;
+    bool firstShow_ = true;
 };
 
 }  // namespace uc

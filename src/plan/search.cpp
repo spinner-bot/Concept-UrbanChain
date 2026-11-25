@@ -109,6 +109,30 @@ Line makeCandidate(const DynamicArray<Index>& path, std::uint32_t color) {
     return line;
 }
 
+double scoreMetrics(const Metrics& metrics, const ScoreParams& score) {
+    if (!metrics.feasible || std::isinf(metrics.r3) || std::isinf(metrics.r4)) {
+        return -kInfinity;
+    }
+    return score.wCoverage * metrics.r1 -
+           score.wCost * metrics.r2 / std::max(score.refCost, 1e-9) -
+           score.wTime * metrics.r3 / std::max(score.refTime, 1e-9) -
+           score.wTransfer * metrics.r4 / std::max(score.refTransfer, 1e-9) -
+           score.wDetour * metrics.r5 / std::max(score.refDetour, 1e-9) -
+           score.wShort * metrics.r6 / std::max(score.refShort, 1e-9);
+}
+
+void recomputeCovered(const Map& map, const DynamicArray<Line>& lines,
+                      DynamicArray<unsigned char>& covered) {
+    for (int i = 0; i < map.stationCount(); ++i) {
+        covered[static_cast<std::size_t>(i)] = 0;
+    }
+    for (std::size_t i = 0; i < lines.size(); ++i) {
+        for (std::size_t j = 0; j < lines[i].stations().size(); ++j) {
+            covered[static_cast<std::size_t>(lines[i].stations()[j])] = 1;
+        }
+    }
+}
+
 }  // namespace
 
 PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
@@ -183,12 +207,47 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
         }
     }
 
+    ScoreParams scoreParams = search.score;
+    double totalEdgeCost = 0.0;
+    for (std::size_t i = 0; i < map.edges().size(); ++i) {
+        totalEdgeCost += map.edges()[i].cost;
+    }
+    double totalWeight = 0.0;
+    for (int i = 0; i < stationCount; ++i) {
+        totalWeight += weights.weights[static_cast<std::size_t>(i)];
+    }
+    scoreParams.refCost =
+        std::max(1.0, totalEdgeCost + params.kStation * totalWeight);
+
+    double sumOd = 0.0;
+    double sumOdDistance = 0.0;
+    if (demand.stationCount == stationCount) {
+        for (int i = 0; i < stationCount; ++i) {
+            for (int j = i + 1; j < stationCount; ++j) {
+                const double od =
+                    demand.od[static_cast<std::size_t>(i) * stationCount +
+                              static_cast<std::size_t>(j)];
+                if (od <= 0.0) {
+                    continue;
+                }
+                sumOd += od;
+                sumOdDistance += od * euclideanDistance(map.station(i).position,
+                                                        map.station(j).position);
+            }
+        }
+    }
+    const double averageDistance = sumOd > 0.0 ? sumOdDistance / sumOd : 0.0;
+    scoreParams.refTime = std::max(
+        1.0, averageDistance * params.ops.segmentRunSec + params.ops.headwaySec * 0.5 +
+                 params.ops.dwellSec);
+
     EvalParams staticParams = params;
     staticParams.evaluateOd = false;
     staticParams.overrideLineOps = true;
     staticParams.connectivity = ConnectivityRequirement::CoveredStations;
 
     DynamicArray<Line> current;
+    DynamicArray<int> currentCandidates;
     DynamicArray<unsigned char> covered;
     covered.resize(static_cast<std::size_t>(stationCount));
     for (int i = 0; i < stationCount; ++i) {
@@ -253,6 +312,7 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
         }
         const Line& chosen = candidates[static_cast<std::size_t>(best)];
         current.push_back(chosen);
+        currentCandidates.push_back(best);
         used[static_cast<std::size_t>(best)] = 1;
         for (std::size_t i = 0; i < chosen.stations().size(); ++i) {
             covered[static_cast<std::size_t>(chosen.stations()[i])] = 1;
@@ -266,8 +326,91 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
     finalParams.evaluateOd = true;
     finalParams.overrideLineOps = true;
     finalParams.connectivity = ConnectivityRequirement::CoveredStations;
+    result.baseMetrics = evaluate(map, current, weights, demand, finalParams);
+    result.metrics = result.baseMetrics;
+    result.score = scoreMetrics(result.metrics, scoreParams);
+
+    if (search.enableLocalSearch && !current.empty() &&
+        search.localSearchBudget > 0) {
+        double currentScore = result.score;
+        int evaluations = 0;
+        bool improved = true;
+        while (improved && evaluations < search.localSearchBudget) {
+            improved = false;
+
+            // 1) 尝试加入候选线路：必须与已覆盖站点共享至少一个站。
+            for (std::size_t c = 0; c < candidates.size(); ++c) {
+                if (evaluations >= search.localSearchBudget) {
+                    break;
+                }
+                if (used[c] || static_cast<int>(current.size()) >= search.maxLines) {
+                    continue;
+                }
+                const Line& candidate = candidates[c];
+                bool shares = current.empty();
+                for (std::size_t i = 0; i < candidate.stations().size() && !shares; ++i) {
+                    shares = covered[static_cast<std::size_t>(candidate.stations()[i])] != 0;
+                }
+                if (!shares) {
+                    continue;
+                }
+                DynamicArray<Line> trial = current;
+                trial.push_back(candidate);
+                ++evaluations;
+                ++result.candidatesEvaluated;
+                const Metrics metrics = evaluate(map, trial, weights, demand, finalParams);
+                const double score = scoreMetrics(metrics, scoreParams);
+                if (score > currentScore + 1e-9) {
+                    current = static_cast<DynamicArray<Line>&&>(trial);
+                    used[c] = 1;
+                    currentCandidates.push_back(static_cast<int>(c));
+                    for (std::size_t i = 0; i < candidate.stations().size(); ++i) {
+                        covered[static_cast<std::size_t>(candidate.stations()[i])] = 1;
+                    }
+                    currentScore = score;
+                    result.metrics = metrics;
+                    ++result.localMoves;
+                    improved = true;
+                    break;
+                }
+            }
+            if (improved) {
+                continue;
+            }
+
+            // 2) 尝试删除线路；删除后仍须满足 CoveredStations 连通。
+            for (std::size_t removeAt = 0; removeAt < current.size(); ++removeAt) {
+                if (evaluations >= search.localSearchBudget) {
+                    break;
+                }
+                DynamicArray<Line> trial;
+                for (std::size_t i = 0; i < current.size(); ++i) {
+                    if (i != removeAt) {
+                        trial.push_back(current[i]);
+                    }
+                }
+                ++evaluations;
+                ++result.candidatesEvaluated;
+                const Metrics metrics = evaluate(map, trial, weights, demand, finalParams);
+                const double score = scoreMetrics(metrics, scoreParams);
+                if (score > currentScore + 1e-9) {
+                    used[static_cast<std::size_t>(
+                        currentCandidates[removeAt])] = 0;
+                    current = static_cast<DynamicArray<Line>&&>(trial);
+                    currentCandidates.erase(removeAt);
+                    recomputeCovered(map, current, covered);
+                    currentScore = score;
+                    result.metrics = metrics;
+                    ++result.localMoves;
+                    improved = true;
+                    break;
+                }
+            }
+        }
+        result.score = currentScore;
+    }
+
     result.lines = current;
-    result.metrics = evaluate(map, current, weights, demand, finalParams);
     return result;
 }
 

@@ -7,18 +7,39 @@
 namespace uc {
 namespace plan {
 
+struct ScoreParams {
+    // 仅用于搜索接受/排序，不是最终总体 R。
+    double wCoverage = 0.30;
+    double wCost = 0.20;
+    double wTime = 0.25;
+    double wTransfer = 0.10;
+    double wDetour = 0.05;
+    double wShort = 0.10;
+    double refCost = 1.0;
+    double refTime = 1.0;
+    double refTransfer = 3.0;
+    double refDetour = 3.0;
+    double refShort = 1.0;
+};
+
 struct SearchParams {
     int maxLines = 8;
     int topStations = 10;
     int candidateLimit = 80;
     double minCoverageGain = 1e-9;
+    bool enableLocalSearch = true;
+    int localSearchBudget = 120;
+    ScoreParams score;
 };
 
 struct PlanResult {
     DynamicArray<Line> lines;
     Metrics metrics;
+    Metrics baseMetrics;
     int candidatesEvaluated = 0;
     int steps = 0;
+    int localMoves = 0;
+    double score = 0.0;
 };
 
 // 第一版搜索原型：候选路径池 + 连通性保持的贪心覆盖。

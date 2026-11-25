@@ -435,7 +435,104 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
                 continue;
             }
 
-            // 2) 尝试删除线路；删除后仍须满足 CoveredStations 连通。
+            // 2) 端点延长：沿地图边向线路外延伸一个站。
+            for (std::size_t lineIndex = 0; lineIndex < current.size() && !improved; ++lineIndex) {
+                const Line& base = current[lineIndex];
+                if (base.stationCount() < 2) {
+                    continue;
+                }
+                for (int side = 0; side < 2 && !improved; ++side) {
+                    const Index endpoint = side == 0 ? base.stations()[0]
+                                                     : base.stations()[base.stations().size() - 1];
+                    const DynamicArray<AdjEdge>& neighbors = map.neighbors(endpoint);
+                    for (std::size_t n = 0; n < neighbors.size() && !improved; ++n) {
+                        if (evaluations >= search.localSearchBudget) {
+                            break;
+                        }
+                        const Index next = neighbors[n].to;
+                        if (base.containsStation(next)) {
+                            continue;
+                        }
+                        DynamicArray<Index> stops;
+                        if (side == 0) {
+                            stops.push_back(next);
+                        }
+                        for (std::size_t i = 0; i < base.stations().size(); ++i) {
+                            stops.push_back(base.stations()[i]);
+                        }
+                        if (side != 0) {
+                            stops.push_back(next);
+                        }
+                        Line extended = base;
+                        extended.setStations(static_cast<DynamicArray<Index>&&>(stops));
+                        DynamicArray<Line> trial = current;
+                        trial[lineIndex] = static_cast<Line&&>(extended);
+                        ++evaluations;
+                        ++result.candidatesEvaluated;
+                        const Metrics metrics =
+                            evaluate(map, trial, weights, demand, finalParams);
+                        const double score = scoreMetrics(metrics, scoreParams);
+                        if (score > currentScore + 1e-9) {
+                            used[static_cast<std::size_t>(currentCandidates[lineIndex])] = 0;
+                            current = static_cast<DynamicArray<Line>&&>(trial);
+                            recomputeCovered(map, current, covered);
+                            currentScore = score;
+                            result.metrics = metrics;
+                            ++result.localMoves;
+                            improved = true;
+                        }
+                    }
+                }
+            }
+            if (improved) {
+                continue;
+            }
+
+            // 3) 端点缩短：去掉线路首/尾一个站。
+            for (std::size_t lineIndex = 0; lineIndex < current.size() && !improved; ++lineIndex) {
+                const Line& base = current[lineIndex];
+                if (base.stationCount() <= 2) {
+                    continue;
+                }
+                for (int side = 0; side < 2 && !improved; ++side) {
+                    if (evaluations >= search.localSearchBudget) {
+                        break;
+                    }
+                    DynamicArray<Index> stops;
+                    if (side == 0) {
+                        for (std::size_t i = 1; i < base.stations().size(); ++i) {
+                            stops.push_back(base.stations()[i]);
+                        }
+                    } else {
+                        for (std::size_t i = 0; i + 1 < base.stations().size(); ++i) {
+                            stops.push_back(base.stations()[i]);
+                        }
+                    }
+                    Line shortened = base;
+                    shortened.setStations(static_cast<DynamicArray<Index>&&>(stops));
+                    DynamicArray<Line> trial = current;
+                    trial[lineIndex] = static_cast<Line&&>(shortened);
+                    ++evaluations;
+                    ++result.candidatesEvaluated;
+                    const Metrics metrics =
+                        evaluate(map, trial, weights, demand, finalParams);
+                    const double score = scoreMetrics(metrics, scoreParams);
+                    if (score > currentScore + 1e-9) {
+                        used[static_cast<std::size_t>(currentCandidates[lineIndex])] = 0;
+                        current = static_cast<DynamicArray<Line>&&>(trial);
+                        recomputeCovered(map, current, covered);
+                        currentScore = score;
+                        result.metrics = metrics;
+                        ++result.localMoves;
+                        improved = true;
+                    }
+                }
+            }
+            if (improved) {
+                continue;
+            }
+
+            // 4) 尝试删除线路；删除后仍须满足 CoveredStations 连通。
             for (std::size_t removeAt = 0; removeAt < current.size(); ++removeAt) {
                 if (evaluations >= search.localSearchBudget) {
                     break;

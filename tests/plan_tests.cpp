@@ -239,6 +239,51 @@ void testConnectivityGate() {
     CHECK(std::isfinite(connected.r3));
 }
 
+void testCoveredStationsPartialCoverage() {
+    Map map;
+    map.addStation(makeStation("A", 0.0, 0.0));
+    map.addStation(makeStation("B", 1.0, 0.0));
+    map.addStation(makeStation("C", 2.0, 0.0));
+    map.addStation(makeStation("D", 3.0, 0.0));
+    map.addEdge(0, 1, 1.0);
+    map.addEdge(1, 2, 1.0);
+    map.addEdge(2, 3, 1.0);
+
+    WeightResult weights;
+    for (int i = 0; i < 4; ++i) {
+        weights.weights.push_back(1.0);
+    }
+    weights.clusterCount = 1;
+    const DemandResult demand = makeDemand(weights.weights, 4, 1.0, 1);
+
+    DynamicArray<Line> lines;
+    DynamicArray<Index> stops;
+    stops.push_back(0);
+    stops.push_back(1);
+    stops.push_back(2);
+    lines.push_back(makeLine(stops));
+
+    EvalParams params;
+    params.kStation = 0.0;
+    params.shortBeta = 10.0;
+    params.overrideLineOps = true;
+    params.ops.initialTimeSec = 0.0;
+    params.ops.headwaySec = 300;
+    params.ops.dwellSec = 30.0;
+    params.ops.segmentRunSec = 120.0;
+    params.ops.transferSec = 120.0;
+    params.connectivity = ConnectivityRequirement::CoveredStations;
+    params.unreachable = UnreachablePolicy::Exclude;
+
+    const Metrics metrics = evaluate(map, lines, weights, demand, params);
+    CHECK(metrics.coveredStations == 3);
+    CHECK(metrics.connected);
+    CHECK(metrics.feasible);
+    CHECK(std::fabs(metrics.r1 - 0.75) < 1e-9);
+    CHECK(metrics.unreachablePairs == 3);
+    CHECK(std::isfinite(metrics.r3));
+}
+
 void testUnreachablePolicies() {
     Map map;
     map.addStation(makeStation("A", 0.0, 0.0));
@@ -298,6 +343,7 @@ int main() {
     testDemand();
     testEvaluatorBasic();
     testConnectivityGate();
+    testCoveredStationsPartialCoverage();
     testUnreachablePolicies();
     if (failures == 0) {
         std::printf("all plan tests passed\n");

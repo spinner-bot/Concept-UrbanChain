@@ -60,8 +60,8 @@ struct EvalParams {
     double kStation = 1.0;
     double shortAlpha = 1.0;
     double shortBeta = 2.0;
-    ConnectivityRequirement connectivity = ConnectivityRequirement::AllStations;
-    UnreachablePolicy unreachable = UnreachablePolicy::Penalty;
+    ConnectivityRequirement connectivity = ConnectivityRequirement::CoveredStations;
+    UnreachablePolicy unreachable = UnreachablePolicy::Exclude;
     double unreachablePenaltySec = 3600.0;
     bool overrideLineOps = true;
     OpsDefaults ops;

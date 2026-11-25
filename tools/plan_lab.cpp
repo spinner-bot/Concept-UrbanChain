@@ -7,10 +7,13 @@
 #include <random>
 #include <sstream>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "core/map.h"
 #include "core/network.h"
 #include "ds/sort.h"
+#include "ds/union_find.h"
 #include "io/line_io.h"
 #include "io/map_io.h"
 #include "plan/demand.h"
@@ -66,6 +69,148 @@ Map makeClusteredMap(int stationsPerCluster, int clusterCount, int seed) {
                 Vec2{centerX + noise(rng), centerY + noise(rng)};
             map.addStation(station);
         }
+    }
+    return map;
+}
+
+Map makeSimulatedCity(int centerCount, int stationsPerCenter, double sigma, int seed) {
+    Map map;
+    std::mt19937 rng(static_cast<std::uint32_t>(seed * 7919 + 101));
+    std::normal_distribution<double> radial(0.0, sigma);
+    std::uniform_real_distribution<double> jitter(-0.6, 0.6);
+    std::uniform_real_distribution<double> costNoise(-0.18, 0.18);
+
+    struct Center {
+        Vec2 position;
+        int hub = kInvalidIndex;
+        std::vector<int> corridor;
+    };
+    std::vector<Center> centers;
+
+    auto addStation = [&map](double x, double y, const std::string& prefix) {
+        Station station;
+        station.id = prefix + std::to_string(map.stationCount());
+        station.name = station.id;
+        station.position = Vec2{x, y};
+        Index index = kInvalidIndex;
+        map.addStation(station, &index);
+        return index;
+    };
+    auto addEdgeNoisy = [&map, &rng, &costNoise](Index a, Index b) {
+        if (a == b || map.hasEdge(a, b)) {
+            return;
+        }
+        const double length =
+            euclideanDistance(map.station(a).position, map.station(b).position);
+        if (length < 1e-9) {
+            return;
+        }
+        const double cost = length * (1.0 + costNoise(rng));
+        map.addEdge(a, b, std::max(0.01, cost), length);
+    };
+
+    for (int c = 0; c < centerCount; ++c) {
+        const double angle =
+            6.283185307179586 * static_cast<double>(c) / std::max(1, centerCount);
+        const double radius = centerCount <= 1 ? 0.0 : 13.0;
+        Center center;
+        center.position =
+            Vec2{std::cos(angle) * radius, std::sin(angle) * radius};
+        center.hub = addStation(center.position.x, center.position.y, "H");
+        for (int i = 0; i < stationsPerCenter; ++i) {
+            const double x = center.position.x + radial(rng);
+            const double y = center.position.y + radial(rng);
+            addStation(x, y, "S");
+        }
+        centers.push_back(center);
+    }
+
+    if (centerCount == 1) {
+        // 单中心城市：从中心 hub 向若干方向延伸放射状主干走廊。
+        const int spokeCount = 5;
+        for (int s = 0; s < spokeCount; ++s) {
+            const double angle =
+                6.283185307179586 * static_cast<double>(s) / spokeCount;
+            int previous = centers[0].hub;
+            for (int k = 1; k <= 7; ++k) {
+                const double radius = 2.5 + static_cast<double>(k) * 2.4;
+                const double x = std::cos(angle) * radius + jitter(rng);
+                const double y = std::sin(angle) * radius + jitter(rng);
+                const int station = addStation(x, y, "C");
+                addEdgeNoisy(previous, station);
+                previous = station;
+            }
+        }
+    } else {
+        // 多中心城市：中心 hub 之间用环形主干走廊串联。
+        for (int c = 0; c < centerCount; ++c) {
+            Center& from = centers[static_cast<std::size_t>(c)];
+            Center& to = centers[static_cast<std::size_t>((c + 1) % centerCount)];
+            from.corridor.push_back(from.hub);
+            for (int k = 1; k <= 6; ++k) {
+                const double t = static_cast<double>(k) / 7.0;
+                const double x = from.position.x + (to.position.x - from.position.x) * t +
+                                 jitter(rng);
+                const double y = from.position.y + (to.position.y - from.position.y) * t +
+                                 jitter(rng);
+                from.corridor.push_back(addStation(x, y, "C"));
+            }
+            from.corridor.push_back(to.hub);
+            for (std::size_t i = 0; i + 1 < from.corridor.size(); ++i) {
+                addEdgeNoisy(from.corridor[i], from.corridor[i + 1]);
+            }
+        }
+    }
+
+    // k 近邻连接，形成不规则路网。
+    const int count = map.stationCount();
+    const int kNeighbors = 4;
+    for (int i = 0; i < count; ++i) {
+        std::vector<std::pair<double, int>> distances;
+        for (int j = 0; j < count; ++j) {
+            if (i == j) {
+                continue;
+            }
+            distances.push_back(
+                std::make_pair(euclideanDistance(map.station(i).position,
+                                                 map.station(j).position),
+                               j));
+        }
+        std::sort(distances.begin(), distances.end());
+        for (int k = 0; k < std::min(kNeighbors, static_cast<int>(distances.size()));
+             ++k) {
+            addEdgeNoisy(i, distances[static_cast<std::size_t>(k)].second);
+        }
+    }
+
+    // 连通修复：合并距离最近的不同分量。
+    UnionFind sets(count);
+    for (std::size_t i = 0; i < map.edges().size(); ++i) {
+        sets.unite(map.edges()[i].from, map.edges()[i].to);
+    }
+    while (sets.count() > 1) {
+        int bestA = -1;
+        int bestB = -1;
+        double bestDistance = kInfinity;
+        for (int i = 0; i < count; ++i) {
+            for (int j = i + 1; j < count; ++j) {
+                if (sets.find(i) == sets.find(j)) {
+                    continue;
+                }
+                const double d = euclideanDistance(map.station(i).position,
+                                                   map.station(j).position);
+                if (d < bestDistance) {
+                    bestDistance = d;
+                    bestA = i;
+                    bestB = j;
+                }
+            }
+        }
+        if (bestA < 0) {
+            break;
+        }
+        addEdgeNoisy(bestA, bestB);
+        sets.unite(bestA, bestB);
     }
     return map;
 }
@@ -361,19 +506,25 @@ void applyScoreProfile(ScoreParams& score, const std::string& profile) {
 }
 
 void modePlan(int cols, int rows, int k, int maxLines, const std::string& profile,
-              double minCoverage, double coveragePenalty) {
-    const Map map = makeGridMap(cols, rows);
+              double minCoverage, double coveragePenalty, const std::string& scenario,
+              int cityCenters, int perCenter, int citySeed) {
+    const Map map = scenario == "grid"
+                        ? makeGridMap(cols, rows)
+                        : makeSimulatedCity(cityCenters, perCenter, 2.6, citySeed);
     const WeightResult weights = computeWeights(map, makeWeightParams(k, 1));
     const DemandResult demand = makeDemand(map, weights, 1.0);
     EvalParams params = makeEvalParams(UnreachablePolicy::Penalty, 300, 30.0, 120.0);
     params.connectivity = ConnectivityRequirement::CoveredStations;
     SearchParams search;
     search.maxLines = maxLines;
-    search.topStations = std::min(12, map.stationCount());
-    search.candidateLimit = 120;
+    search.topStations = std::min(16, map.stationCount());
+    search.candidateLimit = scenario == "grid" ? 120 : 320;
+    search.localSearchBudget = scenario == "grid" ? 120 : 24;
     applyScoreProfile(search.score, profile);
     search.score.minCoverage = minCoverage;
     search.score.coveragePenalty = coveragePenalty;
+    std::cout << "scenario=" << scenario << " stations=" << map.stationCount()
+              << " edges=" << map.edges().size() << '\n';
 
     const PlanResult plan = buildGreedyPlan(map, weights, demand, params, search);
     std::cout << "plan: " << map.stationCount() << " stations, "
@@ -387,10 +538,12 @@ void modePlan(int cols, int rows, int k, int maxLines, const std::string& profil
     std::cout << "after local search:\n";
     printMetrics(plan.metrics);
 
-    const DynamicArray<Line> gridLines = makeGridLines(map, cols, rows, true, true);
-    const Metrics gridMetrics = evaluate(map, gridLines, weights, demand, params);
-    std::cout << "full grid baseline: " << gridLines.size() << " lines\n";
-    printMetrics(gridMetrics);
+    if (scenario == "grid") {
+        const DynamicArray<Line> gridLines = makeGridLines(map, cols, rows, true, true);
+        const Metrics gridMetrics = evaluate(map, gridLines, weights, demand, params);
+        std::cout << "full grid baseline: " << gridLines.size() << " lines\n";
+        printMetrics(gridMetrics);
+    }
 }
 
 void modeDemo(const std::string& mapPath, const std::string& linePath) {
@@ -422,7 +575,8 @@ void usage() {
               << "  timing       --k 3\n"
               << "  policy       --cols 8 --rows 8 --k 3\n"
               << "  ops          --cols 8 --rows 8 --k 3\n"
-              << "  plan         --cols 8 --rows 8 --k 3 --max-lines 6 --profile balanced|coverage|service\n"
+              << "  plan         --scenario city|grid --centers 1 --per-center 60 --city-seed 1\n"
+              << "               --k 3 --max-lines 8 --profile balanced|coverage|service\n"
               << "               --min-coverage 0.8 --coverage-penalty 1.0\n"
               << "  demo         --map data/demo.cuc3m3 --lines data/demo.cuc3l\n";
 }
@@ -441,8 +595,12 @@ int main(int argc, char** argv) {
     int seed = 1;
     int perCluster = 50;
     int spatialClusters = 3;
-    int maxLines = 6;
+    int maxLines = 8;
     std::string profile = "balanced";
+    std::string scenario = "city";
+    int cityCenters = 1;
+    int perCenter = 60;
+    int citySeed = 1;
     double minCoverage = 0.8;
     double coveragePenalty = 1.0;
     std::string mapPath = "data/demo.cuc3m3";
@@ -466,6 +624,14 @@ int main(int argc, char** argv) {
             maxLines = std::stoi(argv[++i]);
         } else if (arg == "--profile" && i + 1 < argc) {
             profile = argv[++i];
+        } else if (arg == "--scenario" && i + 1 < argc) {
+            scenario = argv[++i];
+        } else if (arg == "--centers" && i + 1 < argc) {
+            cityCenters = std::stoi(argv[++i]);
+        } else if (arg == "--per-center" && i + 1 < argc) {
+            perCenter = std::stoi(argv[++i]);
+        } else if (arg == "--city-seed" && i + 1 < argc) {
+            citySeed = std::stoi(argv[++i]);
         } else if (arg == "--min-coverage" && i + 1 < argc) {
             minCoverage = std::stod(argv[++i]);
         } else if (arg == "--coverage-penalty" && i + 1 < argc) {
@@ -490,7 +656,8 @@ int main(int argc, char** argv) {
     } else if (mode == "ops") {
         modeOps(cols, rows, k);
     } else if (mode == "plan") {
-        modePlan(cols, rows, k, maxLines, profile, minCoverage, coveragePenalty);
+        modePlan(cols, rows, k, maxLines, profile, minCoverage, coveragePenalty,
+                 scenario, cityCenters, perCenter, citySeed);
     } else if (mode == "demo") {
         modeDemo(mapPath, linePath);
     } else {

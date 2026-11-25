@@ -601,7 +601,8 @@ void modePlan(int cols, int rows, int k, int maxLines, const std::string& profil
     search.score.minCoverage = minCoverage;
     search.score.coveragePenalty = coveragePenalty;
     std::cout << "scenario=" << scenario << " stations=" << map.stationCount()
-              << " edges=" << map.edges().size() << '\n';
+              << " edges=" << map.edges().size() << " r1=" << r1Mode
+              << " lambda=" << number(coverageLambda) << '\n';
 
     const PlanResult plan = buildGreedyPlan(map, weights, demand, params, search);
     std::cout << "plan: " << map.stationCount() << " stations, "
@@ -678,7 +679,8 @@ void modePlanFile(const std::string& mapPath, const std::string& outLinesPath,
         return;
     }
     std::cout << "map=" << mapPath << " stations=" << source.map().stationCount()
-              << " edges=" << source.map().edges().size() << '\n';
+              << " edges=" << source.map().edges().size() << " r1=" << r1Mode
+              << " lambda=" << number(coverageLambda) << '\n';
     std::cout << "planned lines=" << plan.lines.size()
               << " merged=" << plan.mergedLines
               << " duplicatesRemoved=" << plan.duplicateLinesRemoved
@@ -737,7 +739,8 @@ void usage() {
               << "               --k 3 --max-lines 8 --profile balanced|coverage|service\n"
               << "               --min-coverage 0.8 --coverage-penalty 1.0 [--no-local]\n"
               << "               [--local-budget 24] [--no-prefilter]\n"
-              << "               [--r1-mode unique|log|sat] [--r1-lambda 0.25]\n"
+              << "               [--r1-mode sat|log|unique] [--r1-lambda 0.25]\n"
+              << "               default r1-mode=sat lambda=0.25\n"
               << "  plan-file    --map data/city_demo.cuc3m3 --out-lines data/city_demo_planned.cuc3l\n"
               << "  audit        --map data/city_demo.cuc3m3 --lines data/city_demo.cuc3l [--short-threshold 3]\n"
               << "  demo         --map data/demo.cuc3m3 --lines data/demo.cuc3l\n";
@@ -769,7 +772,7 @@ int main(int argc, char** argv) {
     bool prefilter = true;
     int localBudget = 0;
     int shortThreshold = 3;
-    std::string r1Mode = "unique";
+    std::string r1Mode = "sat";
     double coverageLambda = 0.25;
     std::string mapPath = "data/demo.cuc3m3";
     std::string linePath = "data/demo.cuc3l";

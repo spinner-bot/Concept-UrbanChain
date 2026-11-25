@@ -169,6 +169,8 @@ void printWeights(const Map& map, const WeightResult& result, int top) {
     std::cout << "stations=" << map.stationCount()
               << " clusters=" << result.clusterCount
               << " iterations=" << result.iterations
+              << " restarts=" << result.restartsTried
+              << " inertia=" << number(result.inertia)
               << " R=" << number(result.scaleR)
               << " global=(" << number(result.globalCenter.x) << ","
               << number(result.globalCenter.y) << ")\n";

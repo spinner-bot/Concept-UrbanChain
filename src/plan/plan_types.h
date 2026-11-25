@@ -37,6 +37,9 @@ struct WeightParams {
     Vec2 customCenter;
     WeightNormalization normalization = WeightNormalization::Mean;
     int seed = 1;
+    // 随机重启次数；<=0 表示自动取 10*K-10+(K==1)。
+    // 最远点优先初始化总会额外跑一次，与这些随机种子共同比较 inertia。
+    int randomRestarts = 0;
 };
 
 struct DemandParams {
@@ -72,6 +75,8 @@ struct WeightResult {
     double scaleR = 1.0;
     int clusterCount = 0;
     int iterations = 0;
+    int restartsTried = 0;
+    double inertia = 0.0;
 };
 
 struct DemandResult {

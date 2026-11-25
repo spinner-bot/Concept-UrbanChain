@@ -3,54 +3,102 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <random>
+#include <utility>
 
 namespace uc {
 namespace plan {
 namespace {
 
-struct XY {
-    double x = 0.0;
-    double y = 0.0;
+struct KMeansOutcome {
+    DynamicArray<Vec2> centers;
+    DynamicArray<int> clusterOf;
+    double inertia = kInfinity;
+    int iterations = 0;
 };
 
-double distance(const XY& a, const XY& b) {
+double squaredDistance(const Vec2& a, const Vec2& b) {
     const double dx = a.x - b.x;
     const double dy = a.y - b.y;
-    return std::sqrt(dx * dx + dy * dy);
+    return dx * dx + dy * dy;
 }
 
-}  // namespace
-
-WeightResult computeWeights(const Map& map, const WeightParams& params) {
-    WeightResult result;
+DynamicArray<Vec2> farthestFirstInit(const Map& map, int K) {
     const int count = map.stationCount();
-    if (count <= 0) {
-        return result;
+    DynamicArray<Vec2> centers;
+    if (count <= 0 || K <= 0) {
+        return centers;
     }
 
-    const int K = std::max(1, std::min(params.clusters, count));
-    result.clusterCount = K;
-    result.clusterOf.resize(static_cast<std::size_t>(count));
-    result.weights.resize(static_cast<std::size_t>(count));
-    result.centers.resize(static_cast<std::size_t>(K));
+    Vec2 mean;
+    for (int i = 0; i < count; ++i) {
+        mean.x += map.station(i).position.x;
+        mean.y += map.station(i).position.y;
+    }
+    mean.x /= count;
+    mean.y /= count;
 
-    std::mt19937 rng(static_cast<std::uint32_t>(params.seed));
+    int first = 0;
+    double best = -1.0;
+    for (int i = 0; i < count; ++i) {
+        const double d = squaredDistance(map.station(i).position, mean);
+        if (d > best) {
+            best = d;
+            first = i;
+        }
+    }
+    centers.push_back(map.station(first).position);
+
+    while (static_cast<int>(centers.size()) < K) {
+        int chosen = 0;
+        double chosenDistance = -1.0;
+        for (int i = 0; i < count; ++i) {
+            double nearest = kInfinity;
+            for (std::size_t k = 0; k < centers.size(); ++k) {
+                nearest = std::min(nearest, squaredDistance(map.station(i).position, centers[k]));
+            }
+            if (nearest > chosenDistance) {
+                chosenDistance = nearest;
+                chosen = i;
+            }
+        }
+        centers.push_back(map.station(chosen).position);
+    }
+    return centers;
+}
+
+DynamicArray<Vec2> randomInit(const Map& map, int K, std::uint32_t seed) {
+    const int count = map.stationCount();
+    DynamicArray<Vec2> centers;
+    if (count <= 0 || K <= 0) {
+        return centers;
+    }
+    std::mt19937 rng(seed);
     std::uniform_int_distribution<int> pick(0, count - 1);
     DynamicArray<unsigned char> used;
     used.resize(static_cast<std::size_t>(count));
     for (int i = 0; i < count; ++i) {
         used[static_cast<std::size_t>(i)] = 0;
     }
-
-    for (int k = 0; k < K; ++k) {
-        int index = pick(rng);
-        while (used[static_cast<std::size_t>(index)]) {
-            index = pick(rng);
+    while (static_cast<int>(centers.size()) < K) {
+        const int index = pick(rng);
+        if (used[static_cast<std::size_t>(index)]) {
+            continue;
         }
         used[static_cast<std::size_t>(index)] = 1;
-        const Vec2& position = map.station(index).position;
-        result.centers[static_cast<std::size_t>(k)] = position;
+        centers.push_back(map.station(index).position);
+    }
+    return centers;
+}
+
+KMeansOutcome runKMeans(const Map& map, int K, DynamicArray<Vec2> centers) {
+    KMeansOutcome outcome;
+    const int count = map.stationCount();
+    outcome.centers = static_cast<DynamicArray<Vec2>&&>(centers);
+    outcome.clusterOf.resize(static_cast<std::size_t>(count));
+    for (int i = 0; i < count; ++i) {
+        outcome.clusterOf[static_cast<std::size_t>(i)] = 0;
     }
 
     int iteration = 0;
@@ -61,14 +109,15 @@ WeightResult computeWeights(const Map& map, const WeightParams& params) {
             int best = 0;
             double bestDistance = kInfinity;
             for (int k = 0; k < K; ++k) {
-                const double d = euclideanDistance(position, result.centers[static_cast<std::size_t>(k)]);
+                const double d =
+                    squaredDistance(position, outcome.centers[static_cast<std::size_t>(k)]);
                 if (d < bestDistance) {
                     bestDistance = d;
                     best = k;
                 }
             }
-            if (result.clusterOf[static_cast<std::size_t>(i)] != best) {
-                result.clusterOf[static_cast<std::size_t>(i)] = best;
+            if (outcome.clusterOf[static_cast<std::size_t>(i)] != best) {
+                outcome.clusterOf[static_cast<std::size_t>(i)] = best;
                 changed = true;
             }
         }
@@ -85,15 +134,14 @@ WeightResult computeWeights(const Map& map, const WeightParams& params) {
             counts[static_cast<std::size_t>(k)] = 0;
         }
         for (int i = 0; i < count; ++i) {
-            const int k = result.clusterOf[static_cast<std::size_t>(i)];
-            const Vec2& position = map.station(i).position;
-            sumX[static_cast<std::size_t>(k)] += position.x;
-            sumY[static_cast<std::size_t>(k)] += position.y;
+            const int k = outcome.clusterOf[static_cast<std::size_t>(i)];
+            sumX[static_cast<std::size_t>(k)] += map.station(i).position.x;
+            sumY[static_cast<std::size_t>(k)] += map.station(i).position.y;
             ++counts[static_cast<std::size_t>(k)];
         }
         for (int k = 0; k < K; ++k) {
             if (counts[static_cast<std::size_t>(k)] > 0) {
-                result.centers[static_cast<std::size_t>(k)] =
+                outcome.centers[static_cast<std::size_t>(k)] =
                     Vec2{sumX[static_cast<std::size_t>(k)] / counts[static_cast<std::size_t>(k)],
                          sumY[static_cast<std::size_t>(k)] / counts[static_cast<std::size_t>(k)]};
             } else {
@@ -107,15 +155,15 @@ WeightResult computeWeights(const Map& map, const WeightParams& params) {
                         }
                         nearest = std::min(
                             nearest,
-                            euclideanDistance(map.station(i).position,
-                                              result.centers[static_cast<std::size_t>(other)]));
+                            squaredDistance(map.station(i).position,
+                                            outcome.centers[static_cast<std::size_t>(other)]));
                     }
                     if (nearest > farthestDistance) {
                         farthestDistance = nearest;
                         farthest = i;
                     }
                 }
-                result.centers[static_cast<std::size_t>(k)] = map.station(farthest).position;
+                outcome.centers[static_cast<std::size_t>(k)] = map.station(farthest).position;
                 changed = true;
             }
         }
@@ -123,22 +171,72 @@ WeightResult computeWeights(const Map& map, const WeightParams& params) {
             break;
         }
     }
-    result.iterations = iteration + 1;
+    outcome.iterations = iteration + 1;
 
-    // 最终再分配一次，保证 clusterOf 与当前中心一致。
     for (int i = 0; i < count; ++i) {
         const Vec2& position = map.station(i).position;
         int best = 0;
         double bestDistance = kInfinity;
         for (int k = 0; k < K; ++k) {
-            const double d = euclideanDistance(position, result.centers[static_cast<std::size_t>(k)]);
+            const double d =
+                squaredDistance(position, outcome.centers[static_cast<std::size_t>(k)]);
             if (d < bestDistance) {
                 bestDistance = d;
                 best = k;
             }
         }
-        result.clusterOf[static_cast<std::size_t>(i)] = best;
+        outcome.clusterOf[static_cast<std::size_t>(i)] = best;
     }
+
+    outcome.inertia = 0.0;
+    for (int i = 0; i < count; ++i) {
+        outcome.inertia += squaredDistance(
+            map.station(i).position,
+            outcome.centers[static_cast<std::size_t>(
+                outcome.clusterOf[static_cast<std::size_t>(i)])]);
+    }
+    return outcome;
+}
+
+int effectiveRestarts(const WeightParams& params, int K) {
+    if (params.randomRestarts > 0) {
+        return params.randomRestarts;
+    }
+    return std::max(0, 10 * K - 10) + (K == 1 ? 1 : 0);
+}
+
+}  // namespace
+
+WeightResult computeWeights(const Map& map, const WeightParams& params) {
+    WeightResult result;
+    const int count = map.stationCount();
+    if (count <= 0) {
+        return result;
+    }
+
+    const int K = std::max(1, std::min(params.clusters, count));
+    result.clusterCount = K;
+
+    // 候选 0：最远点优先；候选 1..N：固定 seed 的随机初始化。
+    // 全部跑完后按 K-means inertia 取最优。
+    KMeansOutcome best = runKMeans(map, K, farthestFirstInit(map, K));
+    const int restarts = effectiveRestarts(params, K);
+    result.restartsTried = 1;
+    for (int r = 0; r < restarts; ++r) {
+        const std::uint32_t seed =
+            static_cast<std::uint32_t>(params.seed) * 1000003u +
+            static_cast<std::uint32_t>(r) * 7919u + 17u;
+        KMeansOutcome candidate = runKMeans(map, K, randomInit(map, K, seed));
+        ++result.restartsTried;
+        if (candidate.inertia < best.inertia) {
+            best = static_cast<KMeansOutcome&&>(candidate);
+        }
+    }
+
+    result.clusterOf = best.clusterOf;
+    result.centers = best.centers;
+    result.iterations = best.iterations;
+    result.inertia = best.inertia;
 
     switch (params.globalCenterMode) {
         case GlobalCenterMode::StationMean: {
@@ -173,6 +271,7 @@ WeightResult computeWeights(const Map& map, const WeightParams& params) {
         result.scaleR = 1.0;
     }
 
+    result.weights.resize(static_cast<std::size_t>(count));
     const double epsilon = std::max(params.epsilon, 1e-12);
     const double exponent = std::max(0.0, params.regionalExponent);
     double weightSum = 0.0;

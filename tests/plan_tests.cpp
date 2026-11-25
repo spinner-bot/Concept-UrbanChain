@@ -89,6 +89,8 @@ void testWeights() {
     const WeightResult single = computeWeights(map, params);
     CHECK(single.clusterCount == 1);
     CHECK(single.weights.size() == 4);
+    CHECK(single.restartsTried == 2);  // 最远点 + 自动 1 次随机
+    CHECK(single.inertia >= 0.0);
     double sum = 0.0;
     for (std::size_t i = 0; i < single.weights.size(); ++i) {
         CHECK(single.weights[i] > 0.0);
@@ -102,6 +104,7 @@ void testWeights() {
     CHECK(two.clusterCount == 2);
     CHECK(two.weights.size() == 4);
     CHECK(two.clusterOf.size() == 4);
+    CHECK(two.restartsTried == 11);  // 最远点 + 自动 10 次随机
 }
 
 void testDemand() {

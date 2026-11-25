@@ -30,6 +30,7 @@ add_library(uc_plan STATIC
     src/plan/demand.cpp
     src/plan/evaluator.cpp
     src/plan/search.cpp
+    src/plan/audit.cpp
 )
 target_link_libraries(uc_plan PUBLIC uc_core)
 

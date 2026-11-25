@@ -36,6 +36,10 @@ struct SearchParams {
     // 局部移动先做静态指标预筛，再对候选做完整 OD 评价。
     bool prefilter = true;
     double prefilterMargin = 0.0;
+    // 搜索结束后做线路级清理：重复线、可贯通线、冗余短线。
+    bool enableCleanup = true;
+    double maxMergeTurnDeg = 45.0;
+    int cleanupBudget = 120;
     ScoreParams score;
 };
 
@@ -46,6 +50,9 @@ struct PlanResult {
     int candidatesEvaluated = 0;
     int steps = 0;
     int localMoves = 0;
+    int mergedLines = 0;
+    int duplicateLinesRemoved = 0;
+    int redundantLinesRemoved = 0;
     double score = 0.0;
 };
 

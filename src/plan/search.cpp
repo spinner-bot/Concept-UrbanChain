@@ -8,6 +8,7 @@
 #include "ds/binary_heap.h"
 #include "ds/hash_map.h"
 #include "ds/sort.h"
+#include "plan/audit.h"
 #include "plan/evaluator.h"
 
 namespace uc {
@@ -161,6 +162,51 @@ std::string pathKey(const DynamicArray<Index>& path) {
     return forward < backward ? forward : backward;
 }
 
+bool sameStationSet(const Line& a, const Line& b) {
+    if (a.stationCount() != b.stationCount()) {
+        return false;
+    }
+    for (int i = 0; i < a.stationCount(); ++i) {
+        bool found = false;
+        for (int j = 0; j < b.stationCount(); ++j) {
+            if (a.stations()[static_cast<std::size_t>(i)] ==
+                b.stations()[static_cast<std::size_t>(j)]) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool isStationSubset(const Line& candidate, const Line& container) {
+    if (candidate.stationCount() >= container.stationCount()) {
+        return false;
+    }
+    for (int i = 0; i < candidate.stationCount(); ++i) {
+        if (!container.containsStation(candidate.stations()[static_cast<std::size_t>(i)])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool containsDuplicateLine(const DynamicArray<Line>& lines, const Line& candidate,
+                           int ignore = -1) {
+    for (std::size_t i = 0; i < lines.size(); ++i) {
+        if (static_cast<int>(i) == ignore) {
+            continue;
+        }
+        if (sameStationSet(lines[i], candidate)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 Line makeCandidate(const DynamicArray<Index>& path, std::uint32_t color) {
     Line line(0, "candidate", color);
     for (std::size_t i = 0; i < path.size(); ++i) {
@@ -299,6 +345,75 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
         }
     }
 
+    // 方向多样性种子：先放入跨城/跨轴的候选，避免锚点对排序把候选池
+    // 全部塞满同一方向。网格图中这会显式提供南北向候选。
+    auto addExtremePair = [&](Index a, Index b) {
+        if (a >= 0 && b >= 0 && a != b) {
+            addCandidate(a, b);
+        }
+    };
+    int minX = -1;
+    int maxX = -1;
+    int minY = -1;
+    int maxY = -1;
+    int minSum = -1;
+    int maxSum = -1;
+    int minDiff = -1;
+    int maxDiff = -1;
+    for (int i = 0; i < stationCount; ++i) {
+        const Vec2 p = map.station(i).position;
+        if (minX < 0 || p.x < map.station(minX).position.x) minX = i;
+        if (maxX < 0 || p.x > map.station(maxX).position.x) maxX = i;
+        if (minY < 0 || p.y < map.station(minY).position.y) minY = i;
+        if (maxY < 0 || p.y > map.station(maxY).position.y) maxY = i;
+        if (minSum < 0 || p.x + p.y < map.station(minSum).position.x +
+                                           map.station(minSum).position.y)
+            minSum = i;
+        if (maxSum < 0 || p.x + p.y > map.station(maxSum).position.x +
+                                           map.station(maxSum).position.y)
+            maxSum = i;
+        if (minDiff < 0 || p.x - p.y < map.station(minDiff).position.x -
+                                           map.station(minDiff).position.y)
+            minDiff = i;
+        if (maxDiff < 0 || p.x - p.y > map.station(maxDiff).position.x -
+                                           map.station(maxDiff).position.y)
+            maxDiff = i;
+    }
+    addExtremePair(minX, maxX);
+    addExtremePair(minY, maxY);
+    addExtremePair(minSum, maxSum);
+    addExtremePair(minDiff, maxDiff);
+
+    constexpr int kSectors = 8;
+    constexpr double kTwoPi = 6.28318530717958647692;
+    int sectorStation[kSectors];
+    double sectorDistance[kSectors];
+    for (int s = 0; s < kSectors; ++s) {
+        sectorStation[s] = -1;
+        sectorDistance[s] = -1.0;
+    }
+    for (int i = 0; i < stationCount; ++i) {
+        const Vec2 delta{map.station(i).position.x - weights.globalCenter.x,
+                         map.station(i).position.y - weights.globalCenter.y};
+        const double distance = std::sqrt(delta.x * delta.x + delta.y * delta.y);
+        if (distance < 1e-9) {
+            continue;
+        }
+        double angle = std::atan2(delta.y, delta.x);
+        if (angle < 0.0) {
+            angle += kTwoPi;
+        }
+        int sector = static_cast<int>(angle / (kTwoPi / kSectors));
+        sector = std::max(0, std::min(kSectors - 1, sector));
+        if (distance > sectorDistance[sector]) {
+            sectorDistance[sector] = distance;
+            sectorStation[sector] = i;
+        }
+    }
+    for (int s = 0; s < kSectors / 2; ++s) {
+        addExtremePair(sectorStation[s], sectorStation[s + kSectors / 2]);
+    }
+
     for (std::size_t i = 0; i < anchors.size(); ++i) {
         for (std::size_t j = i + 1; j < anchors.size(); ++j) {
             addCandidate(anchors[i], anchors[j]);
@@ -395,6 +510,9 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
                 continue;
             }
             const Line& candidate = candidates[c];
+            if (containsDuplicateLine(current, candidate)) {
+                continue;
+            }
             if (!current.empty()) {
                 bool shares = false;
                 for (std::size_t i = 0; i < candidate.stations().size(); ++i) {
@@ -492,6 +610,9 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
                     continue;
                 }
                 const Line& candidate = candidates[c];
+                if (containsDuplicateLine(current, candidate)) {
+                    continue;
+                }
                 bool shares = current.empty();
                 for (std::size_t i = 0; i < candidate.stations().size() && !shares; ++i) {
                     shares = covered[static_cast<std::size_t>(candidate.stations()[i])] != 0;
@@ -768,6 +889,142 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
             }
         }
         result.score = currentScore;
+    }
+
+    // 线路级清理：先消除重复线，再尝试同向贯通，最后删除冗余线。
+    // 这些操作直接针对“短线碎片/重复线/本应贯通却断开”的结构问题，
+    // 与按站增删的局部搜索互补。
+    if (search.enableCleanup && !current.empty() && search.cleanupBudget > 0) {
+        EvalParams cleanupParams = finalParams;
+        cleanupParams.evaluateOd = true;
+        double cleanupScore = result.score;
+        int cleanupEvaluations = 0;
+        bool changed = true;
+        int guard = 0;
+
+        while (changed && cleanupEvaluations < search.cleanupBudget && guard < 64) {
+            changed = false;
+            ++guard;
+
+            // 1) 重复线路：站点集合相同，保留第一条，其余直接删除。
+            //    重复线只会增加建设/站台成本，不提供新的覆盖或连通性。
+            bool removedDuplicate = false;
+            for (std::size_t i = 0; i < current.size() && !removedDuplicate; ++i) {
+                for (std::size_t j = i + 1; j < current.size(); ++j) {
+                    if (!sameStationSet(current[i], current[j])) {
+                        continue;
+                    }
+                    current.erase(j);
+                    ++result.duplicateLinesRemoved;
+                    removedDuplicate = true;
+                    break;
+                }
+            }
+            if (removedDuplicate) {
+                result.metrics = evaluate(map, current, weights, demand, cleanupParams);
+                cleanupScore = scoreMetrics(result.metrics, scoreParams);
+                changed = true;
+                continue;
+            }
+
+            // 2) 被完全包含的短线：例如某条线只是另一条线的一段。
+            //    它不增加新站点或新边，只增加成本与短线惩罚，直接删除。
+            bool removedSubset = false;
+            for (std::size_t i = 0; i < current.size() && !removedSubset; ++i) {
+                for (std::size_t j = 0; j < current.size(); ++j) {
+                    if (i == j) {
+                        continue;
+                    }
+                    if (!isStationSubset(current[i], current[j])) {
+                        continue;
+                    }
+                    current.erase(i);
+                    ++result.redundantLinesRemoved;
+                    removedSubset = true;
+                    break;
+                }
+            }
+            if (removedSubset) {
+                result.metrics = evaluate(map, current, weights, demand, cleanupParams);
+                cleanupScore = scoreMetrics(result.metrics, scoreParams);
+                changed = true;
+                continue;
+            }
+
+            // 3) 同向贯通：两条线在端点相接、合并后仍是简单路径，
+            //    且转角不超过阈值时，尝试合并为一条线。
+            for (std::size_t i = 0; i < current.size() && !changed; ++i) {
+                for (std::size_t j = i + 1; j < current.size() && !changed; ++j) {
+                    if (cleanupEvaluations >= search.cleanupBudget) {
+                        break;
+                    }
+                    Line merged;
+                    double turn = 180.0;
+                    if (!mergeLinePair(map, current[i], current[j], merged, &turn)) {
+                        continue;
+                    }
+                    if (turn > search.maxMergeTurnDeg) {
+                        continue;
+                    }
+                    DynamicArray<Line> trial;
+                    for (std::size_t k = 0; k < current.size(); ++k) {
+                        if (k == i) {
+                            trial.push_back(merged);
+                        } else if (k != j) {
+                            trial.push_back(current[k]);
+                        }
+                    }
+                    ++cleanupEvaluations;
+                    ++result.candidatesEvaluated;
+                    const Metrics metrics =
+                        evaluate(map, trial, weights, demand, cleanupParams);
+                    if (!metrics.feasible) {
+                        continue;
+                    }
+                    const double score = scoreMetrics(metrics, scoreParams);
+                    if (score > cleanupScore + 1e-9) {
+                        current = static_cast<DynamicArray<Line>&&>(trial);
+                        cleanupScore = score;
+                        result.metrics = metrics;
+                        ++result.mergedLines;
+                        changed = true;
+                    }
+                }
+            }
+            if (changed) {
+                continue;
+            }
+
+            // 4) 冗余线路：删除后仍可行且代理分数提高，则删除。
+            for (std::size_t removeAt = 0; removeAt < current.size() && !changed;
+                 ++removeAt) {
+                if (cleanupEvaluations >= search.cleanupBudget) {
+                    break;
+                }
+                DynamicArray<Line> trial;
+                for (std::size_t k = 0; k < current.size(); ++k) {
+                    if (k != removeAt) {
+                        trial.push_back(current[k]);
+                    }
+                }
+                ++cleanupEvaluations;
+                ++result.candidatesEvaluated;
+                const Metrics metrics =
+                    evaluate(map, trial, weights, demand, cleanupParams);
+                if (!metrics.feasible) {
+                    continue;
+                }
+                const double score = scoreMetrics(metrics, scoreParams);
+                if (score > cleanupScore + 1e-9) {
+                    current = static_cast<DynamicArray<Line>&&>(trial);
+                    cleanupScore = score;
+                    result.metrics = metrics;
+                    ++result.redundantLinesRemoved;
+                    changed = true;
+                }
+            }
+        }
+        result.score = cleanupScore;
     }
 
     result.lines = current;

@@ -360,7 +360,8 @@ void applyScoreProfile(ScoreParams& score, const std::string& profile) {
     }
 }
 
-void modePlan(int cols, int rows, int k, int maxLines, const std::string& profile) {
+void modePlan(int cols, int rows, int k, int maxLines, const std::string& profile,
+              double minCoverage, double coveragePenalty) {
     const Map map = makeGridMap(cols, rows);
     const WeightResult weights = computeWeights(map, makeWeightParams(k, 1));
     const DemandResult demand = makeDemand(map, weights, 1.0);
@@ -371,6 +372,8 @@ void modePlan(int cols, int rows, int k, int maxLines, const std::string& profil
     search.topStations = std::min(12, map.stationCount());
     search.candidateLimit = 120;
     applyScoreProfile(search.score, profile);
+    search.score.minCoverage = minCoverage;
+    search.score.coveragePenalty = coveragePenalty;
 
     const PlanResult plan = buildGreedyPlan(map, weights, demand, params, search);
     std::cout << "plan: " << map.stationCount() << " stations, "
@@ -420,6 +423,7 @@ void usage() {
               << "  policy       --cols 8 --rows 8 --k 3\n"
               << "  ops          --cols 8 --rows 8 --k 3\n"
               << "  plan         --cols 8 --rows 8 --k 3 --max-lines 6 --profile balanced|coverage|service\n"
+              << "               --min-coverage 0.8 --coverage-penalty 1.0\n"
               << "  demo         --map data/demo.cuc3m3 --lines data/demo.cuc3l\n";
 }
 
@@ -439,6 +443,8 @@ int main(int argc, char** argv) {
     int spatialClusters = 3;
     int maxLines = 6;
     std::string profile = "balanced";
+    double minCoverage = 0.8;
+    double coveragePenalty = 1.0;
     std::string mapPath = "data/demo.cuc3m3";
     std::string linePath = "data/demo.cuc3l";
 
@@ -460,6 +466,10 @@ int main(int argc, char** argv) {
             maxLines = std::stoi(argv[++i]);
         } else if (arg == "--profile" && i + 1 < argc) {
             profile = argv[++i];
+        } else if (arg == "--min-coverage" && i + 1 < argc) {
+            minCoverage = std::stod(argv[++i]);
+        } else if (arg == "--coverage-penalty" && i + 1 < argc) {
+            coveragePenalty = std::stod(argv[++i]);
         } else if (arg == "--map" && i + 1 < argc) {
             mapPath = argv[++i];
         } else if (arg == "--lines" && i + 1 < argc) {
@@ -480,7 +490,7 @@ int main(int argc, char** argv) {
     } else if (mode == "ops") {
         modeOps(cols, rows, k);
     } else if (mode == "plan") {
-        modePlan(cols, rows, k, maxLines, profile);
+        modePlan(cols, rows, k, maxLines, profile, minCoverage, coveragePenalty);
     } else if (mode == "demo") {
         modeDemo(mapPath, linePath);
     } else {

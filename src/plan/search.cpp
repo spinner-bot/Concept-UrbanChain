@@ -78,6 +78,71 @@ DynamicArray<Index> shortestPath(const Map& map, Index start, Index goal) {
     return path;
 }
 
+DynamicArray<Index> shortestPathAvoiding(const Map& map, Index start, Index goal,
+                                         const DynamicArray<unsigned char>& forbidden) {
+    DynamicArray<Index> path;
+    if (start == goal || start < 0 || goal < 0 || start >= map.stationCount() ||
+        goal >= map.stationCount()) {
+        return path;
+    }
+    const int count = map.stationCount();
+    DynamicArray<double> dist;
+    DynamicArray<int> previous;
+    dist.resize(static_cast<std::size_t>(count));
+    previous.resize(static_cast<std::size_t>(count));
+    for (int i = 0; i < count; ++i) {
+        dist[static_cast<std::size_t>(i)] = kInfinity;
+        previous[static_cast<std::size_t>(i)] = -1;
+    }
+    BinaryMinHeap heap;
+    dist[static_cast<std::size_t>(start)] = 0.0;
+    heap.push(0.0, start);
+    while (!heap.empty()) {
+        const HeapItem item = heap.pop();
+        const Index station = item.value;
+        if (item.key > dist[static_cast<std::size_t>(station)] + 1e-9) {
+            continue;
+        }
+        if (station == goal) {
+            break;
+        }
+        const DynamicArray<AdjEdge>& neighbors = map.neighbors(station);
+        for (std::size_t i = 0; i < neighbors.size(); ++i) {
+            const AdjEdge& edge = neighbors[i];
+            if (forbidden[static_cast<std::size_t>(edge.to)] && edge.to != goal) {
+                continue;
+            }
+            const double next = item.key + edge.cost;
+            if (next + 1e-9 < dist[static_cast<std::size_t>(edge.to)]) {
+                dist[static_cast<std::size_t>(edge.to)] = next;
+                previous[static_cast<std::size_t>(edge.to)] = station;
+                heap.push(next, edge.to);
+            }
+        }
+    }
+    if (std::isinf(dist[static_cast<std::size_t>(goal)])) {
+        return path;
+    }
+    int current = goal;
+    while (current >= 0) {
+        path.push_back(current);
+        if (current == start) {
+            break;
+        }
+        current = previous[static_cast<std::size_t>(current)];
+    }
+    if (path.empty() || path.back() != start) {
+        path.clear();
+        return path;
+    }
+    for (std::size_t i = 0, j = path.size(); i + 1 < j; ++i, --j) {
+        const Index tmp = path[i];
+        path[i] = path[j - 1];
+        path[j - 1] = tmp;
+    }
+    return path;
+}
+
 std::string pathKey(const DynamicArray<Index>& path) {
     std::string forward;
     std::string backward;
@@ -532,7 +597,76 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
                 continue;
             }
 
-            // 4) 整线替换：保持线路数不变，用候选线替换现有线路。
+            // 4) 中段重构：取线路上两个非相邻站，禁止原线路站点（端点除外）后
+            //    求替代路径，替换中间段。
+            int rerouteTries = 0;
+            DynamicArray<unsigned char> forbidden;
+            forbidden.resize(static_cast<std::size_t>(stationCount));
+            for (std::size_t lineIndex = 0;
+                 lineIndex < current.size() && !improved; ++lineIndex) {
+                const Line& base = current[lineIndex];
+                if (base.stationCount() < 3) {
+                    continue;
+                }
+                for (std::size_t i = 0; i + 2 < base.stations().size() && !improved; ++i) {
+                    for (std::size_t j = i + 2; j < base.stations().size() && !improved;
+                         ++j) {
+                        if (rerouteTries >= 40 ||
+                            evaluations >= search.localSearchBudget) {
+                            break;
+                        }
+                        ++rerouteTries;
+                        for (int s = 0; s < stationCount; ++s) {
+                            forbidden[static_cast<std::size_t>(s)] = 0;
+                        }
+                        for (std::size_t k = 0; k < base.stations().size(); ++k) {
+                            forbidden[static_cast<std::size_t>(base.stations()[k])] = 1;
+                        }
+                        const Index a = base.stations()[i];
+                        const Index b = base.stations()[j];
+                        forbidden[static_cast<std::size_t>(a)] = 0;
+                        forbidden[static_cast<std::size_t>(b)] = 0;
+                        const DynamicArray<Index> alternative =
+                            shortestPathAvoiding(map, a, b, forbidden);
+                        if (alternative.size() < 2) {
+                            continue;
+                        }
+                        DynamicArray<Index> stops;
+                        for (std::size_t k = 0; k <= i; ++k) {
+                            stops.push_back(base.stations()[k]);
+                        }
+                        for (std::size_t k = 1; k < alternative.size(); ++k) {
+                            stops.push_back(alternative[k]);
+                        }
+                        for (std::size_t k = j + 1; k < base.stations().size(); ++k) {
+                            stops.push_back(base.stations()[k]);
+                        }
+                        Line rerouted = base;
+                        rerouted.setStations(static_cast<DynamicArray<Index>&&>(stops));
+                        DynamicArray<Line> trial = current;
+                        trial[lineIndex] = static_cast<Line&&>(rerouted);
+                        ++evaluations;
+                        ++result.candidatesEvaluated;
+                        const Metrics metrics =
+                            evaluate(map, trial, weights, demand, finalParams);
+                        const double score = scoreMetrics(metrics, scoreParams);
+                        if (score > currentScore + 1e-9) {
+                            used[static_cast<std::size_t>(currentCandidates[lineIndex])] = 0;
+                            current = static_cast<DynamicArray<Line>&&>(trial);
+                            recomputeCovered(map, current, covered);
+                            currentScore = score;
+                            result.metrics = metrics;
+                            ++result.localMoves;
+                            improved = true;
+                        }
+                    }
+                }
+            }
+            if (improved) {
+                continue;
+            }
+
+            // 5) 整线替换：保持线路数不变，用候选线替换现有线路。
             for (std::size_t replaceAt = 0;
                  replaceAt < current.size() && !improved; ++replaceAt) {
                 for (std::size_t c = 0; c < candidates.size() && !improved; ++c) {
@@ -567,7 +701,7 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
                 continue;
             }
 
-            // 5) 尝试删除线路；删除后仍须满足 CoveredStations 连通。
+            // 6) 尝试删除线路；删除后仍须满足 CoveredStations 连通。
             for (std::size_t removeAt = 0; removeAt < current.size(); ++removeAt) {
                 if (evaluations >= search.localSearchBudget) {
                     break;

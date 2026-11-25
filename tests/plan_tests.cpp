@@ -410,6 +410,10 @@ void testUnreachablePolicies() {
 }
 
 void testCoverageModes() {
+    const EvalParams defaults;
+    CHECK(defaults.coverageMode == CoverageMode::MultiLineSaturating);
+    CHECK(std::fabs(defaults.multiLineLambda - 0.25) < 1e-12);
+
     Map map;
     map.addStation(makeStation("A", 0.0, 0.0));
     map.addStation(makeStation("B", 1.0, 0.0));
@@ -439,6 +443,7 @@ void testCoverageModes() {
     params.ops.transferSec = 120.0;
     params.connectivity = ConnectivityRequirement::CoveredStations;
     params.unreachable = UnreachablePolicy::Exclude;
+    params.coverageMode = CoverageMode::Unique;
 
     const Metrics unique = evaluate(map, lines, weights, demand, params);
     CHECK(std::fabs(unique.r1 - 1.0) < 1e-9);

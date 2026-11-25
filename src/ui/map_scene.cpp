@@ -1,6 +1,8 @@
 #include "ui/map_scene.h"
 
 #include <QColor>
+#include <QFont>
+#include <QGraphicsSimpleTextItem>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPen>
@@ -84,6 +86,42 @@ void MapScene::refresh() {
         for (std::size_t j = 0; j < feature.points.size(); ++j) {
             extendBounds(feature.points[j].x, -feature.points[j].y);
         }
+    }
+
+    // 背景设施名称用固定像素大小的图元，避免随缩放变成巨型文字。
+    for (std::size_t i = 0; i < map.backgroundFeatures().size(); ++i) {
+        const BackgroundFeature& feature = map.backgroundFeatures()[i];
+        if (!feature.closed || feature.points.size() < 3 || feature.id.empty()) {
+            continue;
+        }
+        QColor color;
+        if (feature.kind == BackgroundKind::Water) {
+            color = QColor("#2c6e8f");
+        } else if (feature.kind == BackgroundKind::Park) {
+            color = QColor("#3d6b35");
+        } else if (feature.kind == BackgroundKind::Hospital) {
+            color = QColor("#9b2c2c");
+        } else {
+            continue;
+        }
+        double averageX = 0.0;
+        double averageY = 0.0;
+        for (std::size_t j = 0; j < feature.points.size(); ++j) {
+            averageX += feature.points[j].x;
+            averageY += -feature.points[j].y;
+        }
+        averageX /= feature.points.size();
+        averageY /= feature.points.size();
+        auto* label = new QGraphicsSimpleTextItem(
+            QString::fromUtf8(feature.id.c_str()));
+        QFont font = label->font();
+        font.setPointSize(9);
+        font.setBold(true);
+        label->setFont(font);
+        label->setBrush(color);
+        label->setFlag(QGraphicsItem::ItemIgnoresTransformations, true);
+        label->setPos(averageX, averageY);
+        addItem(label);
     }
 
     if (hasBounds) {
@@ -272,6 +310,9 @@ void MapScene::paintBackgroundFeatures(QPainter* painter, const Map& map) const 
         } else if (feature.kind == BackgroundKind::Park) {
             fill = QColor("#cfe6c4");
             stroke = QColor("#a6c99a");
+        } else if (feature.kind == BackgroundKind::Hospital) {
+            fill = QColor("#f3d6d6");
+            stroke = QColor("#c98a8a");
         } else if (feature.kind == BackgroundKind::Water ||
                    feature.kind == BackgroundKind::River) {
             fill = QColor("#b7d9e8");
@@ -354,6 +395,7 @@ void MapScene::paintBackgroundFeatures(QPainter* painter, const Map& map) const 
             (feature.closed &&
              (feature.kind == BackgroundKind::Region ||
               feature.kind == BackgroundKind::Park ||
+              feature.kind == BackgroundKind::Hospital ||
               feature.kind == BackgroundKind::Water))) {
             continue;
         }
@@ -370,6 +412,7 @@ void MapScene::paintBackgroundFeatures(QPainter* painter, const Map& map) const 
         painter->setBrush(Qt::NoBrush);
         painter->drawPath(makePath(points, feature.closed));
     }
+
 }
 
 int MapScene::edgeAt(const QPointF& scenePos, double threshold) const {

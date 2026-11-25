@@ -11,6 +11,7 @@ enum class BackgroundKind {
     Region,
     Water,
     Park,
+    Hospital,
     Road,
     River,
     Coast,
@@ -35,6 +36,8 @@ inline const char* backgroundKindName(BackgroundKind kind) {
             return "water";
         case BackgroundKind::Park:
             return "park";
+        case BackgroundKind::Hospital:
+            return "hospital";
         case BackgroundKind::Road:
             return "road";
         case BackgroundKind::River:
@@ -60,6 +63,10 @@ inline bool parseBackgroundKind(const std::string& text, BackgroundKind* kind) {
     }
     if (text == "park") {
         *kind = BackgroundKind::Park;
+        return true;
+    }
+    if (text == "hospital") {
+        *kind = BackgroundKind::Hospital;
         return true;
     }
     if (text == "road") {

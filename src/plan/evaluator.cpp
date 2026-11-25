@@ -93,12 +93,17 @@ Metrics evaluateNetwork(const Network& network, const WeightResult& weights,
     }
 
     // R1：加权覆盖率。
+    // v1 只看“是否被覆盖”；v2 用服务线路数 p_i 做边际递减，避免覆盖率
+    // 饱和后规划器完全失去增设线路的激励。
     double totalWeight = 0.0;
     double coveredWeight = 0.0;
     DynamicArray<unsigned char> covered;
+    DynamicArray<int> serviceCount;
     covered.resize(static_cast<std::size_t>(stationCount));
+    serviceCount.resize(static_cast<std::size_t>(stationCount));
     for (int i = 0; i < stationCount; ++i) {
         covered[static_cast<std::size_t>(i)] = 0;
+        serviceCount[static_cast<std::size_t>(i)] = 0;
         totalWeight += weights.weights[static_cast<std::size_t>(i)];
     }
     for (std::size_t i = 0; i < network.lines().size(); ++i) {
@@ -107,14 +112,29 @@ Metrics evaluateNetwork(const Network& network, const WeightResult& weights,
             const Index station = line.stations()[j];
             if (station >= 0 && station < stationCount) {
                 covered[static_cast<std::size_t>(station)] = 1;
+                ++serviceCount[static_cast<std::size_t>(station)];
             }
         }
     }
     for (int i = 0; i < stationCount; ++i) {
-        if (covered[static_cast<std::size_t>(i)]) {
-            coveredWeight += weights.weights[static_cast<std::size_t>(i)];
-            ++metrics.coveredStations;
+        const int p = serviceCount[static_cast<std::size_t>(i)];
+        if (p <= 0) {
+            continue;
         }
+        ++metrics.coveredStations;
+        const double weight = weights.weights[static_cast<std::size_t>(i)];
+        coveredWeight += weight;
+        if (params.coverageMode == CoverageMode::Unique) {
+            continue;
+        }
+        double service = 1.0;
+        if (params.coverageMode == CoverageMode::MultiLineLog) {
+            service += params.multiLineLambda * std::log(static_cast<double>(p));
+        } else {
+            service += params.multiLineLambda *
+                       (1.0 - 1.0 / static_cast<double>(p));
+        }
+        coveredWeight += weight * (service - 1.0);
     }
     metrics.r1 = totalWeight > 1e-12 ? coveredWeight / totalWeight : 0.0;
 

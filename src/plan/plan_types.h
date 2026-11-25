@@ -29,6 +29,12 @@ enum class ConnectivityRequirement {
     AllStations,
 };
 
+enum class CoverageMode {
+    Unique,          // R1 v1：站点被任意线路覆盖即计 1
+    MultiLineLog,    // R1 v2：service(p)=1+lambda*log(p)
+    MultiLineSaturating,  // R1 v2：service(p)=1+lambda*(1-1/p)
+};
+
 struct WeightParams {
     int clusters = 3;
     double regionalExponent = 1.0;
@@ -66,6 +72,9 @@ struct EvalParams {
     bool overrideLineOps = true;
     // 搜索候选筛选时可以关闭 OD 计算，只算静态指标。
     bool evaluateOd = true;
+    // R1 统计口径。默认保持 v1，v2 用于多线服务/边际递减实验。
+    CoverageMode coverageMode = CoverageMode::Unique;
+    double multiLineLambda = 0.25;
     OpsDefaults ops;
 };
 

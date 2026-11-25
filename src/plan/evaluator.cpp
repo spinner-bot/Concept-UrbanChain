@@ -6,6 +6,7 @@
 #include <cstdint>
 
 #include "ds/hash_map.h"
+#include "ds/union_find.h"
 #include "nav/router.h"
 
 namespace uc {
@@ -87,6 +88,7 @@ Metrics evaluateNetwork(const Network& network, const WeightResult& weights,
         demand.stationCount != stationCount ||
         static_cast<int>(demand.od.size()) != stationCount * stationCount) {
         metrics.valid = false;
+        metrics.feasible = false;
         return metrics;
     }
 
@@ -111,9 +113,39 @@ Metrics evaluateNetwork(const Network& network, const WeightResult& weights,
     for (int i = 0; i < stationCount; ++i) {
         if (covered[static_cast<std::size_t>(i)]) {
             coveredWeight += weights.weights[static_cast<std::size_t>(i)];
+            ++metrics.coveredStations;
         }
     }
     metrics.r1 = totalWeight > 1e-12 ? coveredWeight / totalWeight : 0.0;
+
+    // 硬连通约束：线路边 + 共享站点形成的无向分量必须满足要求。
+    UnionFind components(stationCount);
+    for (std::size_t i = 0; i < network.lines().size(); ++i) {
+        const Line& line = network.lines()[i];
+        for (int j = 0; j + 1 < line.stationCount(); ++j) {
+            const Index a = line.stations()[static_cast<std::size_t>(j)];
+            const Index b = line.stations()[static_cast<std::size_t>(j + 1)];
+            if (a >= 0 && b >= 0 && a < stationCount && b < stationCount) {
+                components.unite(a, b);
+            }
+        }
+    }
+
+    metrics.networkComponents = components.count();
+    if (params.connectivity == ConnectivityRequirement::AllStations) {
+        metrics.connected = stationCount <= 1 || components.count() <= 1;
+    } else if (params.connectivity == ConnectivityRequirement::CoveredStations) {
+        HashMap<int, unsigned char, IntHash> roots;
+        for (int i = 0; i < stationCount; ++i) {
+            if (covered[static_cast<std::size_t>(i)]) {
+                roots.set(components.find(i), 1);
+            }
+        }
+        metrics.connected = metrics.coveredStations > 0 && roots.size() <= 1;
+    } else {
+        metrics.connected = true;
+    }
+    metrics.feasible = metrics.valid && metrics.connected;
 
     // R2：边并集成本 + 站台成本。
     HashMap<std::uint64_t, double, IntHash> usedEdges;
@@ -182,7 +214,7 @@ Metrics evaluateNetwork(const Network& network, const WeightResult& weights,
     double sumTransfers = 0.0;
     double denominator = 0.0;
     bool hasUnreachable = false;
-    if (stationCount >= 2) {
+    if (metrics.feasible && stationCount >= 2) {
         Router router;
         const double departTime = params.ops.initialTimeSec;
         for (int i = 0; i < stationCount; ++i) {
@@ -219,7 +251,7 @@ Metrics evaluateNetwork(const Network& network, const WeightResult& weights,
     }
 
     metrics.odTotal = denominator;
-    if (hasUnreachable) {
+    if (!metrics.feasible || hasUnreachable) {
         metrics.r3 = kInfinity;
         metrics.r4 = kInfinity;
     } else if (denominator > 1e-12) {

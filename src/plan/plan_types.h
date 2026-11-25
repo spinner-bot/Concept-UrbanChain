@@ -23,6 +23,12 @@ enum class UnreachablePolicy {
     Infinite,
 };
 
+enum class ConnectivityRequirement {
+    None,
+    CoveredStations,
+    AllStations,
+};
+
 struct WeightParams {
     int clusters = 3;
     double regionalExponent = 1.0;
@@ -51,6 +57,7 @@ struct EvalParams {
     double kStation = 1.0;
     double shortAlpha = 1.0;
     double shortBeta = 2.0;
+    ConnectivityRequirement connectivity = ConnectivityRequirement::AllStations;
     UnreachablePolicy unreachable = UnreachablePolicy::Penalty;
     double unreachablePenaltySec = 3600.0;
     bool overrideLineOps = true;
@@ -76,6 +83,10 @@ struct DemandResult {
 
 struct Metrics {
     bool valid = true;
+    bool feasible = true;
+    bool connected = true;
+    int networkComponents = 0;
+    int coveredStations = 0;
     double r1 = 0.0;
     double r2 = 0.0;
     double r3 = 0.0;

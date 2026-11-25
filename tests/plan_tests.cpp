@@ -160,6 +160,8 @@ void testEvaluatorBasic() {
 
     const Metrics metrics = evaluate(map, lines, weights, demand, params);
     CHECK(metrics.valid);
+    CHECK(metrics.feasible);
+    CHECK(metrics.connected);
     CHECK(metrics.stationCount == 2);
     CHECK(metrics.lineCount == 1);
     CHECK(std::fabs(metrics.r1 - 1.0) < 1e-9);
@@ -169,6 +171,69 @@ void testEvaluatorBasic() {
     CHECK(std::fabs(metrics.r5 - 1.0) < 1e-9);
     CHECK(std::fabs(metrics.r6 - 0.0) < 1e-9);
     CHECK(metrics.unreachablePairs == 0);
+}
+
+void testConnectivityGate() {
+    Map map;
+    map.addStation(makeStation("A", 0.0, 0.0));
+    map.addStation(makeStation("B", 1.0, 0.0));
+    map.addStation(makeStation("C", 2.0, 0.0));
+    map.addStation(makeStation("D", 3.0, 0.0));
+    map.addEdge(0, 1, 1.0);
+    map.addEdge(1, 2, 1.0);
+    map.addEdge(2, 3, 1.0);
+
+    WeightResult weights;
+    for (int i = 0; i < 4; ++i) {
+        weights.weights.push_back(1.0);
+    }
+    weights.clusterCount = 1;
+    const DemandResult demand = makeDemand(weights.weights, 4, 1.0, 1);
+
+    EvalParams params;
+    params.kStation = 0.0;
+    params.shortBeta = 10.0;
+    params.overrideLineOps = true;
+    params.ops.initialTimeSec = 0.0;
+    params.ops.headwaySec = 300;
+    params.ops.dwellSec = 30.0;
+    params.ops.segmentRunSec = 120.0;
+    params.ops.transferSec = 120.0;
+
+    DynamicArray<Line> split;
+    DynamicArray<Index> ab;
+    ab.push_back(0);
+    ab.push_back(1);
+    split.push_back(makeLine(ab));
+    DynamicArray<Index> cd;
+    cd.push_back(2);
+    cd.push_back(3);
+    split.push_back(makeLine(cd));
+
+    params.connectivity = ConnectivityRequirement::AllStations;
+    const Metrics disconnected = evaluate(map, split, weights, demand, params);
+    CHECK(disconnected.coveredStations == 4);
+    CHECK(!disconnected.connected);
+    CHECK(!disconnected.feasible);
+    CHECK(disconnected.networkComponents >= 2);
+    CHECK(std::isinf(disconnected.r3));
+
+    params.connectivity = ConnectivityRequirement::CoveredStations;
+    const Metrics coveredOnly = evaluate(map, split, weights, demand, params);
+    CHECK(!coveredOnly.connected);
+    CHECK(!coveredOnly.feasible);
+
+    split.push_back(makeLine([] {
+        DynamicArray<Index> stops;
+        stops.push_back(1);
+        stops.push_back(2);
+        return stops;
+    }()));
+    params.connectivity = ConnectivityRequirement::AllStations;
+    const Metrics connected = evaluate(map, split, weights, demand, params);
+    CHECK(connected.connected);
+    CHECK(connected.feasible);
+    CHECK(std::isfinite(connected.r3));
 }
 
 void testUnreachablePolicies() {
@@ -201,6 +266,7 @@ void testUnreachablePolicies() {
     params.ops.segmentRunSec = 120.0;
     params.ops.transferSec = 120.0;
     params.unreachablePenaltySec = 3600.0;
+    params.connectivity = ConnectivityRequirement::None;
 
     params.unreachable = UnreachablePolicy::Exclude;
     const Metrics excluded = evaluate(map, lines, weights, demand, params);
@@ -228,6 +294,7 @@ int main() {
     testWeights();
     testDemand();
     testEvaluatorBasic();
+    testConnectivityGate();
     testUnreachablePolicies();
     if (failures == 0) {
         std::printf("all plan tests passed\n");

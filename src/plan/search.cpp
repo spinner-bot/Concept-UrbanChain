@@ -532,7 +532,42 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
                 continue;
             }
 
-            // 4) 尝试删除线路；删除后仍须满足 CoveredStations 连通。
+            // 4) 整线替换：保持线路数不变，用候选线替换现有线路。
+            for (std::size_t replaceAt = 0;
+                 replaceAt < current.size() && !improved; ++replaceAt) {
+                for (std::size_t c = 0; c < candidates.size() && !improved; ++c) {
+                    if (evaluations >= search.localSearchBudget) {
+                        break;
+                    }
+                    if (used[c]) {
+                        continue;
+                    }
+                    DynamicArray<Line> trial = current;
+                    trial[replaceAt] = candidates[c];
+                    ++evaluations;
+                    ++result.candidatesEvaluated;
+                    const Metrics metrics =
+                        evaluate(map, trial, weights, demand, finalParams);
+                    const double score = scoreMetrics(metrics, scoreParams);
+                    if (score > currentScore + 1e-9) {
+                        used[static_cast<std::size_t>(
+                            currentCandidates[replaceAt])] = 0;
+                        used[c] = 1;
+                        currentCandidates[replaceAt] = static_cast<int>(c);
+                        current = static_cast<DynamicArray<Line>&&>(trial);
+                        recomputeCovered(map, current, covered);
+                        currentScore = score;
+                        result.metrics = metrics;
+                        ++result.localMoves;
+                        improved = true;
+                    }
+                }
+            }
+            if (improved) {
+                continue;
+            }
+
+            // 5) 尝试删除线路；删除后仍须满足 CoveredStations 连通。
             for (std::size_t removeAt = 0; removeAt < current.size(); ++removeAt) {
                 if (evaluations >= search.localSearchBudget) {
                     break;

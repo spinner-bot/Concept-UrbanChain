@@ -1,9 +1,11 @@
 #include <cmath>
 #include <cstdio>
+#include <initializer_list>
 #include <string>
 
 #include "core/map.h"
 #include "core/network.h"
+#include "plan/audit.h"
 #include "plan/demand.h"
 #include "plan/evaluator.h"
 #include "plan/search.h"
@@ -30,6 +32,14 @@ Station makeStation(const char* id, double x, double y) {
     station.name = id;
     station.position = Vec2{x, y};
     return station;
+}
+
+DynamicArray<Index> makeStops(std::initializer_list<Index> values) {
+    DynamicArray<Index> stops;
+    for (Index value : values) {
+        stops.push_back(value);
+    }
+    return stops;
 }
 
 Line makeLine(const DynamicArray<Index>& stops) {
@@ -399,6 +409,112 @@ void testUnreachablePolicies() {
     CHECK(std::isinf(infinite.r4));
 }
 
+void testCoverageModes() {
+    Map map;
+    map.addStation(makeStation("A", 0.0, 0.0));
+    map.addStation(makeStation("B", 1.0, 0.0));
+    map.addStation(makeStation("C", 2.0, 0.0));
+    map.addEdge(0, 1, 1.0);
+    map.addEdge(1, 2, 1.0);
+
+    DynamicArray<Line> lines;
+    lines.push_back(makeLine(makeStops({0, 1, 2})));
+    lines.push_back(makeLine(makeStops({0, 1})));
+
+    WeightResult weights;
+    for (int i = 0; i < 3; ++i) {
+        weights.weights.push_back(1.0);
+    }
+    weights.clusterCount = 1;
+    const DemandResult demand = makeDemand(weights.weights, 3, 1.0, 1);
+
+    EvalParams params;
+    params.kStation = 0.0;
+    params.shortBeta = 10.0;
+    params.overrideLineOps = true;
+    params.ops.initialTimeSec = 0.0;
+    params.ops.headwaySec = 300;
+    params.ops.dwellSec = 30.0;
+    params.ops.segmentRunSec = 120.0;
+    params.ops.transferSec = 120.0;
+    params.connectivity = ConnectivityRequirement::CoveredStations;
+    params.unreachable = UnreachablePolicy::Exclude;
+
+    const Metrics unique = evaluate(map, lines, weights, demand, params);
+    CHECK(std::fabs(unique.r1 - 1.0) < 1e-9);
+    CHECK(unique.coveredStations == 3);
+
+    params.coverageMode = CoverageMode::MultiLineLog;
+    params.multiLineLambda = 0.25;
+    const Metrics logMetrics = evaluate(map, lines, weights, demand, params);
+    CHECK(logMetrics.r1 > 1.0);
+    CHECK(std::fabs(logMetrics.r1 - (2.0 * (1.0 + 0.25 * std::log(2.0)) + 1.0) /
+                                       3.0) < 1e-9);
+    CHECK(logMetrics.coveredStations == 3);
+
+    params.coverageMode = CoverageMode::MultiLineSaturating;
+    const Metrics satMetrics = evaluate(map, lines, weights, demand, params);
+    CHECK(satMetrics.r1 > 1.0);
+    CHECK(std::fabs(satMetrics.r1 - (2.0 * 1.125 + 1.0) / 3.0) < 1e-9);
+    CHECK(satMetrics.coveredStations == 3);
+}
+
+void testLineAudit() {
+    Map map;
+    for (int i = 0; i < 4; ++i) {
+        map.addStation(makeStation(("S" + std::to_string(i)).c_str(), i, 0));
+    }
+    for (int i = 0; i + 1 < 4; ++i) {
+        map.addEdge(i, i + 1, 1.0);
+    }
+
+    DynamicArray<Line> lines;
+    lines.push_back(makeLine(makeStops({0, 1, 2})));
+    lines.push_back(makeLine(makeStops({2, 3})));
+    lines.push_back(makeLine(makeStops({0, 1})));
+    lines.push_back(makeLine(makeStops({0, 1, 2})));  // 与第一条重复
+
+    const LineStructure report = auditLines(map, lines, 3);
+    CHECK(report.lineCount == 4);
+    CHECK(report.shortLines == 4);
+    CHECK(report.duplicateExtraLines == 1);
+    CHECK(report.axisLines[static_cast<int>(LineAxis::EastWest)] == 4);
+    CHECK(report.axisEdges[static_cast<int>(LineAxis::EastWest)] == 3);
+    CHECK(report.straightMergePairs >= 1);
+    CHECK(report.maxLinesAtStation >= 3);
+
+    Line merged;
+    double turn = 180.0;
+    CHECK(mergeLinePair(map, lines[0], lines[1], merged, &turn));
+    CHECK(merged.stationCount() == 4);
+    CHECK(merged.stations().front() == 0);
+    CHECK(merged.stations().back() == 3);
+    CHECK(turn < 1e-6);
+
+    Line duplicateMerge;
+    CHECK(!mergeLinePair(map, lines[0], lines[3], duplicateMerge, nullptr));
+}
+
+void testGridAuditBalance() {
+    const Map map = makeTinyGrid(3, 3);
+    DynamicArray<Line> lines;
+    for (int r = 0; r < 3; ++r) {
+        lines.push_back(makeLine(makeStops({r * 3, r * 3 + 1, r * 3 + 2})));
+    }
+    for (int c = 0; c < 3; ++c) {
+        lines.push_back(makeLine(makeStops({c, c + 3, c + 6})));
+    }
+    const LineStructure report = auditLines(map, lines, 2);
+    CHECK(report.axisLines[static_cast<int>(LineAxis::EastWest)] == 3);
+    CHECK(report.axisLines[static_cast<int>(LineAxis::NorthSouth)] == 3);
+    CHECK(report.axisEdges[static_cast<int>(LineAxis::EastWest)] == 6);
+    CHECK(report.axisEdges[static_cast<int>(LineAxis::NorthSouth)] == 6);
+    CHECK(report.axisLineEntropy > 0.999);
+    CHECK(report.axisEdgeEntropy > 0.999);
+    CHECK(report.shortLines == 0);
+    CHECK(report.duplicateExtraLines == 0);
+}
+
 }  // namespace
 
 int main() {
@@ -409,6 +525,9 @@ int main() {
     testConnectivityGate();
     testCoveredStationsPartialCoverage();
     testUnreachablePolicies();
+    testCoverageModes();
+    testLineAudit();
+    testGridAuditBalance();
     if (failures == 0) {
         std::printf("all plan tests passed\n");
         return 0;

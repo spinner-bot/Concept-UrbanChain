@@ -16,6 +16,7 @@
 #include "ds/union_find.h"
 #include "io/line_io.h"
 #include "io/map_io.h"
+#include "plan/audit.h"
 #include "plan/demand.h"
 #include "plan/evaluator.h"
 #include "plan/search.h"
@@ -513,6 +514,49 @@ void printPlanLines(const Map& map, const DynamicArray<Line>& lines) {
     }
 }
 
+void printMergeExamples(const Map& map, const LineStructure& structure, int limit) {
+    if (structure.mergeOpportunities.empty() || limit <= 0) {
+        return;
+    }
+    DynamicArray<LineMergeOpportunity> sorted = structure.mergeOpportunities;
+    quickSort(sorted, [](const LineMergeOpportunity& a,
+                         const LineMergeOpportunity& b) {
+        return a.turnDeg < b.turnDeg;
+    });
+    std::cout << "mergest candidates (straightest first):\n";
+    for (std::size_t i = 0;
+         i < sorted.size() && i < static_cast<std::size_t>(limit); ++i) {
+        const LineMergeOpportunity& opportunity = sorted[i];
+        std::cout << "  L" << opportunity.firstLine << " + L"
+                  << opportunity.secondLine << " at "
+                  << map.station(opportunity.junction).id
+                  << " turn=" << number(opportunity.turnDeg) << "deg\n";
+    }
+}
+
+void auditNetwork(const Network& network, int shortThreshold, int mergeExamples) {
+    const LineStructure structure =
+        auditLines(network.map(), network.lines(), shortThreshold);
+    printLineStructure(structure);
+    printMergeExamples(network.map(), structure, mergeExamples);
+}
+
+CoverageMode parseCoverageMode(const std::string& value) {
+    if (value == "log") {
+        return CoverageMode::MultiLineLog;
+    }
+    if (value == "sat") {
+        return CoverageMode::MultiLineSaturating;
+    }
+    return CoverageMode::Unique;
+}
+
+void applyCoverageParams(EvalParams& params, const std::string& mode,
+                         double lambda) {
+    params.coverageMode = parseCoverageMode(mode);
+    params.multiLineLambda = lambda;
+}
+
 void applyScoreProfile(ScoreParams& score, const std::string& profile) {
     if (profile == "coverage") {
         score.wCoverage = 0.50;
@@ -534,7 +578,8 @@ void applyScoreProfile(ScoreParams& score, const std::string& profile) {
 void modePlan(int cols, int rows, int k, int maxLines, const std::string& profile,
               double minCoverage, double coveragePenalty, const std::string& scenario,
               int cityCenters, int perCenter, int citySeed, bool localSearch,
-              int localBudget, bool prefilter) {
+              int localBudget, bool prefilter, const std::string& r1Mode,
+              double coverageLambda) {
     DynamicArray<Line> baselineLines;
     const Map map = scenario == "grid"
                         ? makeGridMap(cols, rows)
@@ -544,6 +589,7 @@ void modePlan(int cols, int rows, int k, int maxLines, const std::string& profil
     const DemandResult demand = makeDemand(map, weights, 1.0);
     EvalParams params = makeEvalParams(UnreachablePolicy::Penalty, 300, 30.0, 120.0);
     params.connectivity = ConnectivityRequirement::CoveredStations;
+    applyCoverageParams(params, r1Mode, coverageLambda);
     SearchParams search;
     search.maxLines = maxLines;
     search.topStations = std::min(16, map.stationCount());
@@ -561,6 +607,9 @@ void modePlan(int cols, int rows, int k, int maxLines, const std::string& profil
     std::cout << "plan: " << map.stationCount() << " stations, "
               << plan.lines.size() << " lines, steps=" << plan.steps
               << " localMoves=" << plan.localMoves
+              << " merged=" << plan.mergedLines
+              << " duplicatesRemoved=" << plan.duplicateLinesRemoved
+              << " redundantRemoved=" << plan.redundantLinesRemoved
               << " evaluations=" << plan.candidatesEvaluated
               << " score=" << number(plan.score) << '\n';
     printPlanLines(map, plan.lines);
@@ -568,6 +617,9 @@ void modePlan(int cols, int rows, int k, int maxLines, const std::string& profil
     printMetrics(plan.baseMetrics);
     std::cout << "after local search:\n";
     printMetrics(plan.metrics);
+    const LineStructure structure = auditLines(map, plan.lines, 3);
+    printLineStructure(structure);
+    printMergeExamples(map, structure, 8);
 
     if (scenario == "grid") {
         const DynamicArray<Line> gridLines = makeGridLines(map, cols, rows, true, true);
@@ -583,7 +635,8 @@ void modePlan(int cols, int rows, int k, int maxLines, const std::string& profil
 }
 
 void modePlanFile(const std::string& mapPath, const std::string& outLinesPath,
-                  int k, int maxLines, int localBudget, bool prefilter) {
+                  int k, int maxLines, int localBudget, bool prefilter,
+                  const std::string& r1Mode, double coverageLambda) {
     Network source;
     std::string error;
     if (!io::loadMap(mapPath, source.map(), &error)) {
@@ -594,6 +647,7 @@ void modePlanFile(const std::string& mapPath, const std::string& outLinesPath,
     const DemandResult demand = makeDemand(source.map(), weights, 1.0);
     EvalParams params = makeEvalParams(UnreachablePolicy::Penalty, 300, 30.0, 120.0);
     params.connectivity = ConnectivityRequirement::CoveredStations;
+    applyCoverageParams(params, r1Mode, coverageLambda);
 
     SearchParams search;
     search.maxLines = maxLines;
@@ -626,8 +680,28 @@ void modePlanFile(const std::string& mapPath, const std::string& outLinesPath,
     std::cout << "map=" << mapPath << " stations=" << source.map().stationCount()
               << " edges=" << source.map().edges().size() << '\n';
     std::cout << "planned lines=" << plan.lines.size()
+              << " merged=" << plan.mergedLines
+              << " duplicatesRemoved=" << plan.duplicateLinesRemoved
+              << " redundantRemoved=" << plan.redundantLinesRemoved
               << " output=" << outLinesPath << '\n';
     printMetrics(plan.metrics);
+    auditNetwork(output, 3, 8);
+}
+
+void modeAudit(const std::string& mapPath, const std::string& linePath,
+               int shortThreshold) {
+    Network network;
+    std::string error;
+    if (!io::loadMap(mapPath, network.map(), &error)) {
+        std::cout << "map load failed: " << error << '\n';
+        return;
+    }
+    if (!io::loadLines(linePath, network, &error)) {
+        std::cout << "line load failed: " << error << '\n';
+        return;
+    }
+    std::cout << "audit: map=" << mapPath << " lines=" << linePath << '\n';
+    auditNetwork(network, shortThreshold, 16);
 }
 
 void modeDemo(const std::string& mapPath, const std::string& linePath) {
@@ -663,7 +737,9 @@ void usage() {
               << "               --k 3 --max-lines 8 --profile balanced|coverage|service\n"
               << "               --min-coverage 0.8 --coverage-penalty 1.0 [--no-local]\n"
               << "               [--local-budget 24] [--no-prefilter]\n"
+              << "               [--r1-mode unique|log|sat] [--r1-lambda 0.25]\n"
               << "  plan-file    --map data/city_demo.cuc3m3 --out-lines data/city_demo_planned.cuc3l\n"
+              << "  audit        --map data/city_demo.cuc3m3 --lines data/city_demo.cuc3l [--short-threshold 3]\n"
               << "  demo         --map data/demo.cuc3m3 --lines data/demo.cuc3l\n";
 }
 
@@ -692,6 +768,9 @@ int main(int argc, char** argv) {
     bool localSearch = true;
     bool prefilter = true;
     int localBudget = 0;
+    int shortThreshold = 3;
+    std::string r1Mode = "unique";
+    double coverageLambda = 0.25;
     std::string mapPath = "data/demo.cuc3m3";
     std::string linePath = "data/demo.cuc3l";
     std::string outLinesPath = "data/city_demo_planned.cuc3l";
@@ -732,6 +811,12 @@ int main(int argc, char** argv) {
             prefilter = false;
         } else if (arg == "--local-budget" && i + 1 < argc) {
             localBudget = std::stoi(argv[++i]);
+        } else if (arg == "--short-threshold" && i + 1 < argc) {
+            shortThreshold = std::stoi(argv[++i]);
+        } else if (arg == "--r1-mode" && i + 1 < argc) {
+            r1Mode = argv[++i];
+        } else if (arg == "--r1-lambda" && i + 1 < argc) {
+            coverageLambda = std::stod(argv[++i]);
         } else if (arg == "--map" && i + 1 < argc) {
             mapPath = argv[++i];
         } else if (arg == "--lines" && i + 1 < argc) {
@@ -756,9 +841,12 @@ int main(int argc, char** argv) {
     } else if (mode == "plan") {
         modePlan(cols, rows, k, maxLines, profile, minCoverage, coveragePenalty,
                  scenario, cityCenters, perCenter, citySeed, localSearch, localBudget,
-                 prefilter);
+                 prefilter, r1Mode, coverageLambda);
     } else if (mode == "plan-file") {
-        modePlanFile(mapPath, outLinesPath, k, maxLines, localBudget, prefilter);
+        modePlanFile(mapPath, outLinesPath, k, maxLines, localBudget, prefilter,
+                     r1Mode, coverageLambda);
+    } else if (mode == "audit") {
+        modeAudit(mapPath, linePath, shortThreshold);
     } else if (mode == "demo") {
         modeDemo(mapPath, linePath);
     } else {

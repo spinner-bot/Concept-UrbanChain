@@ -342,22 +342,46 @@ void printPlanLines(const Map& map, const DynamicArray<Line>& lines) {
     }
 }
 
-void modePlan(int cols, int rows, int k, int maxLines) {
+void applyScoreProfile(ScoreParams& score, const std::string& profile) {
+    if (profile == "coverage") {
+        score.wCoverage = 0.50;
+        score.wCost = 0.15;
+        score.wTime = 0.15;
+        score.wTransfer = 0.05;
+        score.wDetour = 0.05;
+        score.wShort = 0.10;
+    } else if (profile == "service") {
+        score.wCoverage = 0.20;
+        score.wCost = 0.10;
+        score.wTime = 0.35;
+        score.wTransfer = 0.20;
+        score.wDetour = 0.05;
+        score.wShort = 0.10;
+    }
+}
+
+void modePlan(int cols, int rows, int k, int maxLines, const std::string& profile) {
     const Map map = makeGridMap(cols, rows);
     const WeightResult weights = computeWeights(map, makeWeightParams(k, 1));
     const DemandResult demand = makeDemand(map, weights, 1.0);
-    EvalParams params = makeEvalParams(UnreachablePolicy::Exclude, 300, 30.0, 120.0);
+    EvalParams params = makeEvalParams(UnreachablePolicy::Penalty, 300, 30.0, 120.0);
     params.connectivity = ConnectivityRequirement::CoveredStations;
     SearchParams search;
     search.maxLines = maxLines;
     search.topStations = std::min(12, map.stationCount());
     search.candidateLimit = 120;
+    applyScoreProfile(search.score, profile);
 
     const PlanResult plan = buildGreedyPlan(map, weights, demand, params, search);
-    std::cout << "greedy plan: " << map.stationCount() << " stations, "
+    std::cout << "plan: " << map.stationCount() << " stations, "
               << plan.lines.size() << " lines, steps=" << plan.steps
-              << " evaluations=" << plan.candidatesEvaluated << '\n';
+              << " localMoves=" << plan.localMoves
+              << " evaluations=" << plan.candidatesEvaluated
+              << " score=" << number(plan.score) << '\n';
     printPlanLines(map, plan.lines);
+    std::cout << "greedy base:\n";
+    printMetrics(plan.baseMetrics);
+    std::cout << "after local search:\n";
     printMetrics(plan.metrics);
 
     const DynamicArray<Line> gridLines = makeGridLines(map, cols, rows, true, true);
@@ -395,7 +419,7 @@ void usage() {
               << "  timing       --k 3\n"
               << "  policy       --cols 8 --rows 8 --k 3\n"
               << "  ops          --cols 8 --rows 8 --k 3\n"
-              << "  plan         --cols 8 --rows 8 --k 3 --max-lines 6\n"
+              << "  plan         --cols 8 --rows 8 --k 3 --max-lines 6 --profile balanced|coverage|service\n"
               << "  demo         --map data/demo.cuc3m3 --lines data/demo.cuc3l\n";
 }
 
@@ -414,6 +438,7 @@ int main(int argc, char** argv) {
     int perCluster = 50;
     int spatialClusters = 3;
     int maxLines = 6;
+    std::string profile = "balanced";
     std::string mapPath = "data/demo.cuc3m3";
     std::string linePath = "data/demo.cuc3l";
 
@@ -433,6 +458,8 @@ int main(int argc, char** argv) {
             spatialClusters = std::stoi(argv[++i]);
         } else if (arg == "--max-lines" && i + 1 < argc) {
             maxLines = std::stoi(argv[++i]);
+        } else if (arg == "--profile" && i + 1 < argc) {
+            profile = argv[++i];
         } else if (arg == "--map" && i + 1 < argc) {
             mapPath = argv[++i];
         } else if (arg == "--lines" && i + 1 < argc) {
@@ -453,7 +480,7 @@ int main(int argc, char** argv) {
     } else if (mode == "ops") {
         modeOps(cols, rows, k);
     } else if (mode == "plan") {
-        modePlan(cols, rows, k, maxLines);
+        modePlan(cols, rows, k, maxLines, profile);
     } else if (mode == "demo") {
         modeDemo(mapPath, linePath);
     } else {

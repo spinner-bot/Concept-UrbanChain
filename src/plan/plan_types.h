@@ -72,8 +72,9 @@ struct EvalParams {
     bool overrideLineOps = true;
     // 搜索候选筛选时可以关闭 OD 计算，只算静态指标。
     bool evaluateOd = true;
-    // R1 统计口径。默认保持 v1，v2 用于多线服务/边际递减实验。
-    CoverageMode coverageMode = CoverageMode::Unique;
+    // R1 统计口径。默认 v2：多线服务按有界边际递减计算，
+    // 避免覆盖饱和后规划器完全失去增设线路的激励。
+    CoverageMode coverageMode = CoverageMode::MultiLineSaturating;
     double multiLineLambda = 0.25;
     OpsDefaults ops;
 };

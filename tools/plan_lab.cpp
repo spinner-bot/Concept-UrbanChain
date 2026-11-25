@@ -15,6 +15,7 @@
 #include "io/map_io.h"
 #include "plan/demand.h"
 #include "plan/evaluator.h"
+#include "plan/search.h"
 #include "plan/weights.h"
 
 using namespace uc;
@@ -331,6 +332,40 @@ void modeOps(int cols, int rows, int k) {
     }
 }
 
+void printPlanLines(const Map& map, const DynamicArray<Line>& lines) {
+    for (std::size_t i = 0; i < lines.size(); ++i) {
+        std::cout << "  L" << i << ":";
+        for (std::size_t j = 0; j < lines[i].stations().size(); ++j) {
+            std::cout << ' ' << map.station(lines[i].stations()[j]).id;
+        }
+        std::cout << '\n';
+    }
+}
+
+void modePlan(int cols, int rows, int k, int maxLines) {
+    const Map map = makeGridMap(cols, rows);
+    const WeightResult weights = computeWeights(map, makeWeightParams(k, 1));
+    const DemandResult demand = makeDemand(map, weights, 1.0);
+    EvalParams params = makeEvalParams(UnreachablePolicy::Exclude, 300, 30.0, 120.0);
+    params.connectivity = ConnectivityRequirement::CoveredStations;
+    SearchParams search;
+    search.maxLines = maxLines;
+    search.topStations = std::min(12, map.stationCount());
+    search.candidateLimit = 120;
+
+    const PlanResult plan = buildGreedyPlan(map, weights, demand, params, search);
+    std::cout << "greedy plan: " << map.stationCount() << " stations, "
+              << plan.lines.size() << " lines, steps=" << plan.steps
+              << " evaluations=" << plan.candidatesEvaluated << '\n';
+    printPlanLines(map, plan.lines);
+    printMetrics(plan.metrics);
+
+    const DynamicArray<Line> gridLines = makeGridLines(map, cols, rows, true, true);
+    const Metrics gridMetrics = evaluate(map, gridLines, weights, demand, params);
+    std::cout << "full grid baseline: " << gridLines.size() << " lines\n";
+    printMetrics(gridMetrics);
+}
+
 void modeDemo(const std::string& mapPath, const std::string& linePath) {
     Network network;
     std::string error;
@@ -360,6 +395,7 @@ void usage() {
               << "  timing       --k 3\n"
               << "  policy       --cols 8 --rows 8 --k 3\n"
               << "  ops          --cols 8 --rows 8 --k 3\n"
+              << "  plan         --cols 8 --rows 8 --k 3 --max-lines 6\n"
               << "  demo         --map data/demo.cuc3m3 --lines data/demo.cuc3l\n";
 }
 
@@ -377,6 +413,7 @@ int main(int argc, char** argv) {
     int seed = 1;
     int perCluster = 50;
     int spatialClusters = 3;
+    int maxLines = 6;
     std::string mapPath = "data/demo.cuc3m3";
     std::string linePath = "data/demo.cuc3l";
 
@@ -394,6 +431,8 @@ int main(int argc, char** argv) {
             perCluster = std::stoi(argv[++i]);
         } else if (arg == "--clusters" && i + 1 < argc) {
             spatialClusters = std::stoi(argv[++i]);
+        } else if (arg == "--max-lines" && i + 1 < argc) {
+            maxLines = std::stoi(argv[++i]);
         } else if (arg == "--map" && i + 1 < argc) {
             mapPath = argv[++i];
         } else if (arg == "--lines" && i + 1 < argc) {
@@ -413,6 +452,8 @@ int main(int argc, char** argv) {
         modePolicy(cols, rows, k);
     } else if (mode == "ops") {
         modeOps(cols, rows, k);
+    } else if (mode == "plan") {
+        modePlan(cols, rows, k, maxLines);
     } else if (mode == "demo") {
         modeDemo(mapPath, linePath);
     } else {

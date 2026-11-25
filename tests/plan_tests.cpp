@@ -6,6 +6,7 @@
 #include "core/network.h"
 #include "plan/demand.h"
 #include "plan/evaluator.h"
+#include "plan/search.h"
 #include "plan/weights.h"
 
 using namespace uc;
@@ -130,6 +131,68 @@ void testDemand() {
     const DemandResult forced = computeDemand(map, weights, params);
     CHECK(std::fabs(forced.effectiveBeta - 1.0) < 1e-9);
     CHECK(std::fabs(forced.od[0 * 3 + 2] - 2.0) < 1e-9);
+}
+
+Map makeTinyGrid(int cols, int rows) {
+    Map map;
+    for (int r = 0; r < rows; ++r) {
+        for (int c = 0; c < cols; ++c) {
+            map.addStation(makeStation(
+                ("S" + std::to_string(r * cols + c)).c_str(), c, r));
+        }
+    }
+    for (int r = 0; r < rows; ++r) {
+        for (int c = 0; c < cols; ++c) {
+            const Index index = r * cols + c;
+            if (c + 1 < cols) {
+                map.addEdge(index, index + 1, 1.0);
+            }
+            if (r + 1 < rows) {
+                map.addEdge(index, index + cols, 1.0);
+            }
+        }
+    }
+    return map;
+}
+
+void testGreedyPlan() {
+    const Map map = makeTinyGrid(3, 3);
+    WeightParams weightParams;
+    weightParams.clusters = 2;
+    weightParams.seed = 1;
+    const WeightResult weights = computeWeights(map, weightParams);
+    DemandParams demandParams;
+    const DemandResult demand = computeDemand(map, weights, demandParams);
+
+    EvalParams params;
+    params.kStation = 0.0;
+    params.shortBeta = 10.0;
+    params.overrideLineOps = true;
+    params.evaluateOd = true;
+    params.ops.initialTimeSec = 0.0;
+    params.ops.headwaySec = 300;
+    params.ops.dwellSec = 30.0;
+    params.ops.segmentRunSec = 120.0;
+    params.ops.transferSec = 120.0;
+    params.connectivity = ConnectivityRequirement::CoveredStations;
+
+    SearchParams search;
+    search.maxLines = 4;
+    search.topStations = 6;
+    search.candidateLimit = 40;
+
+    const PlanResult first = buildGreedyPlan(map, weights, demand, params, search);
+    CHECK(first.steps > 0);
+    CHECK(!first.lines.empty());
+    CHECK(static_cast<int>(first.lines.size()) <= search.maxLines);
+    CHECK(first.metrics.feasible);
+    CHECK(first.metrics.connected);
+    CHECK(first.metrics.r1 > 0.0);
+    CHECK(std::isfinite(first.metrics.r3));
+
+    const PlanResult second = buildGreedyPlan(map, weights, demand, params, search);
+    CHECK(first.lines.size() == second.lines.size());
+    CHECK(std::fabs(first.metrics.r1 - second.metrics.r1) < 1e-9);
 }
 
 void testEvaluatorBasic() {
@@ -341,6 +404,7 @@ void testUnreachablePolicies() {
 int main() {
     testWeights();
     testDemand();
+    testGreedyPlan();
     testEvaluatorBasic();
     testConnectivityGate();
     testCoveredStationsPartialCoverage();

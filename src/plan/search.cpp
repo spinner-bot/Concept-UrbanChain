@@ -171,18 +171,72 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
         candidates.push_back(makeCandidate(path, palette[candidates.size() % 8]));
     };
 
-    DynamicArray<int> top;
+    DynamicArray<int> anchors;
+    auto addAnchor = [&anchors, stationCount](int index) {
+        if (index < 0 || index >= stationCount) {
+            return;
+        }
+        for (std::size_t i = 0; i < anchors.size(); ++i) {
+            if (anchors[i] == index) {
+                return;
+            }
+        }
+        anchors.push_back(index);
+    };
+
+    DynamicArray<int> order;
     for (int i = 0; i < stationCount; ++i) {
-        top.push_back(i);
+        order.push_back(i);
     }
-    quickSort(top, [&weights](int a, int b) {
+    quickSort(order, [&weights](int a, int b) {
         return weights.weights[static_cast<std::size_t>(a)] >
                weights.weights[static_cast<std::size_t>(b)];
     });
     const int topCount = std::max(2, std::min(search.topStations, stationCount));
     for (int i = 0; i < topCount; ++i) {
-        for (int j = i + 1; j < topCount; ++j) {
-            addCandidate(top[static_cast<std::size_t>(i)], top[static_cast<std::size_t>(j)]);
+        addAnchor(order[static_cast<std::size_t>(i)]);
+    }
+
+    // 额外锚点：从全局中心出发做最远点采样，保证外围站点进入候选池。
+    if (search.extraAnchors > 0) {
+        int first = 0;
+        double farthest = -1.0;
+        for (int i = 0; i < stationCount; ++i) {
+            const double d =
+                euclideanDistance(map.station(i).position, weights.globalCenter);
+            if (d > farthest) {
+                farthest = d;
+                first = i;
+            }
+        }
+        addAnchor(first);
+        for (int extra = 0; extra < search.extraAnchors; ++extra) {
+            int chosen = -1;
+            double chosenDistance = -1.0;
+            for (int i = 0; i < stationCount; ++i) {
+                double nearest = kInfinity;
+                for (std::size_t a = 0; a < anchors.size(); ++a) {
+                    nearest = std::min(
+                        nearest,
+                        euclideanDistance(map.station(i).position,
+                                          map.station(anchors[a]).position));
+                }
+                if (nearest > chosenDistance) {
+                    chosenDistance = nearest;
+                    chosen = i;
+                }
+            }
+            const std::size_t before = anchors.size();
+            addAnchor(chosen);
+            if (anchors.size() == before) {
+                break;
+            }
+        }
+    }
+
+    for (std::size_t i = 0; i < anchors.size(); ++i) {
+        for (std::size_t j = i + 1; j < anchors.size(); ++j) {
+            addCandidate(anchors[i], anchors[j]);
         }
     }
 

@@ -28,6 +28,7 @@ struct ScoreParams {
 struct SearchParams {
     int maxLines = 8;
     int topStations = 10;
+    int extraAnchors = 12;
     int candidateLimit = 80;
     double minCoverageGain = 1e-9;
     bool enableLocalSearch = true;

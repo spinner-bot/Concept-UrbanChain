@@ -534,7 +534,7 @@ void applyScoreProfile(ScoreParams& score, const std::string& profile) {
 void modePlan(int cols, int rows, int k, int maxLines, const std::string& profile,
               double minCoverage, double coveragePenalty, const std::string& scenario,
               int cityCenters, int perCenter, int citySeed, bool localSearch,
-              int localBudget) {
+              int localBudget, bool prefilter) {
     DynamicArray<Line> baselineLines;
     const Map map = scenario == "grid"
                         ? makeGridMap(cols, rows)
@@ -550,6 +550,7 @@ void modePlan(int cols, int rows, int k, int maxLines, const std::string& profil
     search.candidateLimit = scenario == "grid" ? 120 : 320;
     search.localSearchBudget = localBudget > 0 ? localBudget : (scenario == "grid" ? 120 : 24);
     search.enableLocalSearch = localSearch;
+    search.prefilter = prefilter;
     applyScoreProfile(search.score, profile);
     search.score.minCoverage = minCoverage;
     search.score.coveragePenalty = coveragePenalty;
@@ -613,7 +614,7 @@ void usage() {
               << "  plan         --scenario city|grid --centers 1 --per-center 60 --city-seed 1\n"
               << "               --k 3 --max-lines 8 --profile balanced|coverage|service\n"
               << "               --min-coverage 0.8 --coverage-penalty 1.0 [--no-local]\n"
-              << "               [--local-budget 24]\n"
+              << "               [--local-budget 24] [--no-prefilter]\n"
               << "  demo         --map data/demo.cuc3m3 --lines data/demo.cuc3l\n";
 }
 
@@ -640,6 +641,7 @@ int main(int argc, char** argv) {
     double minCoverage = 0.8;
     double coveragePenalty = 1.0;
     bool localSearch = true;
+    bool prefilter = true;
     int localBudget = 0;
     std::string mapPath = "data/demo.cuc3m3";
     std::string linePath = "data/demo.cuc3l";
@@ -676,6 +678,8 @@ int main(int argc, char** argv) {
             coveragePenalty = std::stod(argv[++i]);
         } else if (arg == "--no-local") {
             localSearch = false;
+        } else if (arg == "--no-prefilter") {
+            prefilter = false;
         } else if (arg == "--local-budget" && i + 1 < argc) {
             localBudget = std::stoi(argv[++i]);
         } else if (arg == "--map" && i + 1 < argc) {
@@ -699,7 +703,8 @@ int main(int argc, char** argv) {
         modeOps(cols, rows, k);
     } else if (mode == "plan") {
         modePlan(cols, rows, k, maxLines, profile, minCoverage, coveragePenalty,
-                 scenario, cityCenters, perCenter, citySeed, localSearch, localBudget);
+                 scenario, cityCenters, perCenter, citySeed, localSearch, localBudget,
+                 prefilter);
     } else if (mode == "demo") {
         modeDemo(mapPath, linePath);
     } else {

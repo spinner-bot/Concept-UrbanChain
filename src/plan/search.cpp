@@ -454,9 +454,32 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
 
     if (search.enableLocalSearch && !current.empty() &&
         search.localSearchBudget > 0) {
+        EvalParams localStatic = params;
+        localStatic.evaluateOd = false;
+        localStatic.overrideLineOps = true;
+        localStatic.connectivity = ConnectivityRequirement::CoveredStations;
+        double currentStaticScore =
+            scoreMetrics(evaluate(map, current, weights, demand, localStatic), scoreParams);
+
         double currentScore = result.score;
         int evaluations = 0;
         bool improved = true;
+
+        // 先用便宜静态指标过滤，再对候选做完整 OD 评价。
+        auto evaluateTrial = [&](const DynamicArray<Line>& trial, Metrics& metrics,
+                                 double& trialStatic) {
+            const Metrics staticMetrics =
+                evaluate(map, trial, weights, demand, localStatic);
+            trialStatic = scoreMetrics(staticMetrics, scoreParams);
+            if (search.prefilter &&
+                trialStatic + search.prefilterMargin < currentStaticScore) {
+                return false;
+            }
+            ++evaluations;
+            ++result.candidatesEvaluated;
+            metrics = evaluate(map, trial, weights, demand, finalParams);
+            return true;
+        };
         while (improved && evaluations < search.localSearchBudget) {
             improved = false;
 
@@ -478,9 +501,11 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
                 }
                 DynamicArray<Line> trial = current;
                 trial.push_back(candidate);
-                ++evaluations;
-                ++result.candidatesEvaluated;
-                const Metrics metrics = evaluate(map, trial, weights, demand, finalParams);
+                Metrics metrics;
+                double trialStatic = 0.0;
+                if (!evaluateTrial(trial, metrics, trialStatic)) {
+                    continue;
+                }
                 const double score = scoreMetrics(metrics, scoreParams);
                 if (score > currentScore + 1e-9) {
                     current = static_cast<DynamicArray<Line>&&>(trial);
@@ -490,6 +515,7 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
                         covered[static_cast<std::size_t>(candidate.stations()[i])] = 1;
                     }
                     currentScore = score;
+                    currentStaticScore = trialStatic;
                     result.metrics = metrics;
                     ++result.localMoves;
                     improved = true;
@@ -532,16 +558,18 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
                         extended.setStations(static_cast<DynamicArray<Index>&&>(stops));
                         DynamicArray<Line> trial = current;
                         trial[lineIndex] = static_cast<Line&&>(extended);
-                        ++evaluations;
-                        ++result.candidatesEvaluated;
-                        const Metrics metrics =
-                            evaluate(map, trial, weights, demand, finalParams);
+                        Metrics metrics;
+                double trialStatic = 0.0;
+                if (!evaluateTrial(trial, metrics, trialStatic)) {
+                    continue;
+                }
                         const double score = scoreMetrics(metrics, scoreParams);
                         if (score > currentScore + 1e-9) {
                             used[static_cast<std::size_t>(currentCandidates[lineIndex])] = 0;
                             current = static_cast<DynamicArray<Line>&&>(trial);
                             recomputeCovered(map, current, covered);
                             currentScore = score;
+                    currentStaticScore = trialStatic;
                             result.metrics = metrics;
                             ++result.localMoves;
                             improved = true;
@@ -577,16 +605,18 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
                     shortened.setStations(static_cast<DynamicArray<Index>&&>(stops));
                     DynamicArray<Line> trial = current;
                     trial[lineIndex] = static_cast<Line&&>(shortened);
-                    ++evaluations;
-                    ++result.candidatesEvaluated;
-                    const Metrics metrics =
-                        evaluate(map, trial, weights, demand, finalParams);
+                    Metrics metrics;
+                double trialStatic = 0.0;
+                if (!evaluateTrial(trial, metrics, trialStatic)) {
+                    continue;
+                }
                     const double score = scoreMetrics(metrics, scoreParams);
                     if (score > currentScore + 1e-9) {
                         used[static_cast<std::size_t>(currentCandidates[lineIndex])] = 0;
                         current = static_cast<DynamicArray<Line>&&>(trial);
                         recomputeCovered(map, current, covered);
                         currentScore = score;
+                    currentStaticScore = trialStatic;
                         result.metrics = metrics;
                         ++result.localMoves;
                         improved = true;
@@ -645,16 +675,18 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
                         rerouted.setStations(static_cast<DynamicArray<Index>&&>(stops));
                         DynamicArray<Line> trial = current;
                         trial[lineIndex] = static_cast<Line&&>(rerouted);
-                        ++evaluations;
-                        ++result.candidatesEvaluated;
-                        const Metrics metrics =
-                            evaluate(map, trial, weights, demand, finalParams);
+                        Metrics metrics;
+                double trialStatic = 0.0;
+                if (!evaluateTrial(trial, metrics, trialStatic)) {
+                    continue;
+                }
                         const double score = scoreMetrics(metrics, scoreParams);
                         if (score > currentScore + 1e-9) {
                             used[static_cast<std::size_t>(currentCandidates[lineIndex])] = 0;
                             current = static_cast<DynamicArray<Line>&&>(trial);
                             recomputeCovered(map, current, covered);
                             currentScore = score;
+                    currentStaticScore = trialStatic;
                             result.metrics = metrics;
                             ++result.localMoves;
                             improved = true;
@@ -678,10 +710,11 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
                     }
                     DynamicArray<Line> trial = current;
                     trial[replaceAt] = candidates[c];
-                    ++evaluations;
-                    ++result.candidatesEvaluated;
-                    const Metrics metrics =
-                        evaluate(map, trial, weights, demand, finalParams);
+                    Metrics metrics;
+                double trialStatic = 0.0;
+                if (!evaluateTrial(trial, metrics, trialStatic)) {
+                    continue;
+                }
                     const double score = scoreMetrics(metrics, scoreParams);
                     if (score > currentScore + 1e-9) {
                         used[static_cast<std::size_t>(
@@ -691,6 +724,7 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
                         current = static_cast<DynamicArray<Line>&&>(trial);
                         recomputeCovered(map, current, covered);
                         currentScore = score;
+                    currentStaticScore = trialStatic;
                         result.metrics = metrics;
                         ++result.localMoves;
                         improved = true;
@@ -712,9 +746,11 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
                         trial.push_back(current[i]);
                     }
                 }
-                ++evaluations;
-                ++result.candidatesEvaluated;
-                const Metrics metrics = evaluate(map, trial, weights, demand, finalParams);
+                Metrics metrics;
+                double trialStatic = 0.0;
+                if (!evaluateTrial(trial, metrics, trialStatic)) {
+                    continue;
+                }
                 const double score = scoreMetrics(metrics, scoreParams);
                 if (score > currentScore + 1e-9) {
                     used[static_cast<std::size_t>(
@@ -723,6 +759,7 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
                     currentCandidates.erase(removeAt);
                     recomputeCovered(map, current, covered);
                     currentScore = score;
+                    currentStaticScore = trialStatic;
                     result.metrics = metrics;
                     ++result.localMoves;
                     improved = true;

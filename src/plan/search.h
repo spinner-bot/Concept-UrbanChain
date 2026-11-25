@@ -33,6 +33,9 @@ struct SearchParams {
     double minCoverageGain = 1e-9;
     bool enableLocalSearch = true;
     int localSearchBudget = 120;
+    // 局部移动先做静态指标预筛，再对候选做完整 OD 评价。
+    bool prefilter = true;
+    double prefilterMargin = 0.0;
     ScoreParams score;
 };
 

@@ -61,7 +61,7 @@ struct EvalParams {
     double shortAlpha = 1.0;
     double shortBeta = 2.0;
     ConnectivityRequirement connectivity = ConnectivityRequirement::CoveredStations;
-    UnreachablePolicy unreachable = UnreachablePolicy::Exclude;
+    UnreachablePolicy unreachable = UnreachablePolicy::Penalty;
     double unreachablePenaltySec = 3600.0;
     bool overrideLineOps = true;
     // 搜索候选筛选时可以关闭 OD 计算，只算静态指标。

@@ -21,10 +21,16 @@ int main(int argc, char** argv) {
     QString mode;
     QString path;
     QString languageOverride;
+    QString mapOverride;
+    QString lineOverride;
     for (int i = 1; i < argc; ++i) {
         const QString argument = QString::fromLocal8Bit(argv[i]);
         if (argument == "--lang" && i + 1 < argc) {
             languageOverride = QString::fromLocal8Bit(argv[++i]);
+        } else if (argument == "--map" && i + 1 < argc) {
+            mapOverride = QString::fromLocal8Bit(argv[++i]);
+        } else if (argument == "--lines" && i + 1 < argc) {
+            lineOverride = QString::fromLocal8Bit(argv[++i]);
         } else if (mode.isEmpty()) {
             mode = argument;
         } else if (path.isEmpty()) {
@@ -39,6 +45,9 @@ int main(int argc, char** argv) {
 
     uc::MainWindow window;
     window.show();
+    if (!mapOverride.isEmpty() && !lineOverride.isEmpty()) {
+        window.loadFiles(mapOverride, lineOverride);
+    }
 
     // 开发自检入口：
     //   --screenshot <path>        截取窗口

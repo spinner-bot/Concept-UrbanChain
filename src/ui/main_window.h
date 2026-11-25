@@ -26,6 +26,7 @@ namespace uc {
 class MainWindow : public QMainWindow {
 public:
     MainWindow();
+    bool loadFiles(const QString& mapPath, const QString& linePath);
 
 protected:
     void closeEvent(QCloseEvent* event) override;

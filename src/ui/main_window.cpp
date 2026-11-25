@@ -428,6 +428,28 @@ void MainWindow::newDocument() {
     statusBar()->showMessage(L("New document"), 3000);
 }
 
+bool MainWindow::loadFiles(const QString& mapPath, const QString& linePath) {
+    std::string error;
+    if (!editor_.load(mapPath.toUtf8().constData(), linePath.toUtf8().constData(),
+                      &error)) {
+        statusBar()->showMessage(
+            QString::fromUtf8(error.c_str()), 5000);
+        return false;
+    }
+    mapPath_ = mapPath;
+    linePath_ = linePath;
+    view_->refresh();
+    view_->fitContent();
+    updateTitle();
+    updateActions();
+    refreshPanels();
+    if (!editor_.network().lines().empty()) {
+        view_->selectLine(0);
+    }
+    statusBar()->showMessage(L("Loaded"), 3000);
+    return true;
+}
+
 void MainWindow::openDocument() {
     if (!maybeSave()) {
         return;

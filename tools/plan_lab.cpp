@@ -582,6 +582,54 @@ void modePlan(int cols, int rows, int k, int maxLines, const std::string& profil
     }
 }
 
+void modePlanFile(const std::string& mapPath, const std::string& outLinesPath,
+                  int k, int maxLines, int localBudget, bool prefilter) {
+    Network source;
+    std::string error;
+    if (!io::loadMap(mapPath, source.map(), &error)) {
+        std::cout << "map load failed: " << error << '\n';
+        return;
+    }
+    const WeightResult weights = computeWeights(source.map(), makeWeightParams(k, 1));
+    const DemandResult demand = makeDemand(source.map(), weights, 1.0);
+    EvalParams params = makeEvalParams(UnreachablePolicy::Penalty, 300, 30.0, 120.0);
+    params.connectivity = ConnectivityRequirement::CoveredStations;
+
+    SearchParams search;
+    search.maxLines = maxLines;
+    search.topStations = std::min(16, source.map().stationCount());
+    search.extraAnchors = 12;
+    search.candidateLimit = 360;
+    search.localSearchBudget = localBudget > 0 ? localBudget : 80;
+    search.prefilter = prefilter;
+
+    const PlanResult plan =
+        buildGreedyPlan(source.map(), weights, demand, params, search);
+    Network output;
+    output.map() = source.map();
+    for (std::size_t i = 0; i < plan.lines.size(); ++i) {
+        Line line = plan.lines[i];
+        line.setName("Planned " + std::to_string(i + 1));
+        line.ops().dwellSec = 30.0;
+        line.ops().headway.clear();
+        line.ops().headway.push_back(HeadwayPeriod{0, 86400, 300});
+        line.ops().segmentRunSec.clear();
+        for (int j = 0; j + 1 < line.stationCount(); ++j) {
+            line.ops().segmentRunSec.push_back(120.0);
+        }
+        output.addLine(static_cast<Line&&>(line));
+    }
+    if (!io::saveLines(outLinesPath, output, &error)) {
+        std::cout << "line save failed: " << error << '\n';
+        return;
+    }
+    std::cout << "map=" << mapPath << " stations=" << source.map().stationCount()
+              << " edges=" << source.map().edges().size() << '\n';
+    std::cout << "planned lines=" << plan.lines.size()
+              << " output=" << outLinesPath << '\n';
+    printMetrics(plan.metrics);
+}
+
 void modeDemo(const std::string& mapPath, const std::string& linePath) {
     Network network;
     std::string error;
@@ -615,6 +663,7 @@ void usage() {
               << "               --k 3 --max-lines 8 --profile balanced|coverage|service\n"
               << "               --min-coverage 0.8 --coverage-penalty 1.0 [--no-local]\n"
               << "               [--local-budget 24] [--no-prefilter]\n"
+              << "  plan-file    --map data/city_demo.cuc3m3 --out-lines data/city_demo_planned.cuc3l\n"
               << "  demo         --map data/demo.cuc3m3 --lines data/demo.cuc3l\n";
 }
 
@@ -645,6 +694,7 @@ int main(int argc, char** argv) {
     int localBudget = 0;
     std::string mapPath = "data/demo.cuc3m3";
     std::string linePath = "data/demo.cuc3l";
+    std::string outLinesPath = "data/city_demo_planned.cuc3l";
 
     for (int i = 2; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -686,6 +736,8 @@ int main(int argc, char** argv) {
             mapPath = argv[++i];
         } else if (arg == "--lines" && i + 1 < argc) {
             linePath = argv[++i];
+        } else if (arg == "--out-lines" && i + 1 < argc) {
+            outLinesPath = argv[++i];
         }
     }
 
@@ -705,6 +757,8 @@ int main(int argc, char** argv) {
         modePlan(cols, rows, k, maxLines, profile, minCoverage, coveragePenalty,
                  scenario, cityCenters, perCenter, citySeed, localSearch, localBudget,
                  prefilter);
+    } else if (mode == "plan-file") {
+        modePlanFile(mapPath, outLinesPath, k, maxLines, localBudget, prefilter);
     } else if (mode == "demo") {
         modeDemo(mapPath, linePath);
     } else {

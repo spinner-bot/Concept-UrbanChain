@@ -20,6 +20,9 @@ struct ScoreParams {
     double refTransfer = 3.0;
     double refDetour = 3.0;
     double refShort = 1.0;
+    // 软覆盖率下限：低于阈值时按平方缺口惩罚，仍保留效率项。
+    double minCoverage = 0.8;
+    double coveragePenalty = 1.0;
 };
 
 struct SearchParams {

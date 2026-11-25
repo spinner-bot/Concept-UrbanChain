@@ -113,12 +113,18 @@ double scoreMetrics(const Metrics& metrics, const ScoreParams& score) {
     if (!metrics.feasible || std::isinf(metrics.r3) || std::isinf(metrics.r4)) {
         return -kInfinity;
     }
-    return score.wCoverage * metrics.r1 -
-           score.wCost * metrics.r2 / std::max(score.refCost, 1e-9) -
-           score.wTime * metrics.r3 / std::max(score.refTime, 1e-9) -
-           score.wTransfer * metrics.r4 / std::max(score.refTransfer, 1e-9) -
-           score.wDetour * metrics.r5 / std::max(score.refDetour, 1e-9) -
-           score.wShort * metrics.r6 / std::max(score.refShort, 1e-9);
+    double value =
+        score.wCoverage * metrics.r1 -
+        score.wCost * metrics.r2 / std::max(score.refCost, 1e-9) -
+        score.wTime * metrics.r3 / std::max(score.refTime, 1e-9) -
+        score.wTransfer * metrics.r4 / std::max(score.refTransfer, 1e-9) -
+        score.wDetour * metrics.r5 / std::max(score.refDetour, 1e-9) -
+        score.wShort * metrics.r6 / std::max(score.refShort, 1e-9);
+    const double deficit = score.minCoverage - metrics.r1;
+    if (deficit > 0.0) {
+        value -= score.coveragePenalty * deficit * deficit;
+    }
+    return value;
 }
 
 void recomputeCovered(const Map& map, const DynamicArray<Line>& lines,
@@ -260,13 +266,11 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
     }
 
     double currentR1 = 0.0;
-    double currentR2 = 0.0;
     for (int step = 0; step < search.maxLines; ++step) {
         int best = -1;
         double bestScore = -kInfinity;
         double bestGain = 0.0;
         double bestR1 = 0.0;
-        double bestR2 = 0.0;
         for (std::size_t c = 0; c < candidates.size(); ++c) {
             if (used[c]) {
                 continue;
@@ -293,18 +297,18 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
                 continue;
             }
             const double gain = metrics.r1 - currentR1;
-            const double cost = std::max(0.0, metrics.r2 - currentR2);
             if (gain <= search.minCoverageGain) {
                 continue;
             }
-            const double score = gain / std::max(cost, 1e-9);
+            // 生长阶段也使用同一个代理分数：覆盖、成本、绕行、短线 + 软覆盖下限。
+            // R3/R4 在 staticParams 下为 0，不参与生长，交给最终局部搜索。
+            const double score = scoreMetrics(metrics, scoreParams);
             if (score > bestScore + 1e-12 ||
                 (std::fabs(score - bestScore) <= 1e-12 && gain > bestGain)) {
                 best = static_cast<int>(c);
                 bestScore = score;
                 bestGain = gain;
                 bestR1 = metrics.r1;
-                bestR2 = metrics.r2;
             }
         }
         if (best < 0) {
@@ -318,7 +322,6 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
             covered[static_cast<std::size_t>(chosen.stations()[i])] = 1;
         }
         currentR1 = bestR1;
-        currentR2 = bestR2;
         ++result.steps;
     }
 

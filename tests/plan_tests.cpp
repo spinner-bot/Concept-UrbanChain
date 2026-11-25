@@ -464,6 +464,25 @@ void testCoverageModes() {
     CHECK(satMetrics.coveredStations == 3);
 }
 
+void testMapGeometryAudit() {
+    Map map;
+    map.addStation(makeStation("A", 0.0, 0.0));
+    map.addStation(makeStation("B", 1.0, 0.0));
+    map.addStation(makeStation("C", 2.0, 0.0));
+    map.addEdge(0, 1, 1.0, 10.0);  // 几何长度 1，存储长度 10
+    map.addEdge(1, 2, 1.0, 1.0);
+
+    const MapGeometryReport report = auditMapGeometry(map);
+    CHECK(report.edgeCount == 2);
+    CHECK(report.mismatchedEdges == 1);
+    CHECK(report.issues.size() == 1);
+    CHECK(report.issues[0].from == 0);
+    CHECK(report.issues[0].to == 1);
+    CHECK(std::fabs(report.issues[0].geometricLength - 1.0) < 1e-9);
+    CHECK(std::fabs(report.issues[0].storedLength - 10.0) < 1e-9);
+    CHECK(report.worstRatio > 9.9);
+}
+
 void testLineAudit() {
     Map map;
     for (int i = 0; i < 4; ++i) {
@@ -531,6 +550,7 @@ int main() {
     testCoveredStationsPartialCoverage();
     testUnreachablePolicies();
     testCoverageModes();
+    testMapGeometryAudit();
     testLineAudit();
     testGridAuditBalance();
     if (failures == 0) {

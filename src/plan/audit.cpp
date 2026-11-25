@@ -226,6 +226,48 @@ std::uint64_t edgeKey(Index a, Index b) {
 
 }  // namespace
 
+MapGeometryReport auditMapGeometry(const Map& map, double tolerance) {
+    MapGeometryReport report;
+    report.edgeCount = static_cast<int>(map.edges().size());
+    for (std::size_t i = 0; i < map.edges().size(); ++i) {
+        const EdgeRecord& edge = map.edges()[i];
+        const double geometric = euclideanDistance(
+            map.station(edge.from).position, map.station(edge.to).position);
+        if (geometric < 1e-9 || edge.length <= 0.0) {
+            continue;
+        }
+        const double ratio = edge.length / geometric;
+        report.worstRatio = std::max(report.worstRatio, ratio);
+        const double allowance = tolerance * std::max(1.0, geometric) + 0.2;
+        if (std::fabs(edge.length - geometric) <= allowance) {
+            continue;
+        }
+        ++report.mismatchedEdges;
+        MapGeometryIssue issue;
+        issue.from = edge.from;
+        issue.to = edge.to;
+        issue.geometricLength = geometric;
+        issue.storedLength = edge.length;
+        issue.ratio = ratio;
+        report.issues.push_back(issue);
+    }
+    return report;
+}
+
+void printMapGeometry(const Map& map, const MapGeometryReport& report) {
+    std::cout << "map geometry: edges=" << report.edgeCount
+              << " mismatched=" << report.mismatchedEdges
+              << " worstLengthRatio=" << report.worstRatio << '\n';
+    for (std::size_t i = 0; i < report.issues.size(); ++i) {
+        const MapGeometryIssue& issue = report.issues[i];
+        std::cout << "  " << map.station(issue.from).id << " - "
+                  << map.station(issue.to).id
+                  << " stored=" << issue.storedLength
+                  << " geometric=" << issue.geometricLength
+                  << " ratio=" << issue.ratio << '\n';
+    }
+}
+
 LineStructure auditLines(const Map& map, const DynamicArray<Line>& lines,
                          int shortStationThreshold) {
     LineStructure structure;

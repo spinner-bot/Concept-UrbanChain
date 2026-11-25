@@ -690,6 +690,17 @@ void modePlanFile(const std::string& mapPath, const std::string& outLinesPath,
     auditNetwork(output, 3, 8);
 }
 
+void modeCheckMap(const std::string& mapPath) {
+    Map map;
+    std::string error;
+    if (!io::loadMap(mapPath, map, &error)) {
+        std::cout << "map load failed: " << error << '\n';
+        return;
+    }
+    std::cout << "check-map: " << mapPath << '\n';
+    printMapGeometry(map, auditMapGeometry(map));
+}
+
 void modeAudit(const std::string& mapPath, const std::string& linePath,
                int shortThreshold) {
     Network network;
@@ -743,6 +754,7 @@ void usage() {
               << "               default r1-mode=sat lambda=0.25\n"
               << "  plan-file    --map data/city_demo.cuc3m3 --out-lines data/city_demo_planned.cuc3l\n"
               << "  audit        --map data/city_demo.cuc3m3 --lines data/city_demo.cuc3l [--short-threshold 3]\n"
+              << "  check-map    --map data/city_demo.cuc3m3\n"
               << "  demo         --map data/demo.cuc3m3 --lines data/demo.cuc3l\n";
 }
 
@@ -850,6 +862,8 @@ int main(int argc, char** argv) {
                      r1Mode, coverageLambda);
     } else if (mode == "audit") {
         modeAudit(mapPath, linePath, shortThreshold);
+    } else if (mode == "check-map") {
+        modeCheckMap(mapPath);
     } else if (mode == "demo") {
         modeDemo(mapPath, linePath);
     } else {

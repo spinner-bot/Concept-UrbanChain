@@ -73,7 +73,8 @@ Map makeClusteredMap(int stationsPerCluster, int clusterCount, int seed) {
     return map;
 }
 
-Map makeSimulatedCity(int centerCount, int stationsPerCenter, double sigma, int seed) {
+Map makeSimulatedCity(int centerCount, int stationsPerCenter, double sigma, int seed,
+                      DynamicArray<Line>* baselineLines = nullptr) {
     Map map;
     std::mt19937 rng(static_cast<std::uint32_t>(seed * 7919 + 101));
     std::normal_distribution<double> radial(0.0, sigma);
@@ -132,6 +133,8 @@ Map makeSimulatedCity(int centerCount, int stationsPerCenter, double sigma, int 
             const double angle =
                 6.283185307179586 * static_cast<double>(s) / spokeCount;
             int previous = centers[0].hub;
+            DynamicArray<Index> spoke;
+            spoke.push_back(previous);
             for (int k = 1; k <= 7; ++k) {
                 const double radius = 2.5 + static_cast<double>(k) * 2.4;
                 const double x = std::cos(angle) * radius + jitter(rng);
@@ -139,6 +142,17 @@ Map makeSimulatedCity(int centerCount, int stationsPerCenter, double sigma, int 
                 const int station = addStation(x, y, "C");
                 addEdgeNoisy(previous, station);
                 previous = station;
+                spoke.push_back(station);
+            }
+            if (baselineLines != nullptr) {
+                Line line(0, "spoke", 0x2563ebu);
+                line.setStations(static_cast<DynamicArray<Index>&&>(spoke));
+                line.ops().dwellSec = 30.0;
+                line.ops().headway.push_back(HeadwayPeriod{0, 86400, 300});
+                for (int i = 0; i + 1 < line.stationCount(); ++i) {
+                    line.ops().segmentRunSec.push_back(120.0);
+                }
+                baselineLines->push_back(static_cast<Line&&>(line));
             }
         }
     } else {
@@ -158,6 +172,18 @@ Map makeSimulatedCity(int centerCount, int stationsPerCenter, double sigma, int 
             from.corridor.push_back(to.hub);
             for (std::size_t i = 0; i + 1 < from.corridor.size(); ++i) {
                 addEdgeNoisy(from.corridor[i], from.corridor[i + 1]);
+            }
+            if (baselineLines != nullptr) {
+                Line line(0, "arc", 0x7c3aedu);
+                for (std::size_t i = 0; i < from.corridor.size(); ++i) {
+                    line.stations().push_back(from.corridor[i]);
+                }
+                line.ops().dwellSec = 30.0;
+                line.ops().headway.push_back(HeadwayPeriod{0, 86400, 300});
+                for (int i = 0; i + 1 < line.stationCount(); ++i) {
+                    line.ops().segmentRunSec.push_back(120.0);
+                }
+                baselineLines->push_back(static_cast<Line&&>(line));
             }
         }
     }
@@ -508,9 +534,11 @@ void applyScoreProfile(ScoreParams& score, const std::string& profile) {
 void modePlan(int cols, int rows, int k, int maxLines, const std::string& profile,
               double minCoverage, double coveragePenalty, const std::string& scenario,
               int cityCenters, int perCenter, int citySeed) {
+    DynamicArray<Line> baselineLines;
     const Map map = scenario == "grid"
                         ? makeGridMap(cols, rows)
-                        : makeSimulatedCity(cityCenters, perCenter, 2.6, citySeed);
+                        : makeSimulatedCity(cityCenters, perCenter, 2.6, citySeed,
+                                            &baselineLines);
     const WeightResult weights = computeWeights(map, makeWeightParams(k, 1));
     const DemandResult demand = makeDemand(map, weights, 1.0);
     EvalParams params = makeEvalParams(UnreachablePolicy::Penalty, 300, 30.0, 120.0);
@@ -543,6 +571,11 @@ void modePlan(int cols, int rows, int k, int maxLines, const std::string& profil
         const Metrics gridMetrics = evaluate(map, gridLines, weights, demand, params);
         std::cout << "full grid baseline: " << gridLines.size() << " lines\n";
         printMetrics(gridMetrics);
+    } else if (!baselineLines.empty()) {
+        const Metrics baselineMetrics =
+            evaluate(map, baselineLines, weights, demand, params);
+        std::cout << "radial spoke baseline: " << baselineLines.size() << " lines\n";
+        printMetrics(baselineMetrics);
     }
 }
 

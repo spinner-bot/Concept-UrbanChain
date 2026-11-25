@@ -214,7 +214,7 @@ Metrics evaluateNetwork(const Network& network, const WeightResult& weights,
     double sumTransfers = 0.0;
     double denominator = 0.0;
     bool hasUnreachable = false;
-    if (metrics.feasible && stationCount >= 2) {
+    if (metrics.feasible && stationCount >= 2 && params.evaluateOd) {
         Router router;
         const double departTime = params.ops.initialTimeSec;
         for (int i = 0; i < stationCount; ++i) {

@@ -64,6 +64,8 @@ struct EvalParams {
     UnreachablePolicy unreachable = UnreachablePolicy::Exclude;
     double unreachablePenaltySec = 3600.0;
     bool overrideLineOps = true;
+    // 搜索候选筛选时可以关闭 OD 计算，只算静态指标。
+    bool evaluateOd = true;
     OpsDefaults ops;
 };
 

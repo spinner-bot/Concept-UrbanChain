@@ -166,6 +166,14 @@ Journey Router::findRoute(const Network& network, Index origin, Index destinatio
         leg.toStation = lastState / lineCount;
         leg.boardTime = dist[static_cast<std::size_t>(firstState)];
         leg.alightTime = dist[static_cast<std::size_t>(lastState)];
+        for (std::size_t k = index; k + 1 < next; ++k) {
+            const Index from = chain[k] / lineCount;
+            const Index to = chain[k + 1] / lineCount;
+            const double length = map.edgeLength(from, to);
+            if (!std::isinf(length)) {
+                leg.distance += length;
+            }
+        }
         journey.legs.push_back(leg);
         index = next;
     }

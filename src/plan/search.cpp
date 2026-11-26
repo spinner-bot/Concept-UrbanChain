@@ -221,7 +221,8 @@ Line makeCandidate(const DynamicArray<Index>& path, std::uint32_t color) {
 }
 
 double scoreMetrics(const Metrics& metrics, const ScoreParams& score) {
-    if (!metrics.feasible || std::isinf(metrics.r3) || std::isinf(metrics.r4)) {
+    if (!metrics.feasible || std::isinf(metrics.r3) || std::isinf(metrics.r4) ||
+        std::isinf(metrics.r5)) {
         return -kInfinity;
     }
     double value =

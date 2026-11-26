@@ -1058,7 +1058,7 @@ footer .big{font-family:var(--serif);font-style:italic;font-size:30px;color:rgba
             <tr><td><strong>R₂</strong></td><td>建设成本</td><td><span class="dir min" style="display:inline-block">最小化</span></td><td>成本量纲</td></tr>
             <tr><td><strong>R₃</strong></td><td>需求加权平均出行时间</td><td><span class="dir min" style="display:inline-block">最小化</span></td><td>时间量纲</td></tr>
             <tr><td><strong>R₄</strong></td><td>需求加权平均换乘次数</td><td><span class="dir min" style="display:inline-block">最小化</span></td><td>次数量纲</td></tr>
-            <tr><td><strong>R₅</strong></td><td>线路绕行度</td><td><span class="dir min" style="display:inline-block">最小化</span></td><td>无量纲比值</td></tr>
+            <tr><td><strong>R₅</strong></td><td>OD 加权绕行度</td><td><span class="dir min" style="display:inline-block">最小化</span></td><td>无量纲比值</td></tr>
             <tr><td><strong>R₆</strong></td><td>短线路惩罚</td><td><span class="dir min" style="display:inline-block">最小化</span></td><td>取决于惩罚参数</td></tr>
           </tbody>
         </table>
@@ -1346,59 +1346,55 @@ footer .big{font-family:var(--serif);font-style:italic;font-size:30px;color:rgba
         <div class="sec-num">12</div>
         <div>
           <span class="kicker">Objective 05</span>
-          <h2>第五项目标：线路绕行度</h2>
-          <p class="desc">衡量单条线路偏离起终点直线距离的程度，按线路等权平均。</p>
+          <h2>第五项目标：OD 加权绕行度</h2>
+          <p class="desc">按乘客实际 OD 出行路径计算绕行，而不是按整条线路首尾计算。</p>
         </div>
       </div>
 
       <div class="obj" style="--c:var(--r5)">
         <div class="obj-head">
           <div class="obj-badge">R₅</div>
-          <h3>线路绕行度</h3>
+          <h3>OD 加权绕行度</h3>
           <span class="dir min">最小化 ↓</span>
         </div>
         <div class="obj-body">
-          <h4>单条线路绕行度</h4>
-          <p>对于线路 \(L_i\)：</p>
-          <div class="fx key" data-label="Line Detour">
-            \[ D_i=\frac{L_i}{d_i} \]
+          <h4>单个 OD 的绕行度</h4>
+          <p>对于 OD 对 \((i,j)\)：</p>
+          <div class="fx key" data-label="OD Detour">
+            \[ D_{ij}=\frac{d^{\mathrm{route}}_{ij}}{d^{\mathrm{direct}}_{ij}} \]
           </div>
           <ul>
-            <li>\(L_i\)：线路实际总长度；</li>
-            <li>\(d_i\)：线路起点和终点之间的欧氏直线距离。</li>
+            <li>\(d^{\mathrm{route}}_{ij}\)：导航器给出的实际乘车路径在地图上的在车距离之和；</li>
+            <li>\(d^{\mathrm{direct}}_{ij}\)：站点 \(i\) 与 \(j\) 的欧氏直线距离。</li>
           </ul>
-          <p>线路实际总长度：</p>
-          <div class="fx" data-label="Length">
-            \[ L_i=\sum_{j=1}^{n_i-1}\ell(v_{i,j},v_{i,j+1}) \]
-          </div>
-          <p>其中 \(\ell(u,v)\) 为相邻站点之间的实际线路长度。</p>
+          <p>在车距离按实际乘坐的线路区段累计，不包含换乘步行距离。</p>
 
-          <h4>线网平均绕行度</h4>
+          <h4>线网绕行度</h4>
           <div class="fx key" data-label="Definition">
-            \[ R_5=D_{\mathrm{avg}}=\frac{1}{N}\sum_{i=1}^{N}D_i \]
+            \[ R_5=\frac{\sum_{(i,j)} q_{ij} D_{ij}}{\sum_{(i,j)} q_{ij}} \]
           </div>
-          <p>各条线路等权参与算术平均。</p>
+          <p>其中 \(q_{ij}\) 为 OD 需求。</p>
           <div class="callout note">
-            <p>不按照线路长度、客流或站点权重进行二次加权。</p>
+            <p>按 OD 需求加权，而不是按线路等权平均。乘客只走局部，整条线路首尾的绕行比会掩盖局部来回扭动。</p>
           </div>
 
           <h4>规则</h4>
-          <p>对于普通非环形线路：</p>
+          <p>对于可达且直距非零的 OD：</p>
           <div class="fx" data-label="Bound">
-            \[ D_i\ge 1 \]
+            \[ D_{ij}\ge 1 \]
           </div>
-          <p>由于当前版本暂不允许环线，因此首尾站重合导致 \(d_i=0\) 的情况暂时通过线路结构约束规避。但如果后续重新允许环线，需要<strong>单独重新定义绕行度</strong>。</p>
+          <p>不可达 OD：Exclude 不计入分母；Penalty 取罚值并计入分母；Infinite 时 \(R_5=\infty\)。</p>
 
           <h4>待定义事项</h4>
           <ul>
-            <li>线路起点与终点坐标重合时的处理；</li>
-            <li>是否需要对极短直线距离设置稳定性处理；</li>
-            <li>单条线路实际长度是否直接采用地图边的几何长度。</li>
+            <li>换乘步行距离是否计入在车距离；</li>
+            <li>直距极小时的稳定性阈值；</li>
+            <li>不可达 OD 罚值的标定。</li>
           </ul>
 
           <div class="callout note">
-            <span class="co-title">符号提示</span>
-            <p>源文档中 \(L_i\) 同时承担“线路对象”与“线路实际总长度”两种含义（例如 \(D_i=L_i/d_i\) 此处指长度）。本文按原文呈现；实现时应明确区分，避免歧义。</p>
+            <span class="co-title">实现提示</span>
+            <p>在车距离由导航器实际路径累计，不采用“线路总长”或“端点直线距离”；这样局部绕行会真实反映在 R₅ 中。</p>
           </div>
         </div>
       </div>

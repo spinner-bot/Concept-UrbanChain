@@ -249,6 +249,42 @@ void testEvaluatorBasic() {
     CHECK(metrics.unreachablePairs == 0);
 }
 
+
+void testOdDetourMetric() {
+    Map map;
+    map.addStation(makeStation("A", 0.0, 0.0));
+    map.addStation(makeStation("B", 10.0, 0.0));
+    map.addStation(makeStation("C", 0.0, 1.0));
+    map.addEdge(0, 1, 1.0, 10.0);
+    map.addEdge(1, 2, 1.0, std::sqrt(101.0));
+
+    DynamicArray<Line> lines;
+    lines.push_back(makeLine(makeStops({0, 1, 2})));
+
+    WeightResult weights;
+    for (int i = 0; i < 3; ++i) {
+        weights.weights.push_back(1.0);
+    }
+    weights.clusterCount = 1;
+    const DemandResult demand = makeDemand(weights.weights, 3, 1.0, 1);
+
+    EvalParams params;
+    params.kStation = 0.0;
+    params.shortBeta = 0.0;
+    params.overrideLineOps = true;
+    params.ops.initialTimeSec = 0.0;
+    params.ops.headwaySec = 120;
+    params.ops.dwellSec = 0.0;
+    params.ops.segmentRunSec = 1.0;
+    params.ops.transferSec = 0.0;
+    params.unreachable = UnreachablePolicy::Exclude;
+
+    const Metrics metrics = evaluate(map, lines, weights, demand, params);
+    CHECK(metrics.feasible);
+    // A→C 必须绕行 A-B-C，路线距离约 20，直距 1；OD 加权后 R5 应远大于 1。
+    CHECK(metrics.r5 > 5.0);
+}
+
 void testConnectivityGate() {
     Map map;
     map.addStation(makeStation("A", 0.0, 0.0));
@@ -600,6 +636,7 @@ int main() {
     testDemand();
     testGreedyPlan();
     testEvaluatorBasic();
+    testOdDetourMetric();
     testConnectivityGate();
     testCoveredStationsPartialCoverage();
     testUnreachablePolicies();

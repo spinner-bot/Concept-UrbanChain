@@ -69,6 +69,8 @@ struct EvalParams {
     ConnectivityRequirement connectivity = ConnectivityRequirement::CoveredStations;
     UnreachablePolicy unreachable = UnreachablePolicy::Penalty;
     double unreachablePenaltySec = 3600.0;
+    // R5 中不可达 OD 的绕行比罚值（无实际路径可用）。
+    double unreachableDetourPenalty = 10.0;
     bool overrideLineOps = true;
     // 搜索候选筛选时可以关闭 OD 计算，只算静态指标。
     bool evaluateOd = true;

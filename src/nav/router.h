@@ -11,6 +11,8 @@ struct JourneyLeg {
     Index toStation = kInvalidIndex;
     double boardTime = 0.0;
     double alightTime = 0.0;
+    // 本段在车内的地图距离（沿线路累计区间长度，不含换乘步行）。
+    double distance = 0.0;
 };
 
 struct Journey {

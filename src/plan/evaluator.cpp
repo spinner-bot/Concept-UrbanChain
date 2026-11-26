@@ -204,9 +204,7 @@ Metrics evaluateNetwork(const Network& network, const WeightResult& weights,
     }
     metrics.r2 = edgeCost + params.kStation * platformWeight;
 
-    // R5 / R6：基于相邻站直线距离的线路长度。
-    double detourSum = 0.0;
-    int detourCount = 0;
+    // R6：过短线路惩罚。R5 改为 OD 加权绕行度，放到下面的 OD 循环里。
     double shortPenalty = 0.0;
     for (std::size_t i = 0; i < network.lines().size(); ++i) {
         const Line& line = network.lines()[i];
@@ -214,24 +212,17 @@ Metrics evaluateNetwork(const Network& network, const WeightResult& weights,
             continue;
         }
         const double length = lineGeometryLength(map, line);
-        const double direct = euclideanDistance(
-            map.station(line.stations()[0]).position,
-            map.station(line.stations()[line.stations().size() - 1]).position);
-        if (direct > 1e-9) {
-            detourSum += length / direct;
-            ++detourCount;
-        }
         if (params.shortBeta > 1e-12) {
             const double ratio = std::max(0.0, 1.0 - length / params.shortBeta);
             shortPenalty += params.shortAlpha * ratio * ratio;
         }
     }
-    metrics.r5 = detourCount > 0 ? detourSum / detourCount : 0.0;
     metrics.r6 = shortPenalty;
 
     // R3 / R4：需求加权的最短期望出行时间与换乘次数。
     double sumTime = 0.0;
     double sumTransfers = 0.0;
+    double sumDetour = 0.0;
     double denominator = 0.0;
     bool hasUnreachable = false;
     if (metrics.feasible && stationCount >= 2 && params.evaluateOd) {
@@ -255,6 +246,17 @@ Metrics evaluateNetwork(const Network& network, const WeightResult& weights,
                     const double travel = std::max(0.0, journey.arriveTime - departTime);
                     sumTime += od * travel;
                     sumTransfers += od * journey.transfers;
+
+                    double routeDistance = 0.0;
+                    for (std::size_t leg = 0; leg < journey.legs.size(); ++leg) {
+                        routeDistance += journey.legs[leg].distance;
+                    }
+                    const double direct = euclideanDistance(map.station(i).position,
+                                                            map.station(j).position);
+                    const double detour =
+                        direct > 1e-9 ? routeDistance / direct : 1.0;
+                    sumDetour += od * detour;
+
                     if (params.unreachable == UnreachablePolicy::Exclude) {
                         denominator += od;
                     }
@@ -262,6 +264,7 @@ Metrics evaluateNetwork(const Network& network, const WeightResult& weights,
                     ++metrics.unreachablePairs;
                     if (params.unreachable == UnreachablePolicy::Penalty) {
                         sumTime += od * params.unreachablePenaltySec;
+                        sumDetour += od * params.unreachableDetourPenalty;
                     } else if (params.unreachable == UnreachablePolicy::Infinite) {
                         hasUnreachable = true;
                     }
@@ -274,12 +277,15 @@ Metrics evaluateNetwork(const Network& network, const WeightResult& weights,
     if (!metrics.feasible || hasUnreachable) {
         metrics.r3 = kInfinity;
         metrics.r4 = kInfinity;
+        metrics.r5 = kInfinity;
     } else if (denominator > 1e-12) {
         metrics.r3 = sumTime / denominator;
         metrics.r4 = sumTransfers / denominator;
+        metrics.r5 = sumDetour / denominator;
     } else {
         metrics.r3 = 0.0;
         metrics.r4 = 0.0;
+        metrics.r5 = 0.0;
     }
 
     const auto endTime = std::chrono::steady_clock::now();

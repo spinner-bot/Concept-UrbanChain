@@ -249,7 +249,7 @@ bool Editor::setEdgeWeight(Index from, Index to, double cost, double length,
         return fail(error, "edge does not exist");
     }
     if (cost < 0.0 || length < 0.0) {
-        return fail(error, "edge cost and length cannot be negative");
+        return fail(error, "edge unit cost and length cannot be negative");
     }
     pushUndo();
     if (!network_.map().setEdgeWeight(from, to, cost, length)) {

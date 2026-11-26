@@ -201,7 +201,7 @@ const Entry kEntries[] = {
     {"transfer lines must differ", "换乘的两条线路必须不同"},
     {"transfer time cannot be negative", "换乘时间不能为负"},
     {"failed to set transfer time", "设置换乘时间失败"},
-    {"edge cost and length cannot be negative", "区间成本与长度不能为负"},
+    {"edge unit cost and length cannot be negative", "区间单位成本与长度不能为负"},
     {"BACKGROUND expects a layer count", "BACKGROUND 需要要素数量"},
     {"background layers require CUC3M 2", "背景图层需要 CUC3M 2 格式"},
     {"duplicate BACKGROUND line", "重复的 BACKGROUND 行"},

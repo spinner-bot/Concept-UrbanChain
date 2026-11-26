@@ -360,6 +360,37 @@ void testMapFormatCompatibility() {
     CHECK(loaded.backgroundFeatures().size() == 1);
     CHECK(loaded.backgroundFeatures()[0].kind == uc::BackgroundKind::Water);
 
+    // CUC4M 1：单位距离成本格式，可保存背景宽度。
+    const std::string v4Path = "uc_test_compat.cuc4m";
+    CHECK(uc::io::saveMap(v4Path, source, &error));
+    {
+        std::ifstream check(v4Path);
+        std::string header;
+        std::getline(check, header);
+        CHECK(header == "CUC4M 1");
+    }
+    uc::Map loadedV4;
+    CHECK(uc::io::loadMap(v4Path, loadedV4, &error));
+    CHECK(loadedV4.stationCount() == 3);
+    CHECK(std::fabs(loadedV4.edgeUnitCost(0, 1) - 1.0) < 1e-9);
+    CHECK(std::fabs(loadedV4.edgeBuildCost(1, 2) - 1.0) < 1e-9);
+
+    // CUC3M 3 仍按“总成本”读取：总成本 6、长度 3 → 单位成本 2。
+    const std::string v3Path = "uc_test_compat.cuc3m3";
+    {
+        std::ofstream legacy(v3Path);
+        legacy << "CUC3M 3\n"
+               << "BACKGROUND 0\n"
+               << "STATION A 0 0 Alpha\n"
+               << "STATION B 3 0 Beta\n"
+               << "EDGE A B 6 3\n"
+               << "END\n";
+    }
+    uc::Map loadedV3;
+    CHECK(uc::io::loadMap(v3Path, loadedV3, &error));
+    CHECK(std::fabs(loadedV3.edgeUnitCost(0, 1) - 2.0) < 1e-9);
+    CHECK(std::fabs(loadedV3.edgeBuildCost(0, 1) - 6.0) < 1e-9);
+
     // 旧 .cuc3m 仍可读取。
     const std::string legacyPath = "uc_test_legacy.cuc3m";
     {
@@ -389,6 +420,8 @@ void testMapFormatCompatibility() {
     CHECK(!uc::io::saveMap("uc_test_width.cuc3m2", source, &error));
 
     std::filesystem::remove(v2Path);
+    std::filesystem::remove(v3Path);
+    std::filesystem::remove(v4Path);
     std::filesystem::remove(legacyPath);
 }
 

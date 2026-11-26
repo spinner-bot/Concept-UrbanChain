@@ -53,6 +53,8 @@ bool loadMap(const std::string& path, Map& map, std::string* error) {
     bool finished = false;
     bool backgroundSeen = false;
     int version = 0;
+    int layoutVersion = 0;
+    bool unitCostFormat = false;
     int expectedBackground = 0;
 
     while (std::getline(input, line)) {
@@ -72,11 +74,22 @@ bool loadMap(const std::string& path, Map& map, std::string* error) {
         stream >> keyword;
 
         if (!headerSeen) {
-            if (keyword != "CUC3M") {
-                return setError(error, lineNumber, "expected CUC3M header");
-            }
-            if (!(stream >> version) || version < 1 || version > 3) {
-                return setError(error, lineNumber, "unsupported CUC3M version");
+            if (keyword == "CUC4M") {
+                // CUC4M 1：边权是单位距离建设成本，背景与线宽布局同 CUC3M 3。
+                if (!(stream >> version) || version != 1) {
+                    return setError(error, lineNumber, "unsupported CUC4M version");
+                }
+                unitCostFormat = true;
+                layoutVersion = 4;
+            } else if (keyword == "CUC3M") {
+                // CUC3M 1–3：边权是区间总成本，按旧语义读取。
+                if (!(stream >> version) || version < 1 || version > 3) {
+                    return setError(error, lineNumber, "unsupported CUC3M version");
+                }
+                unitCostFormat = false;
+                layoutVersion = version;
+            } else {
+                return setError(error, lineNumber, "expected CUC3M or CUC4M header");
             }
             headerSeen = true;
             continue;
@@ -94,7 +107,7 @@ bool loadMap(const std::string& path, Map& map, std::string* error) {
             if (!(stream >> expectedBackground) || expectedBackground < 0) {
                 return setError(error, lineNumber, "BACKGROUND expects a layer count");
             }
-            if (version < 2 && expectedBackground != 0) {
+            if (layoutVersion < 2 && expectedBackground != 0) {
                 return setError(error, lineNumber, "background layers require CUC3M 2");
             }
             backgroundSeen = true;
@@ -102,8 +115,8 @@ bool loadMap(const std::string& path, Map& map, std::string* error) {
         }
 
         if (keyword == "BG") {
-            if (version < 2) {
-                return setError(error, lineNumber, "background layers require CUC3M 2");
+            if (layoutVersion < 2) {
+                return setError(error, lineNumber, "background layers require CUC3M 2 or CUC4M 1");
             }
             if (!backgroundSeen) {
                 return setError(error, lineNumber, "BG appears before BACKGROUND");
@@ -121,7 +134,7 @@ bool loadMap(const std::string& path, Map& map, std::string* error) {
                 return setError(error, lineNumber, "unknown background kind: " + kind);
             }
             feature.closed = closed != 0;
-            if (version >= 3) {
+            if (layoutVersion >= 3) {
                 if (!(stream >> feature.width) || feature.width < 0.0) {
                     return setError(error, lineNumber,
                                     "BG expects a non-negative width after id");
@@ -168,20 +181,37 @@ bool loadMap(const std::string& path, Map& map, std::string* error) {
         if (keyword == "EDGE") {
             std::string fromId;
             std::string toId;
-            double cost = 0.0;
-            if (!(stream >> fromId >> toId >> cost)) {
-                return setError(error, lineNumber, "EDGE expects two station ids, a unit cost and a length");
+            double value = 0.0;
+            if (!(stream >> fromId >> toId >> value)) {
+                return setError(error, lineNumber, "EDGE expects two station ids and a cost");
             }
             double length = -1.0;
-            if (!(stream >> length)) {
-                length = -1.0;
-            }
+            const bool hasLength = static_cast<bool>(stream >> length);
             const Index from = loaded.findStation(fromId);
             const Index to = loaded.findStation(toId);
             if (from == kInvalidIndex || to == kInvalidIndex) {
                 return setError(error, lineNumber, "EDGE references an unknown station");
             }
-            if (!loaded.addEdge(from, to, cost, length)) {
+
+            double unitCost = 0.0;
+            if (unitCostFormat) {
+                // CUC3M 4：第三个字段就是单位距离建设成本，length 缺省取几何距离。
+                unitCost = value;
+            } else {
+                // CUC3M 1–3：第三个字段是区间总成本。转换为单位成本，
+                // 同时保留旧的“省略长度时长度 = 成本”语义。
+                if (!hasLength) {
+                    length = value;
+                    unitCost = length > 1e-9 ? value / length : 1.0;
+                } else if (length > 1e-9) {
+                    unitCost = value / length;
+                } else {
+                    length = value > 1e-9 ? value : 1.0;
+                    unitCost = value > 1e-9 ? 1.0 : value;
+                }
+            }
+
+            if (!loaded.addEdge(from, to, unitCost, length)) {
                 return setError(error, lineNumber, "invalid or duplicate EDGE");
             }
             continue;
@@ -224,22 +254,30 @@ bool saveMap(const std::string& path, const Map& map, std::string* error) {
         lowerPath.size() >= 7 && lowerPath.compare(lowerPath.size() - 7, 7, ".cuc3m2") == 0;
     const bool endsWithM3 =
         lowerPath.size() >= 7 && lowerPath.compare(lowerPath.size() - 7, 7, ".cuc3m3") == 0;
+    const bool endsWithM4 =
+        lowerPath.size() >= 6 && lowerPath.compare(lowerPath.size() - 6, 6, ".cuc4m") == 0;
     const bool endsWithM1 =
         lowerPath.size() >= 6 && lowerPath.compare(lowerPath.size() - 6, 6, ".cuc3m") == 0;
 
     if (endsWithM1 && !endsWithM2 && !endsWithM3) {
         if (error != nullptr) {
-            *error = "map files must use .cuc3m2 or .cuc3m3 extension";
+            *error = "map files must use .cuc4m, .cuc3m3 or .cuc3m2 extension";
+        }
+        return false;
+    }
+    if (!endsWithM4 && !endsWithM2 && !endsWithM3) {
+        if (error != nullptr) {
+            *error = "map files must use .cuc4m, .cuc3m3 or .cuc3m2 extension";
         }
         return false;
     }
 
     const int version = endsWithM2 ? 2 : 3;
-    if (version == 2) {
+    if (version == 2 && !endsWithM4) {
         for (std::size_t i = 0; i < map.backgroundFeatures().size(); ++i) {
             if (map.backgroundFeatures()[i].width > 0.0) {
                 if (error != nullptr) {
-                    *error = "CUC3M2 cannot store background widths; save as .cuc3m3";
+                    *error = "CUC3M2 cannot store background widths; save as .cuc3m3 or .cuc4m";
                 }
                 return false;
             }
@@ -255,7 +293,11 @@ bool saveMap(const std::string& path, const Map& map, std::string* error) {
         return false;
     }
 
-    output << "CUC3M " << version << '\n';
+    if (endsWithM4) {
+        output << "CUC4M 1\n";
+    } else {
+        output << "CUC3M " << version << '\n';
+    }
     output << std::setprecision(17);
     output << "BACKGROUND " << map.backgroundFeatures().size() << '\n';
     for (std::size_t i = 0; i < map.backgroundFeatures().size(); ++i) {
@@ -263,7 +305,7 @@ bool saveMap(const std::string& path, const Map& map, std::string* error) {
         output << "BG " << backgroundKindName(feature.kind) << ' '
                << (feature.closed ? 1 : 0) << ' '
                << (feature.id.empty() ? std::string("bg") : feature.id);
-        if (version >= 3) {
+        if (endsWithM4 || version >= 3) {
             output << ' ' << feature.width;
         }
         for (std::size_t j = 0; j < feature.points.size(); ++j) {
@@ -278,8 +320,11 @@ bool saveMap(const std::string& path, const Map& map, std::string* error) {
     }
     for (std::size_t i = 0; i < map.edges().size(); ++i) {
         const EdgeRecord& edge = map.edges()[i];
+        // CUC3M 1–3 写回旧的区间总成本；CUC4M 写单位距离建设成本。
+        const double costValue =
+            endsWithM4 ? edge.unitCost : edge.unitCost * edge.length;
         output << "EDGE " << map.station(edge.from).id << ' ' << map.station(edge.to).id << ' '
-               << edge.unitCost << ' ' << edge.length << '\n';
+               << costValue << ' ' << edge.length << '\n';
     }
     output << "END\n";
     if (!output) {

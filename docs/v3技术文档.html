@@ -327,7 +327,7 @@ hr{border:none;border-top:1px solid var(--line);margin:26px 0}
   <div class="diagram">
     <div class="flow">
       <div class="box"><b>1 启动</b><small>QApplication · 组织名 · 语言 · MainWindow</small></div>
-      <div class="box"><b>2 加载示例</b><small>尝试 data/demo.cuc3m3 → .cuc3m2 → .cuc3m</small></div>
+      <div class="box"><b>2 加载示例</b><small>尝试 data/demo.cuc4m → .cuc3m3 → .cuc3m2 → .cuc3m</small></div>
       <div class="box"><b>3 渲染</b><small>MapScene 重建站点图元，绘制背景/区间/线路</small></div>
       <div class="box"><b>4 交互</b><small>鼠标/菜单 → MapView → Editor → refresh</small></div>
     </div>
@@ -579,21 +579,22 @@ struct LineOps {
 <section id="format">
   <div class="section-head">
     <div class="num">05</div>
-    <div><h2>文件格式</h2><p>.cuc3m3 / .cuc3m2 / .cuc3m 与 .cuc3l 的语法、兼容与读写流程</p></div>
+    <div><h2>文件格式</h2><p>.cuc4m / .cuc3m3 / .cuc3m2 / .cuc3m 与 .cuc3l 的语法、兼容与读写流程</p></div>
   </div>
 
   <h3>5.1 扩展名与版本策略</h3>
   <div class="table-wrap"><table>
     <tr><th>扩展名</th><th>文件头</th><th>内容</th><th>保存</th><th>读取</th></tr>
-    <tr><td><code>.cuc3m3</code></td><td><code>CUC3M 3</code></td><td>站点/区间 + 背景要素 + 线宽</td><td><span class="badge ok">默认</span></td><td><span class="badge ok">支持</span></td></tr>
-    <tr><td><code>.cuc3m2</code></td><td><code>CUC3M 2</code></td><td>站点/区间 + 背景要素，无宽度字段</td><td><span class="badge ok">可选</span></td><td><span class="badge ok">支持</span></td></tr>
-    <tr><td><code>.cuc3m</code></td><td><code>CUC3M 1</code></td><td>仅站点/区间</td><td><span class="badge todo">拒绝保存</span></td><td><span class="badge ok">兼容读取</span></td></tr>
+    <tr><td><code>.cuc4m</code></td><td><code>CUC4M 1</code></td><td>站点/区间 + 背景要素 + 线宽；边权为单位距离成本</td><td><span class="badge ok">默认</span></td><td><span class="badge ok">支持</span></td></tr>
+    <tr><td><code>.cuc3m3</code></td><td><code>CUC3M 3</code></td><td>站点/区间 + 背景要素 + 线宽；边权为区间总成本</td><td><span class="badge ok">可选</span></td><td><span class="badge ok">支持</span></td></tr>
+    <tr><td><code>.cuc3m2</code></td><td><code>CUC3M 2</code></td><td>站点/区间 + 背景要素，无宽度字段；边权为区间总成本</td><td><span class="badge ok">可选</span></td><td><span class="badge ok">支持</span></td></tr>
+    <tr><td><code>.cuc3m</code></td><td><code>CUC3M 1</code></td><td>仅站点/区间；边权为区间总成本</td><td><span class="badge todo">拒绝保存</span></td><td><span class="badge ok">兼容读取</span></td></tr>
     <tr><td><code>.cuc3l</code></td><td><code>CUC3L 1</code></td><td>线路与运营参数</td><td><span class="badge ok">支持</span></td><td><span class="badge ok">支持</span></td></tr>
   </table></div>
-  <div class="insight"><b>版本由内容头决定，读取不依赖扩展名。</b>打开 `.cuc3m` 旧文件后编辑，直接“保存”会转到“另存为”，避免覆盖旧格式。保存时由扩展名决定写 v2 还是 v3；v2 无法保存线状背景宽度。</div>
+  <div class="insight"><b>版本由内容头决定，读取不依赖扩展名。</b>打开 `.cuc3m` 旧文件后编辑，直接“保存”会转到“另存为”，避免覆盖旧格式。保存时由扩展名决定：<code>.cuc4m</code> 写 CUC4M 1（单位距离成本），<code>.cuc3m3</code> / <code>.cuc3m2</code> 写旧的总成本口径；v2 无法保存线状背景宽度。</div>
 
   <h3>5.2 地图文件语法</h3>
-  <pre><code>CUC3M 3
+  <pre><code>CUC4M 1
 BACKGROUND &lt;数量&gt;
 BG &lt;类型&gt; &lt;闭合 0/1&gt; &lt;ID&gt; &lt;宽度&gt; &lt;x1&gt; &lt;y1&gt; &lt;x2&gt; &lt;y2&gt; ...
 STATION &lt;站点ID&gt; &lt;x&gt; &lt;y&gt; &lt;名称...&gt;
@@ -601,7 +602,7 @@ EDGE &lt;站点ID1&gt; &lt;站点ID2&gt; &lt;单位距离成本&gt; [长度]
 ...
 END</code></pre>
   <p>示例（节选）：</p>
-  <pre><code>CUC3M 3
+  <pre><code>CUC4M 1
 BACKGROUND 19
 BG region 1 district 0 -2.2 -1.7 -1.8 -1.9 0.5 -1.85 2.0 -1.5 ...
 BG water 1 lake-east 0 1.45 -1.65 1.9 -1.55 2.05 -1.1 1.85 -0.7 ...
@@ -614,12 +615,12 @@ END</code></pre>
 
   <div class="table-wrap"><table>
     <tr><th>字段</th><th>说明</th></tr>
-    <tr><td><code>BACKGROUND n</code></td><td>v2/v3 必须出现；n 为后续 BG 行数。v1 只允许 <code>BACKGROUND 0</code></td></tr>
-    <tr><td><code>BG kind closed id width ...</code></td><td>v3 格式；v2 无 <code>width</code>；v1 不允许 BG</td></tr>
+    <tr><td><code>BACKGROUND n</code></td><td>CUC3M 2/3 与 CUC4M 1 必须出现；n 为后续 BG 行数。CUC3M 1 只允许 <code>BACKGROUND 0</code></td></tr>
+    <tr><td><code>BG kind closed id width ...</code></td><td>CUC4M 1 与 CUC3M 3 含 <code>width</code>；CUC3M 2 无 width；CUC3M 1 不允许 BG</td></tr>
     <tr><td>闭合</td><td><code>1</code> 表示多边形/闭合线；非闭合线状要素至少 2 点，闭合要素至少 3 点</td></tr>
-    <tr><td>宽度</td><td>数据坐标单位，仅对道路/河流/海岸等线状要素有意义；v3 必填且非负</td></tr>
+    <tr><td>宽度</td><td>数据坐标单位，仅对道路/河流/海岸等线状要素有意义；CUC4M 1 / CUC3M 3 必填且非负</td></tr>
     <tr><td><code>STATION</code></td><td>ID 不含空格；名称取本行剩余全部内容，可含空格；名称为空时用 ID</td></tr>
-    <tr><td><code>EDGE</code></td><td>无向边；成本为<strong>单位距离建设成本</strong>（普通路段约等于 1，过河/过山可上调），区间总成本 = 单位成本 × 长度；长度为几何口径；省略长度时取两端站点几何距离</td></tr>
+    <tr><td><code>EDGE</code></td><td>无向边。CUC4M 1：第三字段为<strong>单位距离建设成本</strong>（普通路段约等于 1，过河/过山可上调），区间总成本 = 单位成本 × 长度；CUC3M 1–3：第三字段为<strong>区间总成本</strong>。长度为几何口径；省略长度时取几何距离（CUC3M 缺省时按旧语义取总成本）</td></tr>
   </table></div>
 
   <h3>5.3 线路文件语法</h3>
@@ -645,7 +646,7 @@ END</code></pre>
   <h3>5.4 读取流程</h3>
   <ol>
     <li>按 UTF-8 读取，首行去 BOM，行尾去 CR；跳过空行和 <code>#</code> 注释。</li>
-    <li>读取版本头，只接受 1/2/3；根据版本决定是否解析 BG 和 width。</li>
+    <li>读取版本头：<code>CUC3M 1/2/3</code> 或 <code>CUC4M 1</code>；根据格式决定是否解析 BG 和 width，以及边权按总成本还是单位成本解释。</li>
     <li>地图先解析到临时 <code>Map</code>；站点 ID 重复、边引用未知站点、BG 数量不匹配都会带行号报错。</li>
     <li>线路先解析到临时 <code>DynamicArray&lt;Line&gt;</code> 与临时换乘记录；构建临时 <code>Network</code>，复制地图，加入线路和换乘，调用 <code>validate()</code>。</li>
     <li>全部成功后才替换当前文档；<code>Editor::load</code> 会清空撤销/重做并重置 dirty。</li>
@@ -654,19 +655,19 @@ END</code></pre>
   <h3>5.5 保存流程</h3>
   <ol>
     <li><code>Editor::save</code> 先调用 <code>network_.validate()</code>，线路非法则拒绝保存。</li>
-    <li>根据扩展名选择版本：<code>.cuc3m2</code> → v2，<code>.cuc3m3</code> → v3；旧 <code>.cuc3m</code> 拒绝写出。</li>
-    <li>v2 若存在任何 <code>width &gt; 0</code> 的背景要素，直接拒绝并提示改用 v3。</li>
+    <li>根据扩展名选择格式：<code>.cuc4m</code> → CUC4M 1（单位距离成本），<code>.cuc3m2</code> / <code>.cuc3m3</code> → 旧的总成本格式；旧 <code>.cuc3m</code> 拒绝写出。</li>
+    <li>CUC3M 2 若存在任何 <code>width &gt; 0</code> 的背景要素，直接拒绝并提示改用 <code>.cuc3m3</code> 或 <code>.cuc4m</code>。</li>
     <li>浮点统一 17 位有效数字；站点/边按内部数组顺序写出；换乘记录排序后写出。</li>
     <li>文件打开失败/写入失败返回错误字符串，由 UI 弹出“保存失败”。</li>
   </ol>
 
-  <div class="warn"><b>已知格式限制：</b>名称取整行剩余内容，不支持换行/转义；背景 ID 与站点 ID 都是不含空格的 token；线路序号隐式依赖 LINE 顺序；v2 无宽度字段；旧程序不能读取新文件。</div>
+  <div class="warn"><b>已知格式限制：</b>名称取整行剩余内容，不支持换行/转义；背景 ID 与站点 ID 都是不含空格的 token；线路序号隐式依赖 LINE 顺序；CUC3M 2 无宽度字段；旧程序不能读取 .cuc4m 文件。</div>
 
   <h3>5.6 兼容矩阵</h3>
   <div class="table-wrap"><table>
-    <tr><th>程序版本</th><th>读 .cuc3m</th><th>读 .cuc3m2</th><th>读 .cuc3m3</th><th>写 .cuc3m</th><th>写 .cuc3m2</th><th>写 .cuc3m3</th></tr>
-    <tr><td>v3 当前</td><td>是</td><td>是</td><td>是</td><td>否</td><td>是（无宽度时）</td><td>是</td></tr>
-    <tr><td>旧 v3 早期（仅 v1）</td><td>是</td><td>否</td><td>否</td><td>是</td><td>否</td><td>否</td></tr>
+    <tr><th>程序版本</th><th>读 .cuc3m</th><th>读 .cuc3m2</th><th>读 .cuc3m3</th><th>读 .cuc4m</th><th>写 .cuc3m</th><th>写 .cuc3m2</th><th>写 .cuc3m3</th><th>写 .cuc4m</th></tr>
+    <tr><td>v4 当前</td><td>是</td><td>是</td><td>是</td><td>是</td><td>否</td><td>是（无宽度时）</td><td>是</td><td>是</td></tr>
+    <tr><td>旧 v3 早期（仅 v1）</td><td>是</td><td>否</td><td>否</td><td>否</td><td>是</td><td>否</td><td>否</td><td>否</td></tr>
   </table></div>
 </section>
 
@@ -910,7 +911,7 @@ app.exec();</code></pre>
 
   <h3>9.3 文件打开 / 保存流程</h3>
   <ul>
-    <li><b>打开：</b>先选地图（<code>*.cuc3m3 *.cuc3m2 *.cuc3m</code>），优先自动寻找同名 <code>.cuc3l</code>；找不到再弹线路选择。加载成功后刷新视图、适应窗口、重建侧栏。</li>
+    <li><b>打开：</b>先选地图（<code>*.cuc4m *.cuc3m3 *.cuc3m2 *.cuc3m</code>），优先自动寻找同名 <code>.cuc3l</code>；找不到再弹线路选择。加载成功后刷新视图、适应窗口、重建侧栏。</li>
     <li><b>保存：</b>若当前路径是旧 <code>.cuc3m</code> 或未知扩展名，转到“另存为”；否则直接 <code>Editor::save</code>。</li>
     <li><b>另存为：</b>QFileDialog 提供 v3/v2 两个过滤器；根据过滤器设置默认后缀，用户未输入后缀时自动补齐；线路文件默认与地图同基名 <code>.cuc3l</code>。</li>
     <li><b>覆盖保护：</b>关闭/新建/打开前若 dirty，弹出保存/放弃/取消三选一。</li>
@@ -1072,7 +1073,7 @@ ctest                  → 2/2 tests passed</code></pre>
     <tr><td>时间相关 Dijkstra 假设 FIFO</td><td>分时段间隔边界可能非最优</td><td>v4 实验：限参/自愿等待/标签修正/时间离散</td></tr>
     <tr><td>精细轨迹点未存储</td><td>线路只能自动平滑，不能逐点编辑</td><td>扩展 .cuc3l TRAJECTORY 字段</td></tr>
     <tr><td>背景只有矢量要素</td><td>没有真实地理底图/栅格瓦片</td><td>项目定位为模拟城市，不需要</td></tr>
-    <tr><td>背景无图形编辑</td><td>只能手写 .cuc3m3 文件</td><td>背景要素编辑器</td></tr>
+    <tr><td>背景无图形编辑</td><td>只能手写 .cuc4m / .cuc3m3 文件</td><td>背景要素编辑器</td></tr>
     <tr><td>线路序号隐式</td><td>重排线路要同步改换乘序号</td><td>显式线路 ID + 引用表</td></tr>
     <tr><td>v2 无背景宽度</td><td>带宽度地图不能保存 v2</td><td>保持现状；v3 为默认</td></tr>
     <tr><td>地图允许不连通</td><td>孤立站点可以保存，导航返回无路径</td><td>可选连通性告警/约束</td></tr>
@@ -1118,8 +1119,8 @@ ctest                  → 2/2 tests passed</code></pre>
   <details><summary>换乘键怎么存？有什么限制？</summary>
   <div class="a">64 位编码 <code class="inline">(station&lt;&lt;42)|(fromLine&lt;&lt;21)|toLine</code>，哈希表存秒数；默认 120 秒。隐含限制是站点/线路数都小于 2²¹，课程地图远小于此。保存时 <code class="inline">transferRecords()</code> 排序，输出确定。</div></details>
 
-  <details><summary>为什么地图文件改成 .cuc3m2/.cuc3m3？怎么兼容？</summary>
-  <div class="a">背景要素和线宽需要格式扩展。扩展名与版本绑定：v3 带宽度，v2 无宽度，旧 .cuc3m 只读。读取由文件头版本决定，三种都能读；保存默认 v3，v2 仅在没有宽度时允许；旧路径保存会转“另存为”。</div></details>
+  <details><summary>为什么地图文件改成 .cuc3m2/.cuc3m3/.cuc4m？怎么兼容？</summary>
+  <div class="a">背景要素、线宽和边权语义需要格式扩展。扩展名与版本绑定：CUC4M 1 带宽度且边权为单位距离成本；CUC3M 3 带宽度、CUC3M 2 无宽度，两者边权都是旧的区间总成本；旧 .cuc3m 只读。读取由文件头决定，四种都能读；保存默认 .cuc4m，.cuc3m3/.cuc3m2 仅作为旧的兼容写出口；旧路径保存会转“另存为”。</div></details>
 
   <details><summary>Catmull-Rom 平滑会影响导航/成本/规划吗？</summary>
   <div class="a">不会。样条只在 <code class="inline">MapScene</code> 渲染与命中检测中使用；线路长度仍按地图边长度累计，导航按区段运行时间，成本按地图边权。平滑曲线可能轻微偏离直线区间，这是纯视觉效果。</div></details>
@@ -1172,7 +1173,7 @@ ctest                  → 2/2 tests passed</code></pre>
     <div class="card"><b>核心模型</b><p>src/core/types.h · station.h · background.h · map.* · line.* · network.* · spline.*</p></div>
     <div class="card"><b>IO / 导航 / 编辑</b><p>src/io/map_io.* · line_io.* · src/nav/router.* · src/edit/editor.*</p></div>
     <div class="card"><b>界面</b><p>src/ui/language.* · main_window.* · map_view.* · map_scene.* · station_item.* · line_dialog.* · transfer_dialog.*</p></div>
-    <div class="card"><b>测试与数据</b><p>tests/test_main.cpp · tests/ui_smoke.cpp · data/demo.cuc3m3 · data/demo.cuc3l</p></div>
+    <div class="card"><b>测试与数据</b><p>tests/test_main.cpp · tests/ui_smoke.cpp · data/demo.cuc4m · data/demo.cuc3l</p></div>
   </div>
 
   <h3>15.3 术语</h3>
@@ -1191,7 +1192,7 @@ ctest                  → 2/2 tests passed</code></pre>
   <ol>
     <li><code>tools\build.bat</code> 成功，无编译错误。</li>
     <li><code>ctest --test-dir build --output-on-failure</code> 2/2 通过。</li>
-    <li><code>start_v3.bat</code> 能加载 <code>data/demo.cuc3m3</code> 与同名 <code>.cuc3l</code>。</li>
+    <li><code>start_v3.bat</code> 能加载 <code>data/demo.cuc4m</code> 与同名 <code>.cuc3l</code>。</li>
     <li>中文/英文切换后菜单、按钮、对话框按钮均正确。</li>
     <li>WEST→SE 08:00 查询得到换乘 1 次、08:15 到达。</li>
     <li>另存为 v3 成功；带宽度地图另存 v2 被明确拒绝并提示。</li>

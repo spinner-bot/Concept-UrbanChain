@@ -753,10 +753,10 @@ void usage() {
               << "               [--local-budget 24] [--no-prefilter]\n"
               << "               [--r1-mode sat|log|unique] [--r1-lambda 0.25]\n"
               << "               default r1-mode=sat lambda=0.25\n"
-              << "  plan-file    --map data/city_demo.cuc3m3 --out-lines data/city_demo_planned.cuc3l\n"
-              << "  audit        --map data/city_demo.cuc3m3 --lines data/city_demo.cuc3l [--short-threshold 3]\n"
-              << "  check-map    --map data/city_demo.cuc3m3\n"
-              << "  demo         --map data/demo.cuc3m3 --lines data/demo.cuc3l\n";
+              << "  plan-file    --map data/city_demo.cuc4m --out-lines data/city_demo_planned.cuc3l\n"
+              << "  audit        --map data/city_demo.cuc4m --lines data/city_demo.cuc3l [--short-threshold 3]\n"
+              << "  check-map    --map data/city_demo.cuc4m\n"
+              << "  demo         --map data/demo.cuc4m --lines data/demo.cuc3l\n";
 }
 
 }  // namespace
@@ -787,7 +787,7 @@ int main(int argc, char** argv) {
     int shortThreshold = 3;
     std::string r1Mode = "sat";
     double coverageLambda = 0.25;
-    std::string mapPath = "data/demo.cuc3m3";
+    std::string mapPath = "data/demo.cuc4m";
     std::string linePath = "data/demo.cuc3l";
     std::string outLinesPath = "data/city_demo_planned.cuc3l";
 

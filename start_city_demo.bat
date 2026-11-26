@@ -13,8 +13,8 @@ if errorlevel 1 (
 )
 
 :run
-if not exist "data\city_demo.cuc3m3" (
-    echo [city] data\city_demo.cuc3m3 not found.
+if not exist "data\city_demo.cuc4m" (
+    echo [city] data\city_demo.cuc4m not found.
     pause
     exit /b 1
 )
@@ -24,5 +24,5 @@ if not exist "data\city_demo.cuc3l" (
     exit /b 1
 )
 
-start "" /D "%~dp0" "%~dp0build\urbanchain.exe" --map "%~dp0data\city_demo.cuc3m3" --lines "%~dp0data\city_demo.cuc3l" --lang zh
+start "" /D "%~dp0" "%~dp0build\urbanchain.exe" --map "%~dp0data\city_demo.cuc4m" --lines "%~dp0data\city_demo.cuc3l" --lang zh
 exit /b 0

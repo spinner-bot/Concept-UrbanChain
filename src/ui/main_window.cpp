@@ -382,7 +382,7 @@ void MainWindow::connectCallbacks() {
 
 void MainWindow::loadDemoIfAvailable() {
     const QString bases[] = {"data/demo", "../data/demo", "../../data/demo"};
-    const QString mapSuffixes[] = {".cuc3m3", ".cuc3m2", ".cuc3m"};
+    const QString mapSuffixes[] = {".cuc4m", ".cuc3m3", ".cuc3m2", ".cuc3m"};
     for (const QString& base : bases) {
         const QString linePath = base + ".cuc3l";
         if (!QFileInfo::exists(linePath)) {
@@ -456,7 +456,7 @@ void MainWindow::openDocument() {
     }
     const QString mapPath = QFileDialog::getOpenFileName(
         this, L("Open map"), QString(),
-        L("UrbanChain map (*.cuc3m3 *.cuc3m2 *.cuc3m);;All files (*)"));
+        L("UrbanChain map (*.cuc4m *.cuc3m3 *.cuc3m2 *.cuc3m);;All files (*)"));
     if (mapPath.isEmpty()) {
         return;
     }
@@ -501,7 +501,8 @@ bool MainWindow::saveDocument() {
     }
     const bool supported =
         mapPath_.endsWith(".cuc3m2", Qt::CaseInsensitive) ||
-        mapPath_.endsWith(".cuc3m3", Qt::CaseInsensitive);
+        mapPath_.endsWith(".cuc3m3", Qt::CaseInsensitive) ||
+        mapPath_.endsWith(".cuc4m", Qt::CaseInsensitive);
     if (!supported) {
         // 旧 .cuc3m 只读兼容，不覆盖写回。
         return saveDocumentAs();
@@ -513,11 +514,12 @@ bool MainWindow::saveDocumentAs() {
     QString initialPath = mapPath_;
     if (initialPath.isEmpty() ||
         (!initialPath.endsWith(".cuc3m2", Qt::CaseInsensitive) &&
-         !initialPath.endsWith(".cuc3m3", Qt::CaseInsensitive))) {
+         !initialPath.endsWith(".cuc3m3", Qt::CaseInsensitive) &&
+         !initialPath.endsWith(".cuc4m", Qt::CaseInsensitive))) {
         const QFileInfo current(initialPath);
-        initialPath = current.dir().filePath(current.completeBaseName() + QString(".cuc3m3"));
+        initialPath = current.dir().filePath(current.completeBaseName() + QString(".cuc4m"));
         if (mapPath_.isEmpty()) {
-            initialPath = QString("map.cuc3m3");
+            initialPath = QString("map.cuc4m");
         }
     }
 
@@ -526,15 +528,18 @@ bool MainWindow::saveDocumentAs() {
     dialog.selectFile(initialInfo.fileName());
     dialog.setAcceptMode(QFileDialog::AcceptSave);
     dialog.setFileMode(QFileDialog::AnyFile);
-    dialog.setNameFilters({L("UrbanChain map v3 (*.cuc3m3)"),
+    dialog.setNameFilters({L("UrbanChain map v4 (*.cuc4m)"),
+                           L("UrbanChain map v3 (*.cuc3m3)"),
                            L("UrbanChain map v2 (*.cuc3m2)"),
                            L("All files (*)")});
-    dialog.setDefaultSuffix("cuc3m3");
+    dialog.setDefaultSuffix("cuc4m");
     connect(&dialog, &QFileDialog::filterSelected, &dialog, [&dialog](const QString& filter) {
         if (filter.contains("cuc3m2")) {
             dialog.setDefaultSuffix("cuc3m2");
         } else if (filter.contains("cuc3m3")) {
             dialog.setDefaultSuffix("cuc3m3");
+        } else if (filter.contains("cuc4m")) {
+            dialog.setDefaultSuffix("cuc4m");
         }
     });
     if (dialog.exec() != QDialog::Accepted || dialog.selectedFiles().isEmpty()) {
@@ -542,8 +547,10 @@ bool MainWindow::saveDocumentAs() {
     }
     QString mapPath = dialog.selectedFiles().first();
     if (QFileInfo(mapPath).suffix().isEmpty()) {
-        mapPath += dialog.selectedNameFilter().contains("cuc3m2") ? QString(".cuc3m2")
-                                                                  : QString(".cuc3m3");
+        const QString filter = dialog.selectedNameFilter();
+        mapPath += filter.contains("cuc3m2")   ? QString(".cuc3m2")
+                   : filter.contains("cuc3m3") ? QString(".cuc3m3")
+                                               : QString(".cuc4m");
     }
 
     QString defaultLinePath = linePath_;

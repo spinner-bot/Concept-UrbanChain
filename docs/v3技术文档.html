@@ -597,7 +597,7 @@ struct LineOps {
 BACKGROUND &lt;数量&gt;
 BG &lt;类型&gt; &lt;闭合 0/1&gt; &lt;ID&gt; &lt;宽度&gt; &lt;x1&gt; &lt;y1&gt; &lt;x2&gt; &lt;y2&gt; ...
 STATION &lt;站点ID&gt; &lt;x&gt; &lt;y&gt; &lt;名称...&gt;
-EDGE &lt;站点ID1&gt; &lt;站点ID2&gt; &lt;成本&gt; [长度]
+EDGE &lt;站点ID1&gt; &lt;站点ID2&gt; &lt;单位距离成本&gt; [长度]
 ...
 END</code></pre>
   <p>示例（节选）：</p>
@@ -619,7 +619,7 @@ END</code></pre>
     <tr><td>闭合</td><td><code>1</code> 表示多边形/闭合线；非闭合线状要素至少 2 点，闭合要素至少 3 点</td></tr>
     <tr><td>宽度</td><td>数据坐标单位，仅对道路/河流/海岸等线状要素有意义；v3 必填且非负</td></tr>
     <tr><td><code>STATION</code></td><td>ID 不含空格；名称取本行剩余全部内容，可含空格；名称为空时用 ID</td></tr>
-    <tr><td><code>EDGE</code></td><td>无向边；成本为规划/成本口径，长度为几何口径；省略长度时长度 = 成本</td></tr>
+    <tr><td><code>EDGE</code></td><td>无向边；成本为<strong>单位距离建设成本</strong>（普通路段约等于 1，过河/过山可上调），区间总成本 = 单位成本 × 长度；长度为几何口径；省略长度时取两端站点几何距离</td></tr>
   </table></div>
 
   <h3>5.3 线路文件语法</h3>

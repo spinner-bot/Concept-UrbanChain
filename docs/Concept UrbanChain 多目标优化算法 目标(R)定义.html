@@ -629,7 +629,7 @@ footer .big{font-family:var(--serif);font-style:italic;font-size:30px;color:rgba
         \[ e=(u,v)\in E,\qquad c_e \]
       </div>
       <p>
-        当前模型直接将地图带权图中的边权作为区间建设成本使用。边权的具体物理单位及是否同时代表区间长度，应以输入数据定义为准。<strong>若建设成本和几何长度并非同一概念，应在数据层分别保存，不得默认二者相等。</strong>
+        地图带权图中的边权 \(c_e\) 表示<strong>单位距离建设成本</strong>，而不是整个区间的总成本；区间几何长度 \(l_e\) 由数据层单独保存。区间总建设成本为 \(c_e \cdot l_e\)。普通路段单位成本接近 1，过河、过山等建设难度较高的区间可上调。
       </p>
 
       <h3><span class="h3n">2.2</span>站点数据</h3>

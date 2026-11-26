@@ -702,7 +702,7 @@ void modePlanFile(const std::string& mapPath, const std::string& outLinesPath,
     auditNetwork(output, 3, 8);
 }
 
-void modeCorridors(const std::string& mapPath) {
+void modeCorridors(const std::string& mapPath, const std::string& linePath) {
     Map map;
     std::string error;
     if (!io::loadMap(mapPath, map, &error)) {
@@ -710,7 +710,17 @@ void modeCorridors(const std::string& mapPath) {
         return;
     }
     std::cout << "corridors: " << mapPath << '\n';
-    printCorridorGraph(buildCorridorGraph(map));
+    const CorridorGraph graph = buildCorridorGraph(map);
+    printCorridorGraph(graph);
+    if (!linePath.empty()) {
+        Network network;
+        network.map() = map;
+        if (!io::loadLines(linePath, network, &error)) {
+            std::cout << "line load failed: " << error << '\n';
+            return;
+        }
+        printCorridorLineUsage(corridorLineUsage(map, graph, network.lines()));
+    }
 }
 
 void modeCheckMap(const std::string& mapPath) {
@@ -912,7 +922,7 @@ int main(int argc, char** argv) {
     } else if (mode == "check-map") {
         modeCheckMap(mapPath);
     } else if (mode == "corridors") {
-        modeCorridors(mapPath);
+        modeCorridors(mapPath, linePath);
     } else if (mode == "demo") {
         modeDemo(mapPath, linePath);
     } else {

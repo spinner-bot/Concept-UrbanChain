@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/line.h"
 #include "core/map.h"
 #include "ds/dynamic_array.h"
 
@@ -37,6 +38,15 @@ struct CorridorOptions {
 CorridorGraph buildCorridorGraph(const Map& map, const CorridorOptions& options = {});
 
 void printCorridorGraph(const CorridorGraph& graph);
+
+struct CorridorLineUsage {
+    int lineEdges = 0;
+    int roadEdges = 0;
+    int connectorEdges = 0;
+};
+CorridorLineUsage corridorLineUsage(const Map& map, const CorridorGraph& graph,
+                                   const DynamicArray<Line>& lines);
+void printCorridorLineUsage(const CorridorLineUsage& usage);
 
 // 从走廊骨架生成“沿走廊贯通”的候选线路：
 // - 每条走廊本身；

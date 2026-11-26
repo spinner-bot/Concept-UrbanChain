@@ -188,6 +188,47 @@ CorridorGraph buildCorridorGraph(const Map& map, const CorridorOptions& options)
     return graph;
 }
 
+CorridorLineUsage corridorLineUsage(const Map& map, const CorridorGraph& graph,
+                                   const DynamicArray<Line>& lines) {
+    CorridorLineUsage usage;
+    for (std::size_t l = 0; l < lines.size(); ++l) {
+        const Line& line = lines[l];
+        for (int i = 0; i + 1 < line.stationCount(); ++i) {
+            const Index a = line.stations()[static_cast<std::size_t>(i)];
+            const Index b = line.stations()[static_cast<std::size_t>(i + 1)];
+            int edgeIndex = -1;
+            for (std::size_t e = 0; e < map.edges().size(); ++e) {
+                const EdgeRecord& edge = map.edges()[e];
+                if ((edge.from == a && edge.to == b) || (edge.from == b && edge.to == a)) {
+                    edgeIndex = static_cast<int>(e);
+                    break;
+                }
+            }
+            if (edgeIndex < 0) {
+                continue;
+            }
+            ++usage.lineEdges;
+            if (edgeIndex < static_cast<int>(graph.edgeIsRoad.size()) &&
+                graph.edgeIsRoad[static_cast<std::size_t>(edgeIndex)]) {
+                ++usage.roadEdges;
+            } else {
+                ++usage.connectorEdges;
+            }
+        }
+    }
+    return usage;
+}
+
+void printCorridorLineUsage(const CorridorLineUsage& usage) {
+    const double ratio = usage.lineEdges > 0
+                             ? 100.0 * usage.roadEdges / usage.lineEdges
+                             : 0.0;
+    std::cout << "line corridor usage: edges=" << usage.lineEdges
+              << " road=" << usage.roadEdges
+              << " connector=" << usage.connectorEdges
+              << " roadRatio=" << ratio << "%\n";
+}
+
 void printCorridorGraph(const CorridorGraph& graph) {
     std::cout << "corridor graph: roadEdges=" << graph.roadEdgeCount
               << " connectorEdges=" << graph.connectorEdgeCount

@@ -23,6 +23,11 @@ struct ScoreParams {
     // 软覆盖率下限：低于阈值时按平方缺口惩罚，仍保留效率项。
     double minCoverage = 0.8;
     double coveragePenalty = 1.0;
+    // 线路相似度惩罚：共享区间（共线）与站点过近都会推高惩罚，
+    // 用于避免多条线路堆在市中心同一条走廊。
+    double wLineOverlap = 0.10;
+    double wLineProximity = 0.03;
+    double lineProximityDistance = 7.0;
 };
 
 struct SearchParams {
@@ -30,6 +35,8 @@ struct SearchParams {
     int topStations = 10;
     int extraAnchors = 12;
     int candidateLimit = 80;
+    // 候选线路与搜索过程中的最短站数；过短的“线路”通常只是接驳段。
+    int minLineStations = 2;
     double minCoverageGain = 1e-9;
     bool enableLocalSearch = true;
     int localSearchBudget = 120;
@@ -55,6 +62,10 @@ struct PlanResult {
     int redundantLinesRemoved = 0;
     double score = 0.0;
 };
+
+// 线路相似度惩罚（共线 + 过近），供测试与实验观察。
+double lineSimilarityPenalty(const Map& map, const DynamicArray<Line>& lines,
+                             const ScoreParams& score);
 
 // 第一版搜索原型：候选路径池 + 连通性保持的贪心覆盖。
 // 评分只使用静态指标（R1 增量 / R2 增量），R3/R4 在最终方案上完整计算。

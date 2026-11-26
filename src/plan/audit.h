@@ -40,6 +40,17 @@ struct MapGeometryReport {
 MapGeometryReport auditMapGeometry(const Map& map, double tolerance = 0.05);
 void printMapGeometry(const Map& map, const MapGeometryReport& report);
 
+struct NearestEdgeReport {
+    int required = 0;       // X = 1 + stationCount / 10
+    int checkedStations = 0;
+    int violatedStations = 0;  // 最近 X 个站点中没有全部连边
+    int missingEdges = 0;
+};
+
+// 强制连通规则：每个站点与最近的 X 个站点必须有边。
+NearestEdgeReport auditNearestEdges(const Map& map);
+void printNearestEdges(const NearestEdgeReport& report);
+
 struct LineMergeOpportunity {
     int firstLine = -1;
     int secondLine = -1;
@@ -67,6 +78,13 @@ struct LineStructure {
     int stationsWithOneLine = 0;
     int stationsWithMultipleLines = 0;
     int lineCountHistogram[5] = {0, 0, 0, 0, 0};  // 0,1,2,3,4+
+
+    // 线路相似度：共享区间比例与站点近邻比例，用于检查线路是否堆在一起。
+    double averageEdgeOverlap = 0.0;
+    double maxEdgeOverlap = 0.0;
+    double averageStationProximity = 0.0;
+    double maxStationProximity = 0.0;
+    int clusteredPairs = 0;  // 共享区间或近邻比例 >= 0.5 的线路对
 
     int sharedEndpointPairs = 0;
     int simpleMergePairs = 0;

@@ -4,6 +4,8 @@
 #include <cmath>
 #include <cstdint>
 #include <iostream>
+#include <utility>
+#include <vector>
 
 namespace uc {
 namespace plan {
@@ -285,6 +287,44 @@ void printMapGeometry(const Map& map, const MapGeometryReport& report) {
     }
 }
 
+NearestEdgeReport auditNearestEdges(const Map& map) {
+    NearestEdgeReport report;
+    const int count = map.stationCount();
+    report.required = count <= 0 ? 0 : 1 + count / 10;
+    report.checkedStations = count;
+    for (int i = 0; i < count; ++i) {
+        std::vector<std::pair<double, int>> distances;
+        distances.reserve(static_cast<std::size_t>(std::max(0, count - 1)));
+        for (int j = 0; j < count; ++j) {
+            if (i == j) {
+                continue;
+            }
+            distances.push_back(std::make_pair(
+                euclideanDistance(map.station(i).position, map.station(j).position), j));
+        }
+        std::sort(distances.begin(), distances.end());
+        int missing = 0;
+        const int k = std::min(report.required, static_cast<int>(distances.size()));
+        for (int n = 0; n < k; ++n) {
+            if (!map.hasEdge(i, distances[static_cast<std::size_t>(n)].second)) {
+                ++missing;
+            }
+        }
+        if (missing > 0) {
+            ++report.violatedStations;
+            report.missingEdges += missing;
+        }
+    }
+    return report;
+}
+
+void printNearestEdges(const NearestEdgeReport& report) {
+    std::cout << "nearest-edge rule: X=1+stations/10=" << report.required
+              << " checked=" << report.checkedStations
+              << " violatedStations=" << report.violatedStations
+              << " missingEdges=" << report.missingEdges << '\n';
+}
+
 LineStructure auditLines(const Map& map, const DynamicArray<Line>& lines,
                          int shortStationThreshold) {
     LineStructure structure;
@@ -442,6 +482,77 @@ LineStructure auditLines(const Map& map, const DynamicArray<Line>& lines,
         }
     }
 
+    // 线路相似度：共享区间比例 + 站点近邻比例。
+    double overlapSum = 0.0;
+    double proximitySum = 0.0;
+    int similarityPairs = 0;
+    constexpr double kProximityDistance = 7.0;
+    for (std::size_t i = 0; i < lines.size(); ++i) {
+        const Line& a = lines[i];
+        if (a.stationCount() < 2) {
+            continue;
+        }
+        for (std::size_t j = i + 1; j < lines.size(); ++j) {
+            const Line& b = lines[j];
+            if (b.stationCount() < 2) {
+                continue;
+            }
+            ++similarityPairs;
+            int sharedEdges = 0;
+            for (int ea = 0; ea + 1 < a.stationCount(); ++ea) {
+                for (int eb = 0; eb + 1 < b.stationCount(); ++eb) {
+                    const Index a0 = a.stations()[static_cast<std::size_t>(ea)];
+                    const Index a1 = a.stations()[static_cast<std::size_t>(ea + 1)];
+                    const Index b0 = b.stations()[static_cast<std::size_t>(eb)];
+                    const Index b1 = b.stations()[static_cast<std::size_t>(eb + 1)];
+                    if ((a0 == b0 && a1 == b1) || (a0 == b1 && a1 == b0)) {
+                        ++sharedEdges;
+                        break;
+                    }
+                }
+            }
+            const int shorterEdges = std::min(a.stationCount() - 1, b.stationCount() - 1);
+            const double overlap =
+                shorterEdges > 0 ? static_cast<double>(sharedEdges) / shorterEdges : 0.0;
+            auto nearFraction = [&](const Line& source, const Line& target) {
+                if (source.stationCount() <= 0) {
+                    return 0.0;
+                }
+                int near = 0;
+                for (int s = 0; s < source.stationCount(); ++s) {
+                    const Vec2& point =
+                        map.station(source.stations()[static_cast<std::size_t>(s)]).position;
+                    double best = kInfinity;
+                    for (int t = 0; t < target.stationCount(); ++t) {
+                        best = std::min(
+                            best,
+                            euclideanDistance(
+                                point,
+                                map.station(target.stations()[static_cast<std::size_t>(t)])
+                                    .position));
+                    }
+                    if (best <= kProximityDistance) {
+                        ++near;
+                    }
+                }
+                return static_cast<double>(near) / source.stationCount();
+            };
+            const double proximity = 0.5 * (nearFraction(a, b) + nearFraction(b, a));
+            overlapSum += overlap;
+            proximitySum += proximity;
+            structure.maxEdgeOverlap = std::max(structure.maxEdgeOverlap, overlap);
+            structure.maxStationProximity =
+                std::max(structure.maxStationProximity, proximity);
+            if (overlap >= 0.5 || proximity >= 0.5) {
+                ++structure.clusteredPairs;
+            }
+        }
+    }
+    if (similarityPairs > 0) {
+        structure.averageEdgeOverlap = overlapSum / similarityPairs;
+        structure.averageStationProximity = proximitySum / similarityPairs;
+    }
+
     return structure;
 }
 
@@ -481,6 +592,11 @@ void printLineStructure(const LineStructure& structure) {
               << " 3=" << structure.lineCountHistogram[3]
               << " 4+=" << structure.lineCountHistogram[4]
               << " max=" << structure.maxLinesAtStation << '\n';
+    std::cout << "line similarity: avgEdgeOverlap=" << structure.averageEdgeOverlap
+              << " maxEdgeOverlap=" << structure.maxEdgeOverlap
+              << " avgProximity=" << structure.averageStationProximity
+              << " maxProximity=" << structure.maxStationProximity
+              << " clusteredPairs=" << structure.clusteredPairs << '\n';
     std::cout << "merge: sharedEndpointPairs=" << structure.sharedEndpointPairs
               << " simple=" << structure.simpleMergePairs
               << " straight(<=45deg)=" << structure.straightMergePairs

@@ -464,6 +464,60 @@ void testCoverageModes() {
     CHECK(satMetrics.coveredStations == 3);
 }
 
+
+void testLineSimilarityPenalty() {
+    Map map;
+    for (int i = 0; i < 5; ++i) {
+        map.addStation(makeStation(("S" + std::to_string(i)).c_str(), i * 10.0, 0.0));
+    }
+    for (int i = 0; i + 1 < 5; ++i) {
+        map.addEdge(i, i + 1, 1.0, 10.0);
+    }
+
+    ScoreParams score;
+    score.lineProximityDistance = 1.0;
+
+    DynamicArray<Line> duplicated;
+    duplicated.push_back(makeLine(makeStops({0, 1, 2, 3})));
+    duplicated.push_back(makeLine(makeStops({0, 1, 2, 3})));
+    const double duplicatePenalty = lineSimilarityPenalty(map, duplicated, score);
+    CHECK(duplicatePenalty > 0.12);
+    CHECK(duplicatePenalty < 0.14);
+
+    DynamicArray<Line> distinct;
+    distinct.push_back(makeLine(makeStops({0, 1, 2})));
+    distinct.push_back(makeLine(makeStops({2, 3, 4})));
+    const double distinctPenalty = lineSimilarityPenalty(map, distinct, score);
+    CHECK(distinctPenalty < duplicatePenalty);
+
+    DynamicArray<Line> single;
+    single.push_back(makeLine(makeStops({0, 1, 2})));
+    CHECK(lineSimilarityPenalty(map, single, score) == 0.0);
+}
+
+void testNearestEdgeAudit() {
+    Map map;
+    for (int i = 0; i < 10; ++i) {
+        map.addStation(makeStation(("S" + std::to_string(i)).c_str(), i * 10.0, 0.0));
+    }
+    for (int i = 0; i + 1 < 10; ++i) {
+        map.addEdge(i, i + 1, 1.0, 10.0);
+    }
+    // 10 站要求 X = 2；端点额外连到第二近站。
+    map.addEdge(0, 2, 1.0, 20.0);
+    map.addEdge(7, 9, 1.0, 20.0);
+
+    NearestEdgeReport report = auditNearestEdges(map);
+    CHECK(report.required == 2);
+    CHECK(report.violatedStations == 0);
+    CHECK(report.missingEdges == 0);
+
+    CHECK(map.removeEdge(0, 2));
+    report = auditNearestEdges(map);
+    CHECK(report.violatedStations >= 1);
+    CHECK(report.missingEdges >= 1);
+}
+
 void testMapGeometryAudit() {
     Map map;
     map.addStation(makeStation("A", 0.0, 0.0));
@@ -551,6 +605,8 @@ int main() {
     testUnreachablePolicies();
     testCoverageModes();
     testMapGeometryAudit();
+    testLineSimilarityPenalty();
+    testNearestEdgeAudit();
     testLineAudit();
     testGridAuditBalance();
     if (failures == 0) {

@@ -238,6 +238,85 @@ double scoreMetrics(const Metrics& metrics, const ScoreParams& score) {
     return value;
 }
 
+double lineSimilarityPenaltyInternal(const Map& map, const DynamicArray<Line>& lines,
+                                     const ScoreParams& score) {
+    if (lines.size() < 2) {
+        return 0.0;
+    }
+    double overlapSum = 0.0;
+    double proximitySum = 0.0;
+    int pairs = 0;
+    for (std::size_t i = 0; i < lines.size(); ++i) {
+        const Line& a = lines[i];
+        if (a.stationCount() < 2) {
+            continue;
+        }
+        for (std::size_t j = i + 1; j < lines.size(); ++j) {
+            const Line& b = lines[j];
+            if (b.stationCount() < 2) {
+                continue;
+            }
+            ++pairs;
+
+            // 共线程度：两条线路共享的区间数 / 较短线路的区间数。
+            int sharedEdges = 0;
+            for (int ea = 0; ea + 1 < a.stationCount(); ++ea) {
+                const Index a0 = a.stations()[static_cast<std::size_t>(ea)];
+                const Index a1 = a.stations()[static_cast<std::size_t>(ea + 1)];
+                for (int eb = 0; eb + 1 < b.stationCount(); ++eb) {
+                    const Index b0 = b.stations()[static_cast<std::size_t>(eb)];
+                    const Index b1 = b.stations()[static_cast<std::size_t>(eb + 1)];
+                    if ((a0 == b0 && a1 == b1) || (a0 == b1 && a1 == b0)) {
+                        ++sharedEdges;
+                        break;
+                    }
+                }
+            }
+            const int shorterEdges = std::min(a.stationCount() - 1, b.stationCount() - 1);
+            if (shorterEdges > 0) {
+                overlapSum += static_cast<double>(sharedEdges) / shorterEdges;
+            }
+
+            // 过近程度：一条线路的站点中，有多少落在另一条线路站点的
+            // 近邻半径内；双向平均，避免短线路单方面被长线路支配。
+            auto nearFraction = [&](const Line& source, const Line& target) {
+                if (source.stationCount() <= 0) {
+                    return 0.0;
+                }
+                int near = 0;
+                for (int s = 0; s < source.stationCount(); ++s) {
+                    const Vec2& point =
+                        map.station(source.stations()[static_cast<std::size_t>(s)]).position;
+                    double best = kInfinity;
+                    for (int t = 0; t < target.stationCount(); ++t) {
+                        best = std::min(
+                            best,
+                            euclideanDistance(
+                                point,
+                                map.station(target.stations()[static_cast<std::size_t>(t)])
+                                    .position));
+                    }
+                    if (best <= score.lineProximityDistance) {
+                        ++near;
+                    }
+                }
+                return static_cast<double>(near) / source.stationCount();
+            };
+            proximitySum += 0.5 * (nearFraction(a, b) + nearFraction(b, a));
+        }
+    }
+    if (pairs <= 0) {
+        return 0.0;
+    }
+    return score.wLineOverlap * overlapSum / pairs +
+           score.wLineProximity * proximitySum / pairs;
+}
+
+double scorePlan(const Map& map, const DynamicArray<Line>& lines, const Metrics& metrics,
+                 const ScoreParams& score) {
+    return scoreMetrics(metrics, score) - lineSimilarityPenaltyInternal(map, lines, score);
+}
+
 void recomputeCovered(const Map& map, const DynamicArray<Line>& lines,
                       DynamicArray<unsigned char>& covered) {
     for (int i = 0; i < map.stationCount(); ++i) {
@@ -251,6 +330,11 @@ void recomputeCovered(const Map& map, const DynamicArray<Line>& lines,
 }
 
 }  // namespace
+
+double lineSimilarityPenalty(const Map& map, const DynamicArray<Line>& lines,
+                             const ScoreParams& score) {
+    return lineSimilarityPenaltyInternal(map, lines, score);
+}
 
 PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
                            const DemandResult& demand, const EvalParams& params,
@@ -271,7 +355,7 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
             return;
         }
         const DynamicArray<Index> path = shortestPath(map, a, b);
-        if (path.size() < 2) {
+        if (static_cast<int>(path.size()) < std::max(2, search.minLineStations)) {
             return;
         }
         const std::string key = pathKey(path);
@@ -539,7 +623,7 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
             }
             // 生长阶段也使用同一个代理分数：覆盖、成本、绕行、短线 + 软覆盖下限。
             // R3/R4 在 staticParams 下为 0，不参与生长，交给最终局部搜索。
-            const double score = scoreMetrics(metrics, scoreParams);
+            const double score = scorePlan(map, trial, metrics, scoreParams);
             if (score > bestScore + 1e-12 ||
                 (std::fabs(score - bestScore) <= 1e-12 && gain > bestGain)) {
                 best = static_cast<int>(c);
@@ -568,7 +652,7 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
     finalParams.connectivity = ConnectivityRequirement::CoveredStations;
     result.baseMetrics = evaluate(map, current, weights, demand, finalParams);
     result.metrics = result.baseMetrics;
-    result.score = scoreMetrics(result.metrics, scoreParams);
+    result.score = scorePlan(map, current, result.metrics, scoreParams);
 
     if (search.enableLocalSearch && !current.empty() &&
         search.localSearchBudget > 0) {
@@ -576,8 +660,10 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
         localStatic.evaluateOd = false;
         localStatic.overrideLineOps = true;
         localStatic.connectivity = ConnectivityRequirement::CoveredStations;
+        const Metrics currentStaticMetrics =
+            evaluate(map, current, weights, demand, localStatic);
         double currentStaticScore =
-            scoreMetrics(evaluate(map, current, weights, demand, localStatic), scoreParams);
+            scorePlan(map, current, currentStaticMetrics, scoreParams);
 
         double currentScore = result.score;
         int evaluations = 0;
@@ -588,7 +674,7 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
                                  double& trialStatic) {
             const Metrics staticMetrics =
                 evaluate(map, trial, weights, demand, localStatic);
-            trialStatic = scoreMetrics(staticMetrics, scoreParams);
+            trialStatic = scorePlan(map, trial, staticMetrics, scoreParams);
             if (search.prefilter &&
                 trialStatic + search.prefilterMargin < currentStaticScore) {
                 return false;
@@ -627,7 +713,7 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
                 if (!evaluateTrial(trial, metrics, trialStatic)) {
                     continue;
                 }
-                const double score = scoreMetrics(metrics, scoreParams);
+                const double score = scorePlan(map, trial, metrics, scoreParams);
                 if (score > currentScore + 1e-9) {
                     current = static_cast<DynamicArray<Line>&&>(trial);
                     used[c] = 1;
@@ -684,7 +770,7 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
                 if (!evaluateTrial(trial, metrics, trialStatic)) {
                     continue;
                 }
-                        const double score = scoreMetrics(metrics, scoreParams);
+                        const double score = scorePlan(map, trial, metrics, scoreParams);
                         if (score > currentScore + 1e-9) {
                             used[static_cast<std::size_t>(currentCandidates[lineIndex])] = 0;
                             current = static_cast<DynamicArray<Line>&&>(trial);
@@ -705,7 +791,7 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
             // 3) 端点缩短：去掉线路首/尾一个站。
             for (std::size_t lineIndex = 0; lineIndex < current.size() && !improved; ++lineIndex) {
                 const Line& base = current[lineIndex];
-                if (base.stationCount() <= 2) {
+                if (base.stationCount() <= std::max(2, search.minLineStations)) {
                     continue;
                 }
                 for (int side = 0; side < 2 && !improved; ++side) {
@@ -731,7 +817,7 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
                 if (!evaluateTrial(trial, metrics, trialStatic)) {
                     continue;
                 }
-                    const double score = scoreMetrics(metrics, scoreParams);
+                    const double score = scorePlan(map, trial, metrics, scoreParams);
                     if (score > currentScore + 1e-9) {
                         used[static_cast<std::size_t>(currentCandidates[lineIndex])] = 0;
                         current = static_cast<DynamicArray<Line>&&>(trial);
@@ -801,7 +887,7 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
                 if (!evaluateTrial(trial, metrics, trialStatic)) {
                     continue;
                 }
-                        const double score = scoreMetrics(metrics, scoreParams);
+                        const double score = scorePlan(map, trial, metrics, scoreParams);
                         if (score > currentScore + 1e-9) {
                             used[static_cast<std::size_t>(currentCandidates[lineIndex])] = 0;
                             current = static_cast<DynamicArray<Line>&&>(trial);
@@ -836,7 +922,7 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
                 if (!evaluateTrial(trial, metrics, trialStatic)) {
                     continue;
                 }
-                    const double score = scoreMetrics(metrics, scoreParams);
+                    const double score = scorePlan(map, trial, metrics, scoreParams);
                     if (score > currentScore + 1e-9) {
                         used[static_cast<std::size_t>(
                             currentCandidates[replaceAt])] = 0;
@@ -872,7 +958,7 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
                 if (!evaluateTrial(trial, metrics, trialStatic)) {
                     continue;
                 }
-                const double score = scoreMetrics(metrics, scoreParams);
+                const double score = scorePlan(map, trial, metrics, scoreParams);
                 if (score > currentScore + 1e-9) {
                     used[static_cast<std::size_t>(
                         currentCandidates[removeAt])] = 0;
@@ -922,7 +1008,7 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
             }
             if (removedDuplicate) {
                 result.metrics = evaluate(map, current, weights, demand, cleanupParams);
-                cleanupScore = scoreMetrics(result.metrics, scoreParams);
+                cleanupScore = scorePlan(map, current, result.metrics, scoreParams);
                 changed = true;
                 continue;
             }
@@ -946,7 +1032,7 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
             }
             if (removedSubset) {
                 result.metrics = evaluate(map, current, weights, demand, cleanupParams);
-                cleanupScore = scoreMetrics(result.metrics, scoreParams);
+                cleanupScore = scorePlan(map, current, result.metrics, scoreParams);
                 changed = true;
                 continue;
             }
@@ -981,7 +1067,7 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
                     if (!metrics.feasible) {
                         continue;
                     }
-                    const double score = scoreMetrics(metrics, scoreParams);
+                    const double score = scorePlan(map, trial, metrics, scoreParams);
                     if (score > cleanupScore + 1e-9) {
                         current = static_cast<DynamicArray<Line>&&>(trial);
                         cleanupScore = score;
@@ -1014,7 +1100,7 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
                 if (!metrics.feasible) {
                     continue;
                 }
-                const double score = scoreMetrics(metrics, scoreParams);
+                const double score = scorePlan(map, trial, metrics, scoreParams);
                 if (score > cleanupScore + 1e-9) {
                     current = static_cast<DynamicArray<Line>&&>(trial);
                     cleanupScore = score;

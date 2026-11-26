@@ -638,7 +638,9 @@ void modePlan(int cols, int rows, int k, int maxLines, const std::string& profil
 
 void modePlanFile(const std::string& mapPath, const std::string& outLinesPath,
                   int k, int maxLines, int localBudget, bool prefilter,
-                  const std::string& r1Mode, double coverageLambda) {
+                  const std::string& r1Mode, double coverageLambda,
+                  double lineOverlap, double lineProximity, double proximityDistance,
+                  int minLineStations) {
     Network source;
     std::string error;
     if (!io::loadMap(mapPath, source.map(), &error)) {
@@ -660,6 +662,10 @@ void modePlanFile(const std::string& mapPath, const std::string& outLinesPath,
     search.candidateLimit = std::max(600, stationCount * 12);
     search.localSearchBudget = localBudget > 0 ? localBudget : 160;
     search.prefilter = prefilter;
+    search.score.wLineOverlap = lineOverlap;
+    search.score.wLineProximity = lineProximity;
+    search.score.lineProximityDistance = proximityDistance;
+    search.minLineStations = minLineStations;
 
     const PlanResult plan =
         buildGreedyPlan(source.map(), weights, demand, params, search);
@@ -702,6 +708,7 @@ void modeCheckMap(const std::string& mapPath) {
     }
     std::cout << "check-map: " << mapPath << '\n';
     printMapGeometry(map, auditMapGeometry(map));
+    printNearestEdges(auditNearestEdges(map));
 }
 
 void modeAudit(const std::string& mapPath, const std::string& linePath,
@@ -789,6 +796,10 @@ int main(int argc, char** argv) {
     int shortThreshold = 3;
     std::string r1Mode = "sat";
     double coverageLambda = 0.25;
+    double lineOverlap = 0.10;
+    double lineProximity = 0.03;
+    double proximityDistance = 7.0;
+    int minLineStations = 2;
     std::string mapPath = "data/demo.cuc4m";
     std::string linePath = "data/demo.cuc3l";
     std::string outLinesPath = "data/city_demo_planned.cuc3l";
@@ -835,6 +846,14 @@ int main(int argc, char** argv) {
             r1Mode = argv[++i];
         } else if (arg == "--r1-lambda" && i + 1 < argc) {
             coverageLambda = std::stod(argv[++i]);
+        } else if (arg == "--line-overlap" && i + 1 < argc) {
+            lineOverlap = std::stod(argv[++i]);
+        } else if (arg == "--line-proximity" && i + 1 < argc) {
+            lineProximity = std::stod(argv[++i]);
+        } else if (arg == "--proximity-distance" && i + 1 < argc) {
+            proximityDistance = std::stod(argv[++i]);
+        } else if (arg == "--min-line-stations" && i + 1 < argc) {
+            minLineStations = std::stoi(argv[++i]);
         } else if (arg == "--map" && i + 1 < argc) {
             mapPath = argv[++i];
         } else if (arg == "--lines" && i + 1 < argc) {
@@ -862,7 +881,8 @@ int main(int argc, char** argv) {
                  prefilter, r1Mode, coverageLambda);
     } else if (mode == "plan-file") {
         modePlanFile(mapPath, outLinesPath, k, maxLines, localBudget, prefilter,
-                     r1Mode, coverageLambda);
+                     r1Mode, coverageLambda, lineOverlap, lineProximity,
+                     proximityDistance, minLineStations);
     } else if (mode == "audit") {
         modeAudit(mapPath, linePath, shortThreshold);
     } else if (mode == "check-map") {

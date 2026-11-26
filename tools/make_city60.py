@@ -89,6 +89,27 @@ class City:
     def add_background_road(self, prefix, points, width):
         self.roads.append((prefix, width, points, False))
 
+    def ensure_k_nearest(self, k):
+        existing = {(min(a, b), max(a, b)) for a, b in self.edges}
+        added = 0
+        for i in range(len(self.nodes)):
+            distances = []
+            for j in range(len(self.nodes)):
+                if i == j:
+                    continue
+                distances.append(
+                    (dist(self.nodes[i]["point"], self.nodes[j]["point"]), j)
+                )
+            distances.sort()
+            for _, j in distances[:k]:
+                key = (min(i, j), max(i, j))
+                if key in existing:
+                    continue
+                existing.add(key)
+                self.edges.append((i, j))
+                added += 1
+        print(f"k-nearest rule: X={k}, added {added} edges")
+
     def extend(self, points, prefix, width):
         if len(points) < 2:
             return
@@ -163,6 +184,12 @@ class City:
         # Irregular local streets: short links between nearby stations,
         # creating blocks and cycles instead of a tree-like network.
         self.add_local_links(limit=16)
+
+        # 强制连通规则：每个站点与最近的 X 个站点必须有边，
+        # X = 1 + 站点数 // 10。
+        required = 1 + len(self.nodes) // 10
+        self.ensure_k_nearest(required)
+        self.required_nearest = required
 
     def add_local_links(self, limit):
         existing = {(min(a, b), max(a, b)) for a, b in self.edges}

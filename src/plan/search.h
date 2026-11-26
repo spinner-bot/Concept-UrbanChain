@@ -36,6 +36,8 @@ struct ScoreParams {
     // 线路形态：净位移 / 实际长度不足时惩罚“来回扭动”，不惩罚单次 90° 弯。
     double wLineWiggle = 0.15;
     double lineStraightnessTarget = 0.65;
+    // 线路中段使用非道路连接边的惩罚；连接边只允许出现在线路两端。
+    double wInteriorConnector = 0.0;
 };
 
 struct SearchParams {

@@ -641,7 +641,8 @@ void modePlanFile(const std::string& mapPath, const std::string& outLinesPath,
                   int k, int maxLines, int localBudget, bool prefilter,
                   const std::string& r1Mode, double coverageLambda,
                   double lineOverlap, double lineProximity, double proximityDistance,
-                  int minLineStations, bool corridorCandidates, bool corridorOnly) {
+                  int minLineStations, bool corridorCandidates, bool corridorOnly,
+                  double interiorConnector) {
     Network source;
     std::string error;
     if (!io::loadMap(mapPath, source.map(), &error)) {
@@ -666,6 +667,7 @@ void modePlanFile(const std::string& mapPath, const std::string& outLinesPath,
     search.score.wLineOverlap = lineOverlap;
     search.score.wLineProximity = lineProximity;
     search.score.lineProximityDistance = proximityDistance;
+    search.score.wInteriorConnector = interiorConnector;
     search.minLineStations = minLineStations;
     search.useCorridorCandidates = corridorCandidates;
     search.corridorOnly = corridorOnly;
@@ -824,6 +826,7 @@ int main(int argc, char** argv) {
     double lineOverlap = 0.10;
     double lineProximity = 0.03;
     double proximityDistance = 7.0;
+    double interiorConnector = 0.0;
     int minLineStations = 2;
     bool corridorCandidates = true;
     bool corridorOnly = false;
@@ -881,6 +884,8 @@ int main(int argc, char** argv) {
             proximityDistance = std::stod(argv[++i]);
         } else if (arg == "--min-line-stations" && i + 1 < argc) {
             minLineStations = std::stoi(argv[++i]);
+        } else if (arg == "--interior-connector" && i + 1 < argc) {
+            interiorConnector = std::stod(argv[++i]);
         } else if (arg == "--corridor-candidates") {
             corridorCandidates = true;
         } else if (arg == "--no-corridor-candidates") {
@@ -916,7 +921,8 @@ int main(int argc, char** argv) {
     } else if (mode == "plan-file") {
         modePlanFile(mapPath, outLinesPath, k, maxLines, localBudget, prefilter,
                      r1Mode, coverageLambda, lineOverlap, lineProximity,
-                     proximityDistance, minLineStations, corridorCandidates, corridorOnly);
+                     proximityDistance, minLineStations, corridorCandidates, corridorOnly,
+                     interiorConnector);
     } else if (mode == "audit") {
         modeAudit(mapPath, linePath, shortThreshold);
     } else if (mode == "check-map") {

@@ -18,10 +18,16 @@ struct CorridorSegment {
 
 struct CorridorGraph {
     DynamicArray<CorridorSegment> segments;
-    DynamicArray<unsigned char> edgeIsRoad;  // 与 map.edges() 对齐
+    // 与 map.edges() 对齐：
+    // edgeIsMainCorridor：属于主/次干道走廊，用于生成候选线路；
+    // edgeIsRoad：任意背景道路（含局部街巷），线路中段可以使用；
+    // 两者都为 0 的是非道路连接边（kNN 等），只允许线路端点接入。
+    DynamicArray<unsigned char> edgeIsMainCorridor;
+    DynamicArray<unsigned char> edgeIsRoad;
+    int mainCorridorEdgeCount = 0;
     int roadEdgeCount = 0;
     int connectorEdgeCount = 0;
-    int junctionCount = 0;  // 道路图中度数 != 2 的站点数
+    int junctionCount = 0;  // 走廊共享站点的数量
     int maxSegmentStations = 0;
     double totalRoadLength = 0.0;
 };
@@ -29,7 +35,7 @@ struct CorridorGraph {
 struct CorridorOptions {
     // 站点到背景道路折线的距离阈值（地图单位）。
     double roadTolerance = 2.0;
-    // 只有宽度达到该值的道路才作为走廊；局部街巷留给连接边。
+    // 只有宽度达到该值的道路才作为主走廊；局部街巷仍算道路，但不生成走廊候选。
     double minCorridorWidth = 1.5;
 };
 
@@ -41,8 +47,9 @@ void printCorridorGraph(const CorridorGraph& graph);
 
 struct CorridorLineUsage {
     int lineEdges = 0;
-    int roadEdges = 0;
-    int connectorEdges = 0;
+    int mainCorridorEdges = 0;
+    int roadEdges = 0;      // 任意道路（含局部街巷）
+    int connectorEdges = 0; // 非道路连接边
 };
 CorridorLineUsage corridorLineUsage(const Map& map, const CorridorGraph& graph,
                                    const DynamicArray<Line>& lines);

@@ -60,14 +60,54 @@ std::uint64_t edgeKey(Index a, Index b) {
     return (static_cast<std::uint64_t>(low) << 32) | high;
 }
 
+double directionCosine(const Vec2& a, const Vec2& b, const Vec2& c, const Vec2& d) {
+    const double ax = b.x - a.x;
+    const double ay = b.y - a.y;
+    const double bx = d.x - c.x;
+    const double by = d.y - c.y;
+    const double la = std::sqrt(ax * ax + ay * ay);
+    const double lb = std::sqrt(bx * bx + by * by);
+    if (la < 1e-12 || lb < 1e-12) {
+        return 0.0;
+    }
+    return std::fabs(ax * bx + ay * by) / (la * lb);
+}
+
+// 任意背景道路支持（包含局部街巷），用于区分“道路边”和“非道路连接边”。
+bool edgeOnBackgroundRoad(const Map& map, const EdgeRecord& edge,
+                          const CorridorOptions& options) {
+    const Vec2& a = map.station(edge.from).position;
+    const Vec2& b = map.station(edge.to).position;
+    const Vec2 midpoint{(a.x + b.x) * 0.5, (a.y + b.y) * 0.5};
+    for (std::size_t f = 0; f < map.backgroundFeatures().size(); ++f) {
+        const BackgroundFeature& feature = map.backgroundFeatures()[f];
+        if (feature.kind != BackgroundKind::Road || feature.points.size() < 2) {
+            continue;
+        }
+        for (std::size_t i = 0; i + 1 < feature.points.size(); ++i) {
+            if (pointSegmentDistance(midpoint, feature.points[i], feature.points[i + 1],
+                                     nullptr) > options.roadTolerance) {
+                continue;
+            }
+            if (directionCosine(a, b, feature.points[i], feature.points[i + 1]) < 0.85) {
+                continue;
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
 }  // namespace
 
 CorridorGraph buildCorridorGraph(const Map& map, const CorridorOptions& options) {
     CorridorGraph graph;
     const int edgeCount = static_cast<int>(map.edges().size());
     const int stationCount = map.stationCount();
+    graph.edgeIsMainCorridor.resize(static_cast<std::size_t>(edgeCount));
     graph.edgeIsRoad.resize(static_cast<std::size_t>(edgeCount));
     for (int i = 0; i < edgeCount; ++i) {
+        graph.edgeIsMainCorridor[static_cast<std::size_t>(i)] = 0;
         graph.edgeIsRoad[static_cast<std::size_t>(i)] = 0;
     }
 
@@ -130,6 +170,7 @@ CorridorGraph buildCorridorGraph(const Map& map, const CorridorOptions& options)
                     return;
                 }
                 usedEdge[static_cast<std::size_t>(edge)] = 1;
+                graph.edgeIsMainCorridor[static_cast<std::size_t>(edge)] = 1;
                 graph.edgeIsRoad[static_cast<std::size_t>(edge)] = 1;
                 length += map.edges()[static_cast<std::size_t>(edge)].length;
                 ++edgeUsedCount;
@@ -159,11 +200,18 @@ CorridorGraph buildCorridorGraph(const Map& map, const CorridorOptions& options)
         flush(runBegin, stationsOnRoad.size());
     }
 
-    // 统计与走廊无关的边：kNN 连接边、局部街巷等。
+    // 主走廊边之外的边，再区分“普通道路（含街巷）”和“非道路连接边”。
     for (int i = 0; i < edgeCount; ++i) {
-        if (graph.edgeIsRoad[static_cast<std::size_t>(i)]) {
+        const EdgeRecord& edge = map.edges()[static_cast<std::size_t>(i)];
+        if (graph.edgeIsMainCorridor[static_cast<std::size_t>(i)]) {
+            ++graph.mainCorridorEdgeCount;
+            graph.totalRoadLength += edge.length;
             ++graph.roadEdgeCount;
-            graph.totalRoadLength += map.edges()[static_cast<std::size_t>(i)].length;
+            continue;
+        }
+        if (edgeOnBackgroundRoad(map, edge, options)) {
+            graph.edgeIsRoad[static_cast<std::size_t>(i)] = 1;
+            ++graph.roadEdgeCount;
         } else {
             ++graph.connectorEdgeCount;
         }
@@ -208,6 +256,10 @@ CorridorLineUsage corridorLineUsage(const Map& map, const CorridorGraph& graph,
                 continue;
             }
             ++usage.lineEdges;
+            if (edgeIndex < static_cast<int>(graph.edgeIsMainCorridor.size()) &&
+                graph.edgeIsMainCorridor[static_cast<std::size_t>(edgeIndex)]) {
+                ++usage.mainCorridorEdges;
+            }
             if (edgeIndex < static_cast<int>(graph.edgeIsRoad.size()) &&
                 graph.edgeIsRoad[static_cast<std::size_t>(edgeIndex)]) {
                 ++usage.roadEdges;
@@ -230,7 +282,8 @@ void printCorridorLineUsage(const CorridorLineUsage& usage) {
 }
 
 void printCorridorGraph(const CorridorGraph& graph) {
-    std::cout << "corridor graph: roadEdges=" << graph.roadEdgeCount
+    std::cout << "corridor graph: mainCorridorEdges=" << graph.mainCorridorEdgeCount
+              << " roadEdges=" << graph.roadEdgeCount
               << " connectorEdges=" << graph.connectorEdgeCount
               << " junctionStations=" << graph.junctionCount
               << " segments=" << graph.segments.size()
@@ -448,8 +501,8 @@ DynamicArray<DynamicArray<Index>> buildCorridorLineCandidates(
             for (std::size_t n = 0; n < neighbors.size(); ++n) {
                 const AdjEdge& edge = neighbors[n];
                 if (edge.edgeId < 0 ||
-                    edge.edgeId >= static_cast<int>(graph.edgeIsRoad.size()) ||
-                    graph.edgeIsRoad[static_cast<std::size_t>(edge.edgeId)]) {
+                    edge.edgeId >= static_cast<int>(graph.edgeIsMainCorridor.size()) ||
+                    graph.edgeIsMainCorridor[static_cast<std::size_t>(edge.edgeId)]) {
                     continue;
                 }
                 if (pathContains(base, edge.to)) {

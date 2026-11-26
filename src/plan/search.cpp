@@ -242,8 +242,10 @@ double scoreMetrics(const Metrics& metrics, const ScoreParams& score) {
 
 struct ScoreContext {
     const Map* map = nullptr;
+    const CorridorGraph* corridorGraph = nullptr;
     DynamicArray<double> stationSpacing;  // 每个站点到最近站点的距离
     double globalSpacing = 1.0;           // 全图中位数站距
+    HashMap<std::uint64_t, int, IntHash> edgeIndex;
 };
 
 ScoreContext makeScoreContext(const Map& map) {
@@ -269,6 +271,13 @@ ScoreContext makeScoreContext(const Map& map) {
     if (count > 0) {
         quickSort(sorted, [](double a, double b) { return a < b; });
         context.globalSpacing = std::max(1e-6, sorted[static_cast<std::size_t>(count / 2)]);
+    }
+    for (std::size_t i = 0; i < map.edges().size(); ++i) {
+        const EdgeRecord& edge = map.edges()[i];
+        const std::uint32_t low = static_cast<std::uint32_t>(std::min(edge.from, edge.to));
+        const std::uint32_t high = static_cast<std::uint32_t>(std::max(edge.from, edge.to));
+        context.edgeIndex.insert((static_cast<std::uint64_t>(low) << 32) | high,
+                                 static_cast<int>(i));
     }
     return context;
 }
@@ -438,12 +447,55 @@ double lineSimilarityPenaltyInternal(const Map& map, const DynamicArray<Line>& l
            score.wLineProximity * proximitySum / pairs;
 }
 
+double lineInteriorConnectorPenaltyInternal(const ScoreContext& context,
+                                            const DynamicArray<Line>& lines,
+                                            const ScoreParams& score) {
+    if (context.corridorGraph == nullptr || score.wInteriorConnector <= 0.0) {
+        return 0.0;
+    }
+    double penalty = 0.0;
+    for (std::size_t i = 0; i < lines.size(); ++i) {
+        const Line& line = lines[i];
+        const int edgeCount = line.stationCount() - 1;
+        if (edgeCount <= 1) {
+            continue;
+        }
+        int interiorConnectors = 0;
+        for (int k = 0; k < edgeCount; ++k) {
+            if (k == 0 || k == edgeCount - 1) {
+                continue;  // 两端允许连接边接入
+            }
+            const Index a = line.stations()[static_cast<std::size_t>(k)];
+            const Index b = line.stations()[static_cast<std::size_t>(k + 1)];
+            const std::uint32_t low = static_cast<std::uint32_t>(std::min(a, b));
+            const std::uint32_t high = static_cast<std::uint32_t>(std::max(a, b));
+            const int* found =
+                context.edgeIndex.find((static_cast<std::uint64_t>(low) << 32) | high);
+            if (found == nullptr) {
+                continue;
+            }
+            const std::size_t edge = static_cast<std::size_t>(*found);
+            if (edge < context.corridorGraph->edgeIsRoad.size() &&
+                !context.corridorGraph->edgeIsRoad[edge]) {
+                ++interiorConnectors;
+            }
+        }
+        if (interiorConnectors > 0) {
+            const double fraction =
+                static_cast<double>(interiorConnectors) / std::max(1, edgeCount);
+            penalty += fraction * fraction;
+        }
+    }
+    return score.wInteriorConnector * penalty;
+}
+
 double scorePlan(const ScoreContext& context, const DynamicArray<Line>& lines,
                  const Metrics& metrics, const ScoreParams& score) {
     return scoreMetrics(metrics, score) -
            lineSimilarityPenaltyInternal(*context.map, lines, score) -
            lineAdequacyPenaltyInternal(context, lines, score) -
-           lineWigglePenaltyInternal(context, lines, score);
+           lineWigglePenaltyInternal(context, lines, score) -
+           lineInteriorConnectorPenaltyInternal(context, lines, score);
 }
 
 void recomputeCovered(const Map& map, const DynamicArray<Line>& lines,
@@ -484,7 +536,11 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
         return result;
     }
 
-    const ScoreContext context = makeScoreContext(map);
+    ScoreContext context = makeScoreContext(map);
+    const CorridorGraph corridorGraph = buildCorridorGraph(map);
+    if (corridorGraph.roadEdgeCount > 0) {
+        context.corridorGraph = &corridorGraph;
+    }
 
     const std::uint32_t palette[] = {0xef4444u, 0x2563ebu, 0x16a34au, 0xf59e0bu,
                                      0x7c3aedu, 0x0891b2u, 0xdb2777u, 0x65a30du};
@@ -525,9 +581,8 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
     // 走廊候选先进入池子：线路优先沿主/次干道贯通，
     // 任意锚点最短路只作为补充。
     if (search.useCorridorCandidates) {
-        const CorridorGraph corridors = buildCorridorGraph(map);
         const DynamicArray<DynamicArray<Index>> corridorPaths =
-            buildCorridorLineCandidates(map, corridors, search.corridorTurnDeg,
+            buildCorridorLineCandidates(map, corridorGraph, search.corridorTurnDeg,
                                         search.corridorCandidateLimit);
         for (std::size_t i = 0; i < corridorPaths.size(); ++i) {
             addPathCandidate(corridorPaths[i]);

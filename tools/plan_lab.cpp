@@ -107,8 +107,9 @@ Map makeSimulatedCity(int centerCount, int stationsPerCenter, double sigma, int 
         if (length < 1e-9) {
             return;
         }
-        const double cost = length * (1.0 + costNoise(rng));
-        map.addEdge(a, b, std::max(0.01, cost), length);
+        // 单位距离成本围绕 1.0 上下浮动，模拟不同建设难度。
+        const double unitCost = std::max(0.01, 1.0 + costNoise(rng));
+        map.addEdge(a, b, unitCost, length);
     };
 
     for (int c = 0; c < centerCount; ++c) {

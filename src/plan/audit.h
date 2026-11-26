@@ -27,12 +27,16 @@ struct MapGeometryReport {
     int edgeCount = 0;
     int mismatchedEdges = 0;
     double worstRatio = 1.0;
+    // 单位距离建设成本分布；普通路段应接近 1，过河/过山等可明显高于 1。
+    double unitCostMin = 0.0;
+    double unitCostMax = 0.0;
+    double unitCostMean = 0.0;
+    int unitCostOutliers = 0;  // 超出 [0.8, 1.25] 的边数，仅作提示
     DynamicArray<MapGeometryIssue> issues;
 };
 
-// 检查地图边的几何长度与站点坐标是否一致。cost 可以有意偏离长度，
-// 但 length 是几何长度，若与坐标距离相差过大，最短路会被错误地绕开
-// 某些站点（例如中心站被当成高成本端点）。
+// 检查地图边的几何长度与站点坐标是否一致，并汇总单位距离建设成本。
+// length 应等于几何长度；unitCost 可以有意识地偏离 1，用来表达建设难度。
 MapGeometryReport auditMapGeometry(const Map& map, double tolerance = 0.05);
 void printMapGeometry(const Map& map, const MapGeometryReport& report);
 

@@ -295,13 +295,13 @@ void MapView::editEdgeDialog(int edgeIndex) {
     auto* layout = new QFormLayout(&dialog);
     auto* costSpin = new QDoubleSpinBox(&dialog);
     costSpin->setRange(0.0, 1.0e9);
-    costSpin->setDecimals(3);
-    costSpin->setValue(edge.cost);
+    costSpin->setDecimals(4);
+    costSpin->setValue(edge.unitCost);
     auto* lengthSpin = new QDoubleSpinBox(&dialog);
     lengthSpin->setRange(0.0, 1.0e9);
     lengthSpin->setDecimals(3);
     lengthSpin->setValue(edge.length);
-    layout->addRow(L("Cost"), costSpin);
+    layout->addRow(L("Unit Cost"), costSpin);
     layout->addRow(L("Length"), lengthSpin);
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
     QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);

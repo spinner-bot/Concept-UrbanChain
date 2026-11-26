@@ -140,6 +140,7 @@ const Entry kEntries[] = {
     {"Add Station Here", "在此添加站点"},
     {"Edge Properties", "区间属性"},
     {"Cost", "成本"},
+    {"Unit Cost", "单位成本"},
     {"Length", "长度"},
     {"Edge updated", "区间已更新"},
 

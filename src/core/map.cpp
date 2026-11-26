@@ -1,5 +1,7 @@
 #include "core/map.h"
 
+#include <cmath>
+
 #include "ds/union_find.h"
 
 namespace uc {
@@ -40,24 +42,32 @@ Index Map::findStation(const std::string& id) const {
     return found == nullptr ? kInvalidIndex : *found;
 }
 
-bool Map::addEdge(Index u, Index v, double cost, double length) {
+bool Map::addEdge(Index u, Index v, double unitCost, double length) {
     const Index count = stationCount();
     if (u < 0 || v < 0 || u >= count || v >= count || u == v) {
         return false;
     }
-    if (cost < 0.0 || hasEdge(u, v)) {
+    if (unitCost < 0.0 || hasEdge(u, v)) {
         return false;
     }
-    const double actualLength = length < 0.0 ? cost : length;
+    double actualLength = length;
+    if (actualLength < 0.0) {
+        actualLength = euclideanDistance(stations_[static_cast<std::size_t>(u)].position,
+                                         stations_[static_cast<std::size_t>(v)].position);
+    }
+    if (actualLength < 1e-9) {
+        // 两端重合时无法给出有意义的长度，退回单位长度，避免零长度边。
+        actualLength = 1.0;
+    }
     const Index edgeId = static_cast<Index>(edges_.size());
-    edges_.push_back(EdgeRecord{u, v, cost, actualLength});
-    adjacency_[static_cast<std::size_t>(u)].push_back(AdjEdge{v, cost, actualLength, edgeId});
-    adjacency_[static_cast<std::size_t>(v)].push_back(AdjEdge{u, cost, actualLength, edgeId});
+    edges_.push_back(EdgeRecord{u, v, unitCost, actualLength});
+    adjacency_[static_cast<std::size_t>(u)].push_back(AdjEdge{v, unitCost, actualLength, edgeId});
+    adjacency_[static_cast<std::size_t>(v)].push_back(AdjEdge{u, unitCost, actualLength, edgeId});
 
     const std::size_t offsetUV = static_cast<std::size_t>(u) * count + static_cast<std::size_t>(v);
     const std::size_t offsetVU = static_cast<std::size_t>(v) * count + static_cast<std::size_t>(u);
-    matrixCost_[offsetUV] = cost;
-    matrixCost_[offsetVU] = cost;
+    matrixUnitCost_[offsetUV] = unitCost;
+    matrixUnitCost_[offsetVU] = unitCost;
     matrixLength_[offsetUV] = actualLength;
     matrixLength_[offsetVU] = actualLength;
     return true;
@@ -84,23 +94,23 @@ bool Map::removeEdge(Index u, Index v) {
     for (Index i = 0; i < count; ++i) {
         adjacency_[static_cast<std::size_t>(i)].clear();
     }
-    for (std::size_t i = 0; i < matrixCost_.size(); ++i) {
-        matrixCost_[i] = kInfinity;
+    for (std::size_t i = 0; i < matrixUnitCost_.size(); ++i) {
+        matrixUnitCost_[i] = kInfinity;
         matrixLength_[i] = 0.0;
     }
     for (std::size_t i = 0; i < edges_.size(); ++i) {
         const EdgeRecord& edge = edges_[i];
         const Index edgeId = static_cast<Index>(i);
         adjacency_[static_cast<std::size_t>(edge.from)].push_back(
-            AdjEdge{edge.to, edge.cost, edge.length, edgeId});
+            AdjEdge{edge.to, edge.unitCost, edge.length, edgeId});
         adjacency_[static_cast<std::size_t>(edge.to)].push_back(
-            AdjEdge{edge.from, edge.cost, edge.length, edgeId});
+            AdjEdge{edge.from, edge.unitCost, edge.length, edgeId});
         const std::size_t offset =
             static_cast<std::size_t>(edge.from) * count + static_cast<std::size_t>(edge.to);
         const std::size_t reverse =
             static_cast<std::size_t>(edge.to) * count + static_cast<std::size_t>(edge.from);
-        matrixCost_[offset] = edge.cost;
-        matrixCost_[reverse] = edge.cost;
+        matrixUnitCost_[offset] = edge.unitCost;
+        matrixUnitCost_[reverse] = edge.unitCost;
         matrixLength_[offset] = edge.length;
         matrixLength_[reverse] = edge.length;
     }
@@ -118,19 +128,19 @@ bool Map::setEdgeWeight(Index u, Index v, double cost, double length) {
         if (!forward && !backward) {
             continue;
         }
-        edge.cost = cost;
+        edge.unitCost = cost;
         edge.length = length;
         for (std::size_t j = 0; j < adjacency_[static_cast<std::size_t>(u)].size(); ++j) {
             AdjEdge& candidate = adjacency_[static_cast<std::size_t>(u)][j];
             if (candidate.to == v && candidate.edgeId == static_cast<Index>(i)) {
-                candidate.cost = cost;
+                candidate.unitCost = cost;
                 candidate.length = length;
             }
         }
         for (std::size_t j = 0; j < adjacency_[static_cast<std::size_t>(v)].size(); ++j) {
             AdjEdge& candidate = adjacency_[static_cast<std::size_t>(v)][j];
             if (candidate.to == u && candidate.edgeId == static_cast<Index>(i)) {
-                candidate.cost = cost;
+                candidate.unitCost = cost;
                 candidate.length = length;
             }
         }
@@ -139,8 +149,8 @@ bool Map::setEdgeWeight(Index u, Index v, double cost, double length) {
             static_cast<std::size_t>(u) * count + static_cast<std::size_t>(v);
         const std::size_t reverse =
             static_cast<std::size_t>(v) * count + static_cast<std::size_t>(u);
-        matrixCost_[offset] = cost;
-        matrixCost_[reverse] = cost;
+        matrixUnitCost_[offset] = cost;
+        matrixUnitCost_[reverse] = cost;
         matrixLength_[offset] = length;
         matrixLength_[reverse] = length;
         return true;
@@ -153,10 +163,10 @@ bool Map::hasEdge(Index u, Index v) const {
     if (u < 0 || v < 0 || u >= count || v >= count || u == v) {
         return false;
     }
-    return matrixCost_[static_cast<std::size_t>(u) * count + static_cast<std::size_t>(v)] != kInfinity;
+    return matrixUnitCost_[static_cast<std::size_t>(u) * count + static_cast<std::size_t>(v)] != kInfinity;
 }
 
-double Map::edgeCost(Index u, Index v) const {
+double Map::edgeUnitCost(Index u, Index v) const {
     if (u == v) {
         return 0.0;
     }
@@ -164,7 +174,7 @@ double Map::edgeCost(Index u, Index v) const {
     if (u < 0 || v < 0 || u >= count || v >= count) {
         return kInfinity;
     }
-    return matrixCost_[static_cast<std::size_t>(u) * count + static_cast<std::size_t>(v)];
+    return matrixUnitCost_[static_cast<std::size_t>(u) * count + static_cast<std::size_t>(v)];
 }
 
 double Map::edgeLength(Index u, Index v) const {
@@ -176,6 +186,15 @@ double Map::edgeLength(Index u, Index v) const {
         return kInfinity;
     }
     return matrixLength_[static_cast<std::size_t>(u) * count + static_cast<std::size_t>(v)];
+}
+
+double Map::edgeBuildCost(Index u, Index v) const {
+    const double unit = edgeUnitCost(u, v);
+    const double length = edgeLength(u, v);
+    if (std::isinf(unit) || std::isinf(length)) {
+        return kInfinity;
+    }
+    return unit * length;
 }
 
 bool Map::isConnected() const {
@@ -199,7 +218,7 @@ void Map::clear() {
     stationIndex_.clear();
     adjacency_.clear();
     edges_.clear();
-    matrixCost_.clear();
+    matrixUnitCost_.clear();
     matrixLength_.clear();
     background_.clear();
 }
@@ -222,11 +241,11 @@ void Map::resizeMatrix(Index oldCount, Index newCount) {
             const std::size_t newOffset =
                 static_cast<std::size_t>(row) * static_cast<std::size_t>(newCount) +
                 static_cast<std::size_t>(column);
-            newCost[newOffset] = matrixCost_[oldOffset];
+            newCost[newOffset] = matrixUnitCost_[oldOffset];
             newLength[newOffset] = matrixLength_[oldOffset];
         }
     }
-    matrixCost_ = static_cast<DynamicArray<double>&&>(newCost);
+    matrixUnitCost_ = static_cast<DynamicArray<double>&&>(newCost);
     matrixLength_ = static_cast<DynamicArray<double>&&>(newLength);
 }
 

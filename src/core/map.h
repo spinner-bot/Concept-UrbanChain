@@ -13,13 +13,14 @@ namespace uc {
 struct EdgeRecord {
     Index from = kInvalidIndex;
     Index to = kInvalidIndex;
-    double cost = 0.0;    // 建设成本，由地图数据给出
-    double length = 0.0;  // 几何长度；缺省时等于 cost
+    // 单位距离建设成本（每单位长度），而不是整个区间的总成本。
+    double unitCost = 0.0;
+    double length = 0.0;  // 区间长度；缺省时取两端站点的几何距离
 };
 
 struct AdjEdge {
     Index to = kInvalidIndex;
-    double cost = 0.0;
+    double unitCost = 0.0;
     double length = 0.0;
     Index edgeId = kInvalidIndex;
 };
@@ -40,12 +41,15 @@ public:
     bool setStationPosition(Index index, const Vec2& position);
     bool setStationName(Index index, const std::string& name);
 
-    bool addEdge(Index u, Index v, double cost, double length = -1.0);
+    // unitCost 是单位距离建设成本；length 缺省时取两端站点的几何距离。
+    bool addEdge(Index u, Index v, double unitCost, double length = -1.0);
     bool removeEdge(Index u, Index v);
-    bool setEdgeWeight(Index u, Index v, double cost, double length);
+    bool setEdgeWeight(Index u, Index v, double unitCost, double length);
     bool hasEdge(Index u, Index v) const;
-    double edgeCost(Index u, Index v) const;
+    double edgeUnitCost(Index u, Index v) const;
     double edgeLength(Index u, Index v) const;
+    // 区间总建设成本 = 单位距离成本 × 长度。
+    double edgeBuildCost(Index u, Index v) const;
 
     const DynamicArray<AdjEdge>& neighbors(Index station) const {
         return adjacency_.at(static_cast<std::size_t>(station));
@@ -70,7 +74,7 @@ private:
     HashMap<std::string, Index, Fnv1aHash> stationIndex_;
     DynamicArray<DynamicArray<AdjEdge>> adjacency_;
     DynamicArray<EdgeRecord> edges_;
-    DynamicArray<double> matrixCost_;
+    DynamicArray<double> matrixUnitCost_;
     DynamicArray<double> matrixLength_;
     DynamicArray<BackgroundFeature> background_;
 };

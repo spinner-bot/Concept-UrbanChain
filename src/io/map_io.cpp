@@ -170,7 +170,7 @@ bool loadMap(const std::string& path, Map& map, std::string* error) {
             std::string toId;
             double cost = 0.0;
             if (!(stream >> fromId >> toId >> cost)) {
-                return setError(error, lineNumber, "EDGE expects two station ids and a cost");
+                return setError(error, lineNumber, "EDGE expects two station ids, a unit cost and a length");
             }
             double length = -1.0;
             if (!(stream >> length)) {
@@ -279,7 +279,7 @@ bool saveMap(const std::string& path, const Map& map, std::string* error) {
     for (std::size_t i = 0; i < map.edges().size(); ++i) {
         const EdgeRecord& edge = map.edges()[i];
         output << "EDGE " << map.station(edge.from).id << ' ' << map.station(edge.to).id << ' '
-               << edge.cost << ' ' << edge.length << '\n';
+               << edge.unitCost << ' ' << edge.length << '\n';
     }
     output << "END\n";
     if (!output) {

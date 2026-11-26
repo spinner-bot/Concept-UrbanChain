@@ -164,7 +164,7 @@ bool Editor::removeStation(Index station, std::string* error) {
         const Index from = remap[static_cast<std::size_t>(edge.from)];
         const Index to = remap[static_cast<std::size_t>(edge.to)];
         if (from == kInvalidIndex || to == kInvalidIndex ||
-            !newMap.addEdge(from, to, edge.cost, edge.length)) {
+            !newMap.addEdge(from, to, edge.unitCost, edge.length)) {
             return fail(error, "failed to rebuild edges while removing station");
         }
     }
@@ -236,7 +236,8 @@ bool Editor::addEdge(Index from, Index to, std::string* error) {
     }
     const double distance = euclideanDistance(network_.map().station(from).position,
                                               network_.map().station(to).position);
-    return addEdge(from, to, distance, distance, error);
+    // 默认单位距离成本为 1，长度取几何距离。
+    return addEdge(from, to, 1.0, distance, error);
 }
 
 bool Editor::setEdgeWeight(Index from, Index to, double cost, double length,

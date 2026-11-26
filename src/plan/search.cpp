@@ -47,7 +47,7 @@ DynamicArray<Index> shortestPath(const Map& map, Index start, Index goal) {
         const DynamicArray<AdjEdge>& neighbors = map.neighbors(station);
         for (std::size_t i = 0; i < neighbors.size(); ++i) {
             const AdjEdge& edge = neighbors[i];
-            const double next = item.key + edge.cost;
+            const double next = item.key + edge.unitCost * edge.length;
             if (next + 1e-9 < dist[static_cast<std::size_t>(edge.to)]) {
                 dist[static_cast<std::size_t>(edge.to)] = next;
                 previous[static_cast<std::size_t>(edge.to)] = station;
@@ -113,7 +113,7 @@ DynamicArray<Index> shortestPathAvoiding(const Map& map, Index start, Index goal
             if (forbidden[static_cast<std::size_t>(edge.to)] && edge.to != goal) {
                 continue;
             }
-            const double next = item.key + edge.cost;
+            const double next = item.key + edge.unitCost * edge.length;
             if (next + 1e-9 < dist[static_cast<std::size_t>(edge.to)]) {
                 dist[static_cast<std::size_t>(edge.to)] = next;
                 previous[static_cast<std::size_t>(edge.to)] = station;
@@ -450,7 +450,7 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
     ScoreParams scoreParams = search.score;
     double totalEdgeCost = 0.0;
     for (std::size_t i = 0; i < map.edges().size(); ++i) {
-        totalEdgeCost += map.edges()[i].cost;
+        totalEdgeCost += map.edges()[i].unitCost * map.edges()[i].length;
     }
     double totalWeight = 0.0;
     for (int i = 0; i < stationCount; ++i) {

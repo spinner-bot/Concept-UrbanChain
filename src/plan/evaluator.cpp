@@ -192,8 +192,8 @@ Metrics evaluateNetwork(const Network& network, const WeightResult& weights,
             }
             const std::uint64_t key = edgeKey(a, b);
             if (!usedEdges.contains(key)) {
-                usedEdges.insert(key, map.edgeCost(a, b));
-                edgeCost += map.edgeCost(a, b);
+                usedEdges.insert(key, map.edgeBuildCost(a, b));
+                edgeCost += map.edgeBuildCost(a, b);
             }
         }
     }

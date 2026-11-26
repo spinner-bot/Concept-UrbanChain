@@ -180,8 +180,11 @@ void testMapAndLine() {
     CHECK(!map.addEdge(a, b, 1.0));
     CHECK(map.hasEdge(a, b));
     CHECK(!map.hasEdge(a, c));
-    CHECK(std::fabs(map.edgeCost(b, c) - 2.0) < 1e-9);
+    CHECK(std::fabs(map.edgeUnitCost(b, c) - 2.0) < 1e-9);
     CHECK(std::fabs(map.edgeLength(b, c) - 3.0) < 1e-9);
+    CHECK(std::fabs(map.edgeBuildCost(b, c) - 6.0) < 1e-9);
+    CHECK(std::fabs(map.edgeUnitCost(a, b) - 1.0) < 1e-9);
+    CHECK(std::fabs(map.edgeLength(a, b) - 1.0) < 1e-9);
     CHECK(map.isConnected());
 
     uc::Line line = makeLine(a, b, c);
@@ -262,9 +265,11 @@ void testIoRoundTrip() {
     CHECK(loadedMap.stationCount() == 3);
     CHECK(static_cast<int>(loadedMap.edges().size()) == 2);
     CHECK(loadedMap.findStation("B") == b);
-    CHECK(std::fabs(loadedMap.edgeCost(a, b) - 1.0) < 1e-9);
+    CHECK(std::fabs(loadedMap.edgeUnitCost(a, b) - 1.0) < 1e-9);
     CHECK(std::fabs(loadedMap.edgeLength(a, b) - 1.5) < 1e-9);
-    CHECK(std::fabs(loadedMap.edgeCost(b, c) - 2.0) < 1e-9);
+    CHECK(std::fabs(loadedMap.edgeBuildCost(a, b) - 1.5) < 1e-9);
+    CHECK(std::fabs(loadedMap.edgeUnitCost(b, c) - 2.0) < 1e-9);
+    CHECK(std::fabs(loadedMap.edgeBuildCost(b, c) - 5.0) < 1e-9);
     CHECK(loadedMap.station(a).name == "A");
     CHECK(loadedMap.backgroundFeatures().size() == 1);
     CHECK(loadedMap.backgroundFeatures()[0].id == "river");
@@ -369,7 +374,7 @@ void testMapFormatCompatibility() {
     uc::Map legacyMap;
     CHECK(uc::io::loadMap(legacyPath, legacyMap, &error));
     CHECK(legacyMap.stationCount() == 2);
-    CHECK(std::fabs(legacyMap.edgeCost(0, 1) - 1.0) < 1e-9);
+    CHECK(std::fabs(legacyMap.edgeBuildCost(0, 1) - 1.0) < 1e-9);
 
     // 旧扩展名不再用于保存。
     CHECK(!uc::io::saveMap("uc_test_legacy_save.cuc3m", source, &error));
@@ -608,8 +613,9 @@ void testEditorPersistence() {
     uc::Editor loaded;
     CHECK(loaded.load(mapPath, linePath, &error));
     CHECK(loaded.network().map().stationCount() == 4);
-    CHECK(std::fabs(loaded.network().map().edgeCost(a, b) - 2.5) < 1e-9);
+    CHECK(std::fabs(loaded.network().map().edgeUnitCost(a, b) - 2.5) < 1e-9);
     CHECK(std::fabs(loaded.network().map().edgeLength(a, b) - 3.5) < 1e-9);
+    CHECK(std::fabs(loaded.network().map().edgeBuildCost(a, b) - 8.75) < 1e-9);
     CHECK(std::fabs(loaded.network().transferTime(c, red, blue) - 75.0) < 1e-9);
     CHECK(loaded.network().lines().size() == 2);
     const uc::Line& loadedRed = loaded.network().lines()[0];

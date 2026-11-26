@@ -229,8 +229,21 @@ std::uint64_t edgeKey(Index a, Index b) {
 MapGeometryReport auditMapGeometry(const Map& map, double tolerance) {
     MapGeometryReport report;
     report.edgeCount = static_cast<int>(map.edges().size());
+    double unitCostSum = 0.0;
+    int unitCostCount = 0;
     for (std::size_t i = 0; i < map.edges().size(); ++i) {
         const EdgeRecord& edge = map.edges()[i];
+        if (edge.unitCost > 0.0) {
+            if (unitCostCount == 0 || edge.unitCost < report.unitCostMin) {
+                report.unitCostMin = edge.unitCost;
+            }
+            report.unitCostMax = std::max(report.unitCostMax, edge.unitCost);
+            unitCostSum += edge.unitCost;
+            ++unitCostCount;
+            if (edge.unitCost < 0.8 || edge.unitCost > 1.25) {
+                ++report.unitCostOutliers;
+            }
+        }
         const double geometric = euclideanDistance(
             map.station(edge.from).position, map.station(edge.to).position);
         if (geometric < 1e-9 || edge.length <= 0.0) {
@@ -251,6 +264,7 @@ MapGeometryReport auditMapGeometry(const Map& map, double tolerance) {
         issue.ratio = ratio;
         report.issues.push_back(issue);
     }
+    report.unitCostMean = unitCostCount > 0 ? unitCostSum / unitCostCount : 0.0;
     return report;
 }
 
@@ -258,6 +272,9 @@ void printMapGeometry(const Map& map, const MapGeometryReport& report) {
     std::cout << "map geometry: edges=" << report.edgeCount
               << " mismatched=" << report.mismatchedEdges
               << " worstLengthRatio=" << report.worstRatio << '\n';
+    std::cout << "unit construction cost: min=" << report.unitCostMin
+              << " mean=" << report.unitCostMean << " max=" << report.unitCostMax
+              << " outside[0.8,1.25]=" << report.unitCostOutliers << '\n';
     for (std::size_t i = 0; i < report.issues.size(); ++i) {
         const MapGeometryIssue& issue = report.issues[i];
         std::cout << "  " << map.station(issue.from).id << " - "

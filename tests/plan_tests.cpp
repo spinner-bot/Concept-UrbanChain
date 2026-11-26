@@ -554,6 +554,52 @@ void testNearestEdgeAudit() {
     CHECK(report.missingEdges >= 1);
 }
 
+
+void testLineAdequacyAndWiggle() {
+    Map map;
+    // 密集核心：0..9，间距 1。
+    for (int i = 0; i < 10; ++i) {
+        map.addStation(makeStation(("C" + std::to_string(i)).c_str(), i, 0.0));
+    }
+    // 稀疏外围：间距 30。
+    map.addStation(makeStation("S0", 100.0, 0.0));
+    map.addStation(makeStation("S1", 130.0, 0.0));
+    map.addStation(makeStation("S2", 160.0, 0.0));
+    for (int i = 0; i + 1 < 10; ++i) {
+        map.addEdge(i, i + 1, 1.0, 1.0);
+    }
+    map.addEdge(10, 11, 1.0, 30.0);
+    map.addEdge(11, 12, 1.0, 30.0);
+
+    ScoreParams score;
+    DynamicArray<Line> dense;
+    dense.push_back(makeLine(makeStops({0, 1, 2})));
+    DynamicArray<Line> sparse;
+    sparse.push_back(makeLine(makeStops({10, 11, 12})));
+    CHECK(lineAdequacyPenalty(map, dense, score) > 0.0);
+    CHECK(lineAdequacyPenalty(map, sparse, score) <
+          lineAdequacyPenalty(map, dense, score));
+    CHECK(lineAdequacyPenalty(map, sparse, score) == 0.0);
+
+    // 直线：惩罚 0；来回折返：惩罚明显大于 0。
+    Map zig;
+    zig.addStation(makeStation("A", 0.0, 0.0));
+    zig.addStation(makeStation("B", 5.0, 5.0));
+    zig.addStation(makeStation("C", 10.0, 0.0));
+    zig.addStation(makeStation("D", 5.0, -5.0));
+    zig.addStation(makeStation("E", 10.0, -10.0));
+    zig.addEdge(0, 1, 1.0, std::sqrt(50.0));
+    zig.addEdge(1, 2, 1.0, std::sqrt(50.0));
+    zig.addEdge(2, 3, 1.0, std::sqrt(50.0));
+    zig.addEdge(3, 4, 1.0, std::sqrt(50.0));
+    DynamicArray<Line> straight;
+    straight.push_back(makeLine(makeStops({0, 1, 2})));
+    DynamicArray<Line> wiggly;
+    wiggly.push_back(makeLine(makeStops({0, 1, 2, 3, 4})));
+    CHECK(lineWigglePenalty(zig, straight, score) == 0.0);
+    CHECK(lineWigglePenalty(zig, wiggly, score) > 0.0);
+}
+
 void testMapGeometryAudit() {
     Map map;
     map.addStation(makeStation("A", 0.0, 0.0));
@@ -644,6 +690,7 @@ int main() {
     testMapGeometryAudit();
     testLineSimilarityPenalty();
     testNearestEdgeAudit();
+    testLineAdequacyAndWiggle();
     testLineAudit();
     testGridAuditBalance();
     if (failures == 0) {

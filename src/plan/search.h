@@ -28,6 +28,14 @@ struct ScoreParams {
     double wLineOverlap = 0.10;
     double wLineProximity = 0.03;
     double lineProximityDistance = 7.0;
+    // 线路长度充足度：密集城区要求更多站，稀疏郊区/快线允许较短。
+    double wLineAdequacy = 0.20;
+    int lineAdequacyBaseStops = 7;
+    int lineAdequacyMinStops = 3;
+    int lineAdequacyMaxStops = 12;
+    // 线路形态：净位移 / 实际长度不足时惩罚“来回扭动”，不惩罚单次 90° 弯。
+    double wLineWiggle = 0.15;
+    double lineStraightnessTarget = 0.65;
 };
 
 struct SearchParams {
@@ -66,6 +74,12 @@ struct PlanResult {
 // 线路相似度惩罚（共线 + 过近），供测试与实验观察。
 double lineSimilarityPenalty(const Map& map, const DynamicArray<Line>& lines,
                              const ScoreParams& score);
+// 密度感知的线路长度充足度惩罚：密集城区短线路罚得更重。
+double lineAdequacyPenalty(const Map& map, const DynamicArray<Line>& lines,
+                           const ScoreParams& score);
+// 线路直线度不足惩罚：净位移 / 实际长度越小，惩罚越强。
+double lineWigglePenalty(const Map& map, const DynamicArray<Line>& lines,
+                         const ScoreParams& score);
 
 // 第一版搜索原型：候选路径池 + 连通性保持的贪心覆盖。
 // 评分只使用静态指标（R1 增量 / R2 增量），R3/R4 在最终方案上完整计算。

@@ -373,6 +373,66 @@ DynamicArray<DynamicArray<Index>> buildCorridorLineCandidates(
             }
         }
     }
+    // 走廊链式延伸：在候选线路两端再接一段走廊，允许一条线串起 3 段以上主干。
+    const std::size_t chainBase = result.size();
+    for (std::size_t index = 0; index < chainBase; ++index) {
+        const DynamicArray<Index> base = result[index];
+        if (base.size() < 2) {
+            continue;
+        }
+        for (int side = 0; side < 2; ++side) {
+            const Index endpoint = side == 0 ? base.front() : base.back();
+            for (std::size_t seg = 0; seg < graph.segments.size(); ++seg) {
+                const DynamicArray<Index>& stations = graph.segments[seg].stations;
+                for (std::size_t pos = 0; pos < stations.size(); ++pos) {
+                    if (stations[pos] != endpoint) {
+                        continue;
+                    }
+                    for (int direction = 0; direction < 2; ++direction) {
+                        DynamicArray<Index> sidePath = pathSide(stations, pos, direction == 0);
+                        if (sidePath.size() < 2) {
+                            continue;
+                        }
+                        if (sidePath.front() != endpoint) {
+                            sidePath = reversePath(sidePath);
+                        }
+                        if (sidePath.front() != endpoint) {
+                            continue;
+                        }
+                        if (side == 0) {
+                            const Vec2& p = map.station(sidePath[1]).position;
+                            const Vec2& q = map.station(endpoint).position;
+                            const Vec2& r = map.station(base[1]).position;
+                            if (turnDeviationDegrees(p, q, r) > maxTurnDeviationDeg) {
+                                continue;
+                            }
+                            DynamicArray<Index> merged;
+                            for (std::size_t k = 0; k + 1 < sidePath.size(); ++k) {
+                                merged.push_back(sidePath[k]);
+                            }
+                            for (std::size_t k = 0; k < base.size(); ++k) {
+                                merged.push_back(base[k]);
+                            }
+                            addPath(merged);
+                        } else {
+                            const Vec2& p = map.station(base[base.size() - 2]).position;
+                            const Vec2& q = map.station(endpoint).position;
+                            const Vec2& r = map.station(sidePath[1]).position;
+                            if (turnDeviationDegrees(p, q, r) > maxTurnDeviationDeg) {
+                                continue;
+                            }
+                            DynamicArray<Index> merged = base;
+                            for (std::size_t k = 1; k < sidePath.size(); ++k) {
+                                merged.push_back(sidePath[k]);
+                            }
+                            addPath(merged);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // 端点连接：只允许在线路两端各接入最多 2 个连接边相邻站，
     // 用于服务不在走廊上的外围站点，避免中段穿越街区。
     const std::size_t baseCount = result.size();

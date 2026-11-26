@@ -3,6 +3,7 @@
 #include "core/line.h"
 #include "core/map.h"
 #include "ds/dynamic_array.h"
+#include "plan/plan_types.h"
 
 namespace uc {
 namespace plan {
@@ -33,15 +34,16 @@ struct CorridorGraph {
 };
 
 struct CorridorOptions {
-    // 站点到背景道路折线的距离阈值（地图单位）。
-    double roadTolerance = 2.0;
-    // 只有宽度达到该值的道路才作为主走廊；局部街巷仍算道路，但不生成走廊候选。
-    double minCorridorWidth = 1.5;
+    // 站点图上按 OD 流量选走廊边：取流量最高的这一比例。
+    double corridorEdgeRatio = 0.25;
 };
 
-// 提取走廊骨架。道路边来自地图背景中的 road 要素；
-// 不在道路上的边（例如 kNN 强制连边）标记为连接边，不进入走廊。
-CorridorGraph buildCorridorGraph(const Map& map, const CorridorOptions& options = {});
+// 站点/需求驱动的走廊骨架：只用站点分布与 OD 需求，不使用背景道路。
+// 方法：在站点图上为每个 OD 分配流量，取高流量边，收缩成走廊段。
+CorridorGraph buildStationCorridorGraph(const Map& map, const WeightResult& weights,
+                                        const DemandResult& demand,
+                                        const CorridorOptions& options = {});
+
 
 void printCorridorGraph(const CorridorGraph& graph);
 

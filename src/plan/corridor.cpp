@@ -6,232 +6,210 @@
 #include <utility>
 #include <vector>
 
-#include "core/background.h"
+#include "ds/binary_heap.h"
+#include "ds/sort.h"
 #include "ds/hash_map.h"
 
 namespace uc {
 namespace plan {
 namespace {
 
-struct Projection {
-    bool found = false;
-    double distance = kInfinity;
-    double arc = 0.0;
-};
-
-double pointSegmentDistance(const Vec2& point, const Vec2& a, const Vec2& b, double* tOut) {
-    const double dx = b.x - a.x;
-    const double dy = b.y - a.y;
-    const double lengthSquared = dx * dx + dy * dy;
-    if (lengthSquared < 1e-12) {
-        if (tOut != nullptr) {
-            *tOut = 0.0;
-        }
-        return euclideanDistance(point, a);
-    }
-    double t = ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSquared;
-    t = std::max(0.0, std::min(1.0, t));
-    if (tOut != nullptr) {
-        *tOut = t;
-    }
-    return euclideanDistance(point, Vec2{a.x + t * dx, a.y + t * dy});
-}
-
-Projection projectOntoPolyline(const Vec2& point, const DynamicArray<Vec2>& points) {
-    Projection best;
-    double arc = 0.0;
-    for (std::size_t i = 0; i + 1 < points.size(); ++i) {
-        double t = 0.0;
-        const double distance = pointSegmentDistance(point, points[i], points[i + 1], &t);
-        const double segmentLength = euclideanDistance(points[i], points[i + 1]);
-        if (distance < best.distance) {
-            best.found = true;
-            best.distance = distance;
-            best.arc = arc + t * segmentLength;
-        }
-        arc += segmentLength;
-    }
-    return best;
-}
-
-std::uint64_t edgeKey(Index a, Index b) {
-    const std::uint32_t low = static_cast<std::uint32_t>(std::min(a, b));
-    const std::uint32_t high = static_cast<std::uint32_t>(std::max(a, b));
-    return (static_cast<std::uint64_t>(low) << 32) | high;
-}
-
-double directionCosine(const Vec2& a, const Vec2& b, const Vec2& c, const Vec2& d) {
-    const double ax = b.x - a.x;
-    const double ay = b.y - a.y;
-    const double bx = d.x - c.x;
-    const double by = d.y - c.y;
-    const double la = std::sqrt(ax * ax + ay * ay);
-    const double lb = std::sqrt(bx * bx + by * by);
-    if (la < 1e-12 || lb < 1e-12) {
-        return 0.0;
-    }
-    return std::fabs(ax * bx + ay * by) / (la * lb);
-}
-
-// 任意背景道路支持（包含局部街巷），用于区分“道路边”和“非道路连接边”。
-bool edgeOnBackgroundRoad(const Map& map, const EdgeRecord& edge,
-                          const CorridorOptions& options) {
-    const Vec2& a = map.station(edge.from).position;
-    const Vec2& b = map.station(edge.to).position;
-    const Vec2 midpoint{(a.x + b.x) * 0.5, (a.y + b.y) * 0.5};
-    for (std::size_t f = 0; f < map.backgroundFeatures().size(); ++f) {
-        const BackgroundFeature& feature = map.backgroundFeatures()[f];
-        if (feature.kind != BackgroundKind::Road || feature.points.size() < 2) {
-            continue;
-        }
-        for (std::size_t i = 0; i + 1 < feature.points.size(); ++i) {
-            if (pointSegmentDistance(midpoint, feature.points[i], feature.points[i + 1],
-                                     nullptr) > options.roadTolerance) {
-                continue;
-            }
-            if (directionCosine(a, b, feature.points[i], feature.points[i + 1]) < 0.85) {
-                continue;
-            }
-            return true;
-        }
-    }
-    return false;
-}
-
 }  // namespace
 
-CorridorGraph buildCorridorGraph(const Map& map, const CorridorOptions& options) {
+CorridorGraph buildStationCorridorGraph(const Map& map, const WeightResult& weights,
+                                        const DemandResult& demand,
+                                        const CorridorOptions& options) {
     CorridorGraph graph;
-    const int edgeCount = static_cast<int>(map.edges().size());
     const int stationCount = map.stationCount();
+    const int edgeCount = static_cast<int>(map.edges().size());
     graph.edgeIsMainCorridor.resize(static_cast<std::size_t>(edgeCount));
     graph.edgeIsRoad.resize(static_cast<std::size_t>(edgeCount));
     for (int i = 0; i < edgeCount; ++i) {
         graph.edgeIsMainCorridor[static_cast<std::size_t>(i)] = 0;
-        graph.edgeIsRoad[static_cast<std::size_t>(i)] = 0;
+        // 站点/需求驱动的规划不区分背景道路，所有地图边都是候选道路。
+        graph.edgeIsRoad[static_cast<std::size_t>(i)] = 1;
+    }
+    graph.roadEdgeCount = edgeCount;
+    graph.connectorEdgeCount = 0;
+    if (stationCount < 2 || edgeCount == 0 ||
+        static_cast<int>(weights.weights.size()) != stationCount ||
+        demand.stationCount != stationCount) {
+        return graph;
     }
 
-    HashMap<std::uint64_t, int, IntHash> edgeIndex;
+    // 在站点图上分配 OD 流量：每个起点跑一次 Dijkstra，回溯到各终点累加。
+    DynamicArray<double> flow;
+    flow.resize(static_cast<std::size_t>(edgeCount));
     for (int i = 0; i < edgeCount; ++i) {
+        flow[static_cast<std::size_t>(i)] = 0.0;
+    }
+    DynamicArray<double> dist;
+    DynamicArray<int> previousEdge;
+    DynamicArray<int> previousStation;
+    dist.resize(static_cast<std::size_t>(stationCount));
+    previousEdge.resize(static_cast<std::size_t>(stationCount));
+    previousStation.resize(static_cast<std::size_t>(stationCount));
+
+    for (int origin = 0; origin < stationCount; ++origin) {
+        for (int i = 0; i < stationCount; ++i) {
+            dist[static_cast<std::size_t>(i)] = kInfinity;
+            previousEdge[static_cast<std::size_t>(i)] = -1;
+            previousStation[static_cast<std::size_t>(i)] = -1;
+        }
+        BinaryMinHeap heap;
+        dist[static_cast<std::size_t>(origin)] = 0.0;
+        heap.push(0.0, origin);
+        while (!heap.empty()) {
+            const HeapItem item = heap.pop();
+            const Index station = item.value;
+            if (item.key > dist[static_cast<std::size_t>(station)] + 1e-9) {
+                continue;
+            }
+            const DynamicArray<AdjEdge>& neighbors = map.neighbors(station);
+            for (std::size_t n = 0; n < neighbors.size(); ++n) {
+                const AdjEdge& edge = neighbors[n];
+                const double next = item.key + edge.length;
+                if (next + 1e-9 < dist[static_cast<std::size_t>(edge.to)]) {
+                    dist[static_cast<std::size_t>(edge.to)] = next;
+                    previousEdge[static_cast<std::size_t>(edge.to)] = edge.edgeId;
+                    previousStation[static_cast<std::size_t>(edge.to)] = station;
+                    heap.push(next, edge.to);
+                }
+            }
+        }
+        for (int destination = origin + 1; destination < stationCount; ++destination) {
+            const double od =
+                demand.od[static_cast<std::size_t>(origin) * stationCount +
+                          static_cast<std::size_t>(destination)];
+            if (od <= 0.0 || std::isinf(dist[static_cast<std::size_t>(destination)])) {
+                continue;
+            }
+            int current = destination;
+            int guard = 0;
+            while (current != origin && guard++ <= stationCount) {
+                const int edge = previousEdge[static_cast<std::size_t>(current)];
+                if (edge < 0) {
+                    break;
+                }
+                flow[static_cast<std::size_t>(edge)] += od;
+                current = previousStation[static_cast<std::size_t>(current)];
+            }
+        }
+    }
+
+    // 取流量最高的一段边作为主走廊；其余边仍然是普通道路。
+    DynamicArray<int> order;
+    for (int i = 0; i < edgeCount; ++i) {
+        if (flow[static_cast<std::size_t>(i)] > 1e-9) {
+            order.push_back(i);
+        }
+    }
+    quickSort(order, [&flow](int a, int b) {
+        return flow[static_cast<std::size_t>(a)] > flow[static_cast<std::size_t>(b)];
+    });
+    const double ratio = std::max(0.0, std::min(1.0, options.corridorEdgeRatio));
+    const int budget = std::max(
+        2, std::min(static_cast<int>(order.size()),
+                    static_cast<int>(std::ceil(order.size() * ratio))));
+    for (int i = 0; i < budget; ++i) {
+        const int edge = order[static_cast<std::size_t>(i)];
+        graph.edgeIsMainCorridor[static_cast<std::size_t>(edge)] = 1;
+        ++graph.mainCorridorEdgeCount;
+        graph.totalRoadLength += map.edges()[static_cast<std::size_t>(edge)].length;
+    }
+
+    // 把高流量边收缩成走廊段（度 2 链）。
+    DynamicArray<DynamicArray<std::pair<Index, int>>> adjacency;
+    adjacency.resize(static_cast<std::size_t>(stationCount));
+    DynamicArray<int> degree;
+    degree.resize(static_cast<std::size_t>(stationCount));
+    for (int i = 0; i < stationCount; ++i) {
+        degree[static_cast<std::size_t>(i)] = 0;
+    }
+    for (int i = 0; i < edgeCount; ++i) {
+        if (!graph.edgeIsMainCorridor[static_cast<std::size_t>(i)]) {
+            continue;
+        }
         const EdgeRecord& edge = map.edges()[static_cast<std::size_t>(i)];
-        edgeIndex.insert(edgeKey(edge.from, edge.to), i);
+        adjacency[static_cast<std::size_t>(edge.from)].push_back(
+            std::make_pair(edge.to, i));
+        adjacency[static_cast<std::size_t>(edge.to)].push_back(
+            std::make_pair(edge.from, i));
+        ++degree[static_cast<std::size_t>(edge.from)];
+        ++degree[static_cast<std::size_t>(edge.to)];
     }
-    DynamicArray<unsigned char> usedEdge;
-    usedEdge.resize(static_cast<std::size_t>(edgeCount));
+    for (int i = 0; i < stationCount; ++i) {
+        if (degree[static_cast<std::size_t>(i)] != 2 && degree[static_cast<std::size_t>(i)] > 0) {
+            ++graph.junctionCount;
+        }
+    }
+
+    DynamicArray<unsigned char> visited;
+    visited.resize(static_cast<std::size_t>(edgeCount));
     for (int i = 0; i < edgeCount; ++i) {
-        usedEdge[static_cast<std::size_t>(i)] = 0;
+        visited[static_cast<std::size_t>(i)] = 0;
     }
-
-    // 每条背景道路折线是一条候选走廊；只吸收主/次干道，局部街巷不进入走廊。
-    for (std::size_t f = 0; f < map.backgroundFeatures().size(); ++f) {
-        const BackgroundFeature& feature = map.backgroundFeatures()[f];
-        if (feature.kind != BackgroundKind::Road || feature.points.size() < 2) {
-            continue;
-        }
-        if (feature.width + 1e-9 < options.minCorridorWidth) {
-            continue;
-        }
-
-        std::vector<std::pair<double, Index>> stationsOnRoad;
-        for (int station = 0; station < stationCount; ++station) {
-            const Projection projection =
-                projectOntoPolyline(map.station(station).position, feature.points);
-            if (projection.found && projection.distance <= options.roadTolerance) {
-                stationsOnRoad.push_back(
-                    std::make_pair(projection.arc, static_cast<Index>(station)));
+    auto buildSegment = [&](Index start, int firstEdge) {
+        CorridorSegment segment;
+        segment.id = static_cast<int>(graph.segments.size());
+        segment.stations.push_back(start);
+        int edgeIndex = firstEdge;
+        Index current = map.edges()[static_cast<std::size_t>(edgeIndex)].from == start
+                            ? map.edges()[static_cast<std::size_t>(edgeIndex)].to
+                            : map.edges()[static_cast<std::size_t>(edgeIndex)].from;
+        while (edgeIndex >= 0) {
+            visited[static_cast<std::size_t>(edgeIndex)] = 1;
+            ++segment.mapEdgeCount;
+            segment.length += map.edges()[static_cast<std::size_t>(edgeIndex)].length;
+            segment.stations.push_back(current);
+            if (degree[static_cast<std::size_t>(current)] != 2) {
+                break;
             }
-        }
-        if (stationsOnRoad.size() < 2) {
-            continue;
-        }
-        std::sort(stationsOnRoad.begin(), stationsOnRoad.end());
-
-        auto flush = [&](std::size_t begin, std::size_t endExclusive) {
-            if (endExclusive - begin < 2) {
-                return;
-            }
-            CorridorSegment segment;
-            segment.id = static_cast<int>(graph.segments.size());
-            segment.roadWidth = feature.width;
-            double length = 0.0;
-            int edgeUsedCount = 0;
-            for (std::size_t i = begin; i < endExclusive; ++i) {
-                segment.stations.push_back(stationsOnRoad[i].second);
-            }
-            for (std::size_t i = begin; i + 1 < endExclusive; ++i) {
-                const Index a = stationsOnRoad[i].second;
-                const Index b = stationsOnRoad[i + 1].second;
-                const int* found = edgeIndex.find(edgeKey(a, b));
-                if (found == nullptr) {
-                    return;  // 理论上已按连续边切分，这里保护
+            int nextEdge = -1;
+            Index nextStation = kInvalidIndex;
+            const DynamicArray<std::pair<Index, int>>& neighbors =
+                adjacency[static_cast<std::size_t>(current)];
+            for (std::size_t n = 0; n < neighbors.size(); ++n) {
+                if (neighbors[n].second == edgeIndex ||
+                    visited[static_cast<std::size_t>(neighbors[n].second)]) {
+                    continue;
                 }
-                const int edge = *found;
-                if (usedEdge[static_cast<std::size_t>(edge)]) {
-                    return;
-                }
-                usedEdge[static_cast<std::size_t>(edge)] = 1;
-                graph.edgeIsMainCorridor[static_cast<std::size_t>(edge)] = 1;
-                graph.edgeIsRoad[static_cast<std::size_t>(edge)] = 1;
-                length += map.edges()[static_cast<std::size_t>(edge)].length;
-                ++edgeUsedCount;
+                nextEdge = neighbors[n].second;
+                nextStation = neighbors[n].first;
+                break;
             }
-            if (edgeUsedCount == 0) {
-                return;
+            if (nextEdge < 0) {
+                break;
             }
-            segment.length = length;
-            segment.mapEdgeCount = edgeUsedCount;
+            current = nextStation;
+            edgeIndex = nextEdge;
+        }
+        if (segment.stations.size() >= 2) {
             graph.maxSegmentStations =
                 std::max(graph.maxSegmentStations, static_cast<int>(segment.stations.size()));
             graph.segments.push_back(static_cast<CorridorSegment&&>(segment));
-        };
-
-        std::size_t runBegin = 0;
-        for (std::size_t i = 1; i < stationsOnRoad.size(); ++i) {
-            const Index a = stationsOnRoad[i - 1].second;
-            const Index b = stationsOnRoad[i].second;
-            const int* found = edgeIndex.find(edgeKey(a, b));
-            const bool continuous =
-                found != nullptr && !usedEdge[static_cast<std::size_t>(*found)];
-            if (!continuous) {
-                flush(runBegin, i);
-                runBegin = i;
-            }
         }
-        flush(runBegin, stationsOnRoad.size());
-    }
+    };
 
-    // 主走廊边之外的边，再区分“普通道路（含街巷）”和“非道路连接边”。
-    for (int i = 0; i < edgeCount; ++i) {
-        const EdgeRecord& edge = map.edges()[static_cast<std::size_t>(i)];
-        if (graph.edgeIsMainCorridor[static_cast<std::size_t>(i)]) {
-            ++graph.mainCorridorEdgeCount;
-            graph.totalRoadLength += edge.length;
-            ++graph.roadEdgeCount;
+    for (int station = 0; station < stationCount; ++station) {
+        if (degree[static_cast<std::size_t>(station)] == 2 ||
+            degree[static_cast<std::size_t>(station)] == 0) {
             continue;
         }
-        if (edgeOnBackgroundRoad(map, edge, options)) {
-            graph.edgeIsRoad[static_cast<std::size_t>(i)] = 1;
-            ++graph.roadEdgeCount;
-        } else {
-            ++graph.connectorEdgeCount;
+        const DynamicArray<std::pair<Index, int>>& neighbors =
+            adjacency[static_cast<std::size_t>(station)];
+        for (std::size_t n = 0; n < neighbors.size(); ++n) {
+            if (!visited[static_cast<std::size_t>(neighbors[n].second)]) {
+                buildSegment(static_cast<Index>(station), neighbors[n].second);
+            }
         }
     }
-
-    // 走廊共享站点数：出现在两条及以上走廊中的站点，视为走廊交点/换乘节点。
-    HashMap<int, int, IntHash> stationIncidence;
-    for (std::size_t i = 0; i < graph.segments.size(); ++i) {
-        const CorridorSegment& segment = graph.segments[i];
-        for (std::size_t s = 0; s < segment.stations.size(); ++s) {
-            const Index station = segment.stations[s];
-            const int* count = stationIncidence.find(station);
-            stationIncidence.set(station, count == nullptr ? 1 : *count + 1);
+    for (int i = 0; i < edgeCount; ++i) {
+        if (graph.edgeIsMainCorridor[static_cast<std::size_t>(i)] &&
+            !visited[static_cast<std::size_t>(i)]) {
+            buildSegment(map.edges()[static_cast<std::size_t>(i)].from, i);
         }
     }
-    stationIncidence.forEach([&graph](int, int count) {
-        if (count >= 2) {
-            ++graph.junctionCount;
-        }
-    });
 
     return graph;
 }
@@ -272,13 +250,13 @@ CorridorLineUsage corridorLineUsage(const Map& map, const CorridorGraph& graph,
 }
 
 void printCorridorLineUsage(const CorridorLineUsage& usage) {
-    const double ratio = usage.lineEdges > 0
-                             ? 100.0 * usage.roadEdges / usage.lineEdges
-                             : 0.0;
+    const double mainRatio = usage.lineEdges > 0
+                                 ? 100.0 * usage.mainCorridorEdges / usage.lineEdges
+                                 : 0.0;
     std::cout << "line corridor usage: edges=" << usage.lineEdges
-              << " road=" << usage.roadEdges
-              << " connector=" << usage.connectorEdges
-              << " roadRatio=" << ratio << "%\n";
+              << " mainCorridor=" << usage.mainCorridorEdges
+              << " (" << mainRatio << "%)"
+              << " other=" << (usage.lineEdges - usage.mainCorridorEdges) << '\n';
 }
 
 void printCorridorGraph(const CorridorGraph& graph) {

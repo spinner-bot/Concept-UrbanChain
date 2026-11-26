@@ -633,24 +633,21 @@ void testCorridorGraph() {
     map.addEdge(2, 3, 1.0, 1.0);
     map.addEdge(1, 4, 1.0, 2.0);  // 垂直连接边，不在道路上
 
-    BackgroundFeature road;
-    road.id = "Main";
-    road.kind = BackgroundKind::Road;
-    road.closed = false;
-    road.width = 2.0;
-    road.points.push_back(Vec2{0.0, 0.0});
-    road.points.push_back(Vec2{3.0, 0.0});
-    map.addBackgroundFeature(road);
+    WeightResult weights;
+    for (int i = 0; i < 5; ++i) {
+        weights.weights.push_back(1.0);
+    }
+    weights.clusterCount = 1;
+    const DemandResult demand = makeDemand(weights.weights, 5, 1.0, 1);
 
     CorridorOptions options;
-    options.roadTolerance = 1.0;
-    const CorridorGraph graph = buildCorridorGraph(map, options);
-    CHECK(graph.roadEdgeCount == 3);
-    CHECK(graph.connectorEdgeCount == 1);
-    CHECK(graph.segments.size() == 1);
-    CHECK(graph.segments[0].stations.size() == 4);
-    CHECK(graph.maxSegmentStations == 4);
-    CHECK(std::fabs(graph.segments[0].length - 3.0) < 1e-9);
+    options.corridorEdgeRatio = 1.0;  // 测试时保留全部有流量的边
+    const CorridorGraph graph = buildStationCorridorGraph(map, weights, demand, options);
+    CHECK(graph.mainCorridorEdgeCount == 4);
+    CHECK(graph.roadEdgeCount == 4);
+    CHECK(graph.connectorEdgeCount == 0);
+    CHECK(graph.segments.size() >= 2);
+    CHECK(graph.maxSegmentStations >= 3);
 
     const DynamicArray<DynamicArray<Index>> candidates =
         buildCorridorLineCandidates(map, graph, 100.0, 40);

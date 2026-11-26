@@ -712,7 +712,9 @@ void modeCorridors(const std::string& mapPath, const std::string& linePath) {
         return;
     }
     std::cout << "corridors: " << mapPath << '\n';
-    const CorridorGraph graph = buildCorridorGraph(map);
+    const WeightResult weights = computeWeights(map, makeWeightParams(3, 1));
+    const DemandResult demand = makeDemand(map, weights, 1.0);
+    const CorridorGraph graph = buildStationCorridorGraph(map, weights, demand);
     printCorridorGraph(graph);
     if (!linePath.empty()) {
         Network network;

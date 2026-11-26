@@ -537,7 +537,7 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
     }
 
     ScoreContext context = makeScoreContext(map);
-    const CorridorGraph corridorGraph = buildCorridorGraph(map);
+    const CorridorGraph corridorGraph = buildStationCorridorGraph(map, weights, demand);
     if (corridorGraph.roadEdgeCount > 0) {
         context.corridorGraph = &corridorGraph;
     }

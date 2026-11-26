@@ -43,6 +43,11 @@ struct SearchParams {
     int topStations = 10;
     int extraAnchors = 12;
     int candidateLimit = 80;
+    // 走廊候选：从背景道路走廊生成贯通线路，替代部分任意站点对最短路。
+    bool useCorridorCandidates = true;
+    bool corridorOnly = false;
+    double corridorTurnDeg = 100.0;
+    int corridorCandidateLimit = 240;
     // 候选线路与搜索过程中的最短站数；过短的“线路”通常只是接驳段。
     int minLineStations = 2;
     double minCoverageGain = 1e-9;

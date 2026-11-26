@@ -31,6 +31,7 @@ add_library(uc_plan STATIC
     src/plan/evaluator.cpp
     src/plan/search.cpp
     src/plan/audit.cpp
+    src/plan/corridor.cpp
 )
 target_link_libraries(uc_plan PUBLIC uc_core)
 

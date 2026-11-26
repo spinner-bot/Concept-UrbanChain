@@ -9,6 +9,7 @@
 #include "ds/hash_map.h"
 #include "ds/sort.h"
 #include "plan/audit.h"
+#include "plan/corridor.h"
 #include "plan/evaluator.h"
 
 namespace uc {
@@ -506,6 +507,34 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
         candidates.push_back(makeCandidate(path, palette[candidates.size() % 8]));
     };
 
+    auto addPathCandidate = [&](const DynamicArray<Index>& path) {
+        if (static_cast<int>(candidates.size()) >= search.candidateLimit) {
+            return;
+        }
+        if (static_cast<int>(path.size()) < std::max(2, search.minLineStations)) {
+            return;
+        }
+        const std::string key = pathKey(path);
+        if (seen.contains(key)) {
+            return;
+        }
+        seen.insert(key, 1);
+        candidates.push_back(makeCandidate(path, palette[candidates.size() % 8]));
+    };
+
+    // 走廊候选先进入池子：线路优先沿主/次干道贯通，
+    // 任意锚点最短路只作为补充。
+    if (search.useCorridorCandidates) {
+        const CorridorGraph corridors = buildCorridorGraph(map);
+        const DynamicArray<DynamicArray<Index>> corridorPaths =
+            buildCorridorLineCandidates(map, corridors, search.corridorTurnDeg,
+                                        search.corridorCandidateLimit);
+        for (std::size_t i = 0; i < corridorPaths.size(); ++i) {
+            addPathCandidate(corridorPaths[i]);
+        }
+    }
+
+    if (!search.corridorOnly) {
     DynamicArray<int> anchors;
     auto addAnchor = [&anchors, stationCount](int index) {
         if (index < 0 || index >= stationCount) {
@@ -670,6 +699,8 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
                          pairs[static_cast<std::size_t>(i)].b);
         }
     }
+
+    }  // !corridorOnly
 
     ScoreParams scoreParams = search.score;
     double totalEdgeCost = 0.0;

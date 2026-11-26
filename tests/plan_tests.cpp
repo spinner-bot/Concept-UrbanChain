@@ -6,6 +6,7 @@
 #include "core/map.h"
 #include "core/network.h"
 #include "plan/audit.h"
+#include "plan/corridor.h"
 #include "plan/demand.h"
 #include "plan/evaluator.h"
 #include "plan/search.h"
@@ -619,6 +620,51 @@ void testMapGeometryAudit() {
     CHECK(report.worstRatio > 9.9);
 }
 
+
+void testCorridorGraph() {
+    Map map;
+    map.addStation(makeStation("A", 0.0, 0.0));
+    map.addStation(makeStation("B", 1.0, 0.0));
+    map.addStation(makeStation("C", 2.0, 0.0));
+    map.addStation(makeStation("D", 3.0, 0.0));
+    map.addStation(makeStation("E", 1.0, 2.0));
+    map.addEdge(0, 1, 1.0, 1.0);
+    map.addEdge(1, 2, 1.0, 1.0);
+    map.addEdge(2, 3, 1.0, 1.0);
+    map.addEdge(1, 4, 1.0, 2.0);  // 垂直连接边，不在道路上
+
+    BackgroundFeature road;
+    road.id = "Main";
+    road.kind = BackgroundKind::Road;
+    road.closed = false;
+    road.width = 2.0;
+    road.points.push_back(Vec2{0.0, 0.0});
+    road.points.push_back(Vec2{3.0, 0.0});
+    map.addBackgroundFeature(road);
+
+    CorridorOptions options;
+    options.roadTolerance = 1.0;
+    const CorridorGraph graph = buildCorridorGraph(map, options);
+    CHECK(graph.roadEdgeCount == 3);
+    CHECK(graph.connectorEdgeCount == 1);
+    CHECK(graph.segments.size() == 1);
+    CHECK(graph.segments[0].stations.size() == 4);
+    CHECK(graph.maxSegmentStations == 4);
+    CHECK(std::fabs(graph.segments[0].length - 3.0) < 1e-9);
+
+    const DynamicArray<DynamicArray<Index>> candidates =
+        buildCorridorLineCandidates(map, graph, 100.0, 40);
+    bool foundFullCorridor = false;
+    for (std::size_t i = 0; i < candidates.size(); ++i) {
+        if (candidates[i].size() == 4 && candidates[i].front() == 0 &&
+            candidates[i].back() == 3) {
+            foundFullCorridor = true;
+            break;
+        }
+    }
+    CHECK(foundFullCorridor);
+}
+
 void testLineAudit() {
     Map map;
     for (int i = 0; i < 4; ++i) {
@@ -691,6 +737,7 @@ int main() {
     testLineSimilarityPenalty();
     testNearestEdgeAudit();
     testLineAdequacyAndWiggle();
+    testCorridorGraph();
     testLineAudit();
     testGridAuditBalance();
     if (failures == 0) {

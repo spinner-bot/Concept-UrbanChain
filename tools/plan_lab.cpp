@@ -17,6 +17,7 @@
 #include "io/line_io.h"
 #include "io/map_io.h"
 #include "plan/audit.h"
+#include "plan/corridor.h"
 #include "plan/demand.h"
 #include "plan/evaluator.h"
 #include "plan/search.h"
@@ -640,7 +641,7 @@ void modePlanFile(const std::string& mapPath, const std::string& outLinesPath,
                   int k, int maxLines, int localBudget, bool prefilter,
                   const std::string& r1Mode, double coverageLambda,
                   double lineOverlap, double lineProximity, double proximityDistance,
-                  int minLineStations) {
+                  int minLineStations, bool corridorCandidates, bool corridorOnly) {
     Network source;
     std::string error;
     if (!io::loadMap(mapPath, source.map(), &error)) {
@@ -666,6 +667,8 @@ void modePlanFile(const std::string& mapPath, const std::string& outLinesPath,
     search.score.wLineProximity = lineProximity;
     search.score.lineProximityDistance = proximityDistance;
     search.minLineStations = minLineStations;
+    search.useCorridorCandidates = corridorCandidates;
+    search.corridorOnly = corridorOnly;
 
     const PlanResult plan =
         buildGreedyPlan(source.map(), weights, demand, params, search);
@@ -697,6 +700,17 @@ void modePlanFile(const std::string& mapPath, const std::string& outLinesPath,
               << " output=" << outLinesPath << '\n';
     printMetrics(plan.metrics);
     auditNetwork(output, 3, 8);
+}
+
+void modeCorridors(const std::string& mapPath) {
+    Map map;
+    std::string error;
+    if (!io::loadMap(mapPath, map, &error)) {
+        std::cout << "map load failed: " << error << '\n';
+        return;
+    }
+    std::cout << "corridors: " << mapPath << '\n';
+    printCorridorGraph(buildCorridorGraph(map));
 }
 
 void modeCheckMap(const std::string& mapPath) {
@@ -765,6 +779,7 @@ void usage() {
               << "  plan-file    --map data/city_demo.cuc4m --out-lines data/city_demo_planned.cuc3l\n"
               << "  audit        --map data/city_demo.cuc4m --lines data/city_demo.cuc3l [--short-threshold 3]\n"
               << "  check-map    --map data/city_demo.cuc4m\n"
+              << "  corridors    --map data/city60.cuc4m\n"
               << "  demo         --map data/demo.cuc4m --lines data/demo.cuc3l\n";
 }
 
@@ -800,6 +815,8 @@ int main(int argc, char** argv) {
     double lineProximity = 0.03;
     double proximityDistance = 7.0;
     int minLineStations = 2;
+    bool corridorCandidates = true;
+    bool corridorOnly = false;
     std::string mapPath = "data/demo.cuc4m";
     std::string linePath = "data/demo.cuc3l";
     std::string outLinesPath = "data/city_demo_planned.cuc3l";
@@ -854,6 +871,13 @@ int main(int argc, char** argv) {
             proximityDistance = std::stod(argv[++i]);
         } else if (arg == "--min-line-stations" && i + 1 < argc) {
             minLineStations = std::stoi(argv[++i]);
+        } else if (arg == "--corridor-candidates") {
+            corridorCandidates = true;
+        } else if (arg == "--no-corridor-candidates") {
+            corridorCandidates = false;
+        } else if (arg == "--corridor-only") {
+            corridorCandidates = true;
+            corridorOnly = true;
         } else if (arg == "--map" && i + 1 < argc) {
             mapPath = argv[++i];
         } else if (arg == "--lines" && i + 1 < argc) {
@@ -882,11 +906,13 @@ int main(int argc, char** argv) {
     } else if (mode == "plan-file") {
         modePlanFile(mapPath, outLinesPath, k, maxLines, localBudget, prefilter,
                      r1Mode, coverageLambda, lineOverlap, lineProximity,
-                     proximityDistance, minLineStations);
+                     proximityDistance, minLineStations, corridorCandidates, corridorOnly);
     } else if (mode == "audit") {
         modeAudit(mapPath, linePath, shortThreshold);
     } else if (mode == "check-map") {
         modeCheckMap(mapPath);
+    } else if (mode == "corridors") {
+        modeCorridors(mapPath);
     } else if (mode == "demo") {
         modeDemo(mapPath, linePath);
     } else {

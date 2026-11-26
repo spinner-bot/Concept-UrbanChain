@@ -653,10 +653,12 @@ void modePlanFile(const std::string& mapPath, const std::string& outLinesPath,
 
     SearchParams search;
     search.maxLines = maxLines;
-    search.topStations = std::min(16, source.map().stationCount());
-    search.extraAnchors = 12;
-    search.candidateLimit = 360;
-    search.localSearchBudget = localBudget > 0 ? localBudget : 80;
+    // 规模自适应：大一点的地图不能只靠少量锚点，否则外围站进不了候选池。
+    const int stationCount = source.map().stationCount();
+    search.topStations = std::min(24, stationCount);
+    search.extraAnchors = std::min(24, std::max(12, stationCount / 3));
+    search.candidateLimit = std::max(600, stationCount * 12);
+    search.localSearchBudget = localBudget > 0 ? localBudget : 160;
     search.prefilter = prefilter;
 
     const PlanResult plan =

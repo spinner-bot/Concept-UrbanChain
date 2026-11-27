@@ -581,7 +581,7 @@ void modePlan(int cols, int rows, int k, int maxLines, const std::string& profil
               double minCoverage, double coveragePenalty, const std::string& scenario,
               int cityCenters, int perCenter, int citySeed, bool localSearch,
               int localBudget, bool prefilter, const std::string& r1Mode,
-              double coverageLambda) {
+              double coverageLambda, bool corridorCandidates) {
     DynamicArray<Line> baselineLines;
     const Map map = scenario == "grid"
                         ? makeGridMap(cols, rows)
@@ -598,6 +598,7 @@ void modePlan(int cols, int rows, int k, int maxLines, const std::string& profil
     search.candidateLimit = scenario == "grid" ? 120 : 320;
     search.localSearchBudget = localBudget > 0 ? localBudget : (scenario == "grid" ? 120 : 24);
     search.enableLocalSearch = localSearch;
+    search.useCorridorCandidates = corridorCandidates;
     search.prefilter = prefilter;
     applyScoreProfile(search.score, profile);
     search.score.minCoverage = minCoverage;
@@ -642,7 +643,7 @@ void modePlanFile(const std::string& mapPath, const std::string& outLinesPath,
                   const std::string& r1Mode, double coverageLambda,
                   double lineOverlap, double lineProximity, double proximityDistance,
                   int minLineStations, bool corridorCandidates, bool corridorOnly,
-                  double interiorConnector) {
+                  double interiorConnector, double corridorEdgeRatio) {
     Network source;
     std::string error;
     if (!io::loadMap(mapPath, source.map(), &error)) {
@@ -668,6 +669,7 @@ void modePlanFile(const std::string& mapPath, const std::string& outLinesPath,
     search.score.wLineProximity = lineProximity;
     search.score.lineProximityDistance = proximityDistance;
     search.score.wInteriorConnector = interiorConnector;
+    search.corridorEdgeRatio = corridorEdgeRatio;
     search.minLineStations = minLineStations;
     search.useCorridorCandidates = corridorCandidates;
     search.corridorOnly = corridorOnly;
@@ -704,7 +706,8 @@ void modePlanFile(const std::string& mapPath, const std::string& outLinesPath,
     auditNetwork(output, 3, 8);
 }
 
-void modeCorridors(const std::string& mapPath, const std::string& linePath) {
+void modeCorridors(const std::string& mapPath, const std::string& linePath,
+                   double corridorEdgeRatio) {
     Map map;
     std::string error;
     if (!io::loadMap(mapPath, map, &error)) {
@@ -714,7 +717,9 @@ void modeCorridors(const std::string& mapPath, const std::string& linePath) {
     std::cout << "corridors: " << mapPath << '\n';
     const WeightResult weights = computeWeights(map, makeWeightParams(3, 1));
     const DemandResult demand = makeDemand(map, weights, 1.0);
-    const CorridorGraph graph = buildStationCorridorGraph(map, weights, demand);
+    CorridorOptions options;
+    options.corridorEdgeRatio = corridorEdgeRatio;
+    const CorridorGraph graph = buildStationCorridorGraph(map, weights, demand, options);
     printCorridorGraph(graph);
     if (!linePath.empty()) {
         Network network;
@@ -829,6 +834,7 @@ int main(int argc, char** argv) {
     double lineProximity = 0.03;
     double proximityDistance = 7.0;
     double interiorConnector = 0.0;
+    double corridorEdgeRatio = 0.10;
     int minLineStations = 2;
     bool corridorCandidates = true;
     bool corridorOnly = false;
@@ -888,6 +894,8 @@ int main(int argc, char** argv) {
             minLineStations = std::stoi(argv[++i]);
         } else if (arg == "--interior-connector" && i + 1 < argc) {
             interiorConnector = std::stod(argv[++i]);
+        } else if (arg == "--corridor-edge-ratio" && i + 1 < argc) {
+            corridorEdgeRatio = std::stod(argv[++i]);
         } else if (arg == "--corridor-candidates") {
             corridorCandidates = true;
         } else if (arg == "--no-corridor-candidates") {
@@ -919,18 +927,18 @@ int main(int argc, char** argv) {
     } else if (mode == "plan") {
         modePlan(cols, rows, k, maxLines, profile, minCoverage, coveragePenalty,
                  scenario, cityCenters, perCenter, citySeed, localSearch, localBudget,
-                 prefilter, r1Mode, coverageLambda);
+                 prefilter, r1Mode, coverageLambda, corridorCandidates);
     } else if (mode == "plan-file") {
         modePlanFile(mapPath, outLinesPath, k, maxLines, localBudget, prefilter,
                      r1Mode, coverageLambda, lineOverlap, lineProximity,
                      proximityDistance, minLineStations, corridorCandidates, corridorOnly,
-                     interiorConnector);
+                     interiorConnector, corridorEdgeRatio);
     } else if (mode == "audit") {
         modeAudit(mapPath, linePath, shortThreshold);
     } else if (mode == "check-map") {
         modeCheckMap(mapPath);
     } else if (mode == "corridors") {
-        modeCorridors(mapPath, linePath);
+        modeCorridors(mapPath, linePath, corridorEdgeRatio);
     } else if (mode == "demo") {
         modeDemo(mapPath, linePath);
     } else {

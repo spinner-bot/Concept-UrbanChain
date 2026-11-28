@@ -560,7 +560,11 @@ void applyCoverageParams(EvalParams& params, const std::string& mode,
 }
 
 void applySpeedMode(SearchParams& search, const std::string& mode) {
-    if (mode == "full") {
+    if (mode == "deep") {
+        search.timeBudgetMs = 30000;
+        search.localSearchBudget = 400;
+        search.cleanupBudget = 300;
+    } else if (mode == "full") {
         search.timeBudgetMs = 0;
         search.localSearchBudget = 160;
         search.cleanupBudget = 120;

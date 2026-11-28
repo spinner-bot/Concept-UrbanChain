@@ -570,7 +570,15 @@ void applySpeedMode(SearchParams& search, const std::string& mode, int stationCo
             resolved = "balanced";
         }
     }
-    if (resolved == "deep") {
+    if (resolved == "deep2") {
+        search.timeBudgetMs = 120000;
+        search.localSearchBudget = 1600;
+        search.cleanupBudget = 1200;
+    } else if (resolved == "deep1") {
+        search.timeBudgetMs = 60000;
+        search.localSearchBudget = 800;
+        search.cleanupBudget = 600;
+    } else if (resolved == "deep") {
         search.timeBudgetMs = 30000;
         search.localSearchBudget = 400;
         search.cleanupBudget = 300;
@@ -680,7 +688,8 @@ void modePlanFile(const std::string& mapPath, const std::string& outLinesPath,
                   double lineOverlap, double lineProximity, double proximityDistance,
                   int minLineStations, bool corridorCandidates, bool corridorOnly,
                   double interiorConnector, double corridorEdgeRatio,
-                  const std::string& speedMode) {
+                  const std::string& speedMode, int cleanupBudget,
+                  int timeBudgetOverride) {
     Network source;
     std::string error;
     if (!io::loadMap(mapPath, source.map(), &error)) {
@@ -710,6 +719,15 @@ void modePlanFile(const std::string& mapPath, const std::string& outLinesPath,
     search.minLineStations = minLineStations;
     search.useCorridorCandidates = corridorCandidates;
     applySpeedMode(search, speedMode, stationCount);
+    if (timeBudgetOverride >= 0) {
+        search.timeBudgetMs = timeBudgetOverride;
+    }
+    if (localBudget > 0) {
+        search.localSearchBudget = localBudget;
+    }
+    if (cleanupBudget > 0) {
+        search.cleanupBudget = cleanupBudget;
+    }
     search.corridorOnly = corridorOnly;
 
     const PlanResult plan =
@@ -831,7 +849,7 @@ void usage() {
               << "  plan         --scenario city|grid --centers 1 --per-center 60 --city-seed 1\n"
               << "               --k 3 --max-lines 8 --profile balanced|coverage|service\n"
               << "               --min-coverage 0.8 --coverage-penalty 1.0 [--no-local]\n"
-              << "               [--local-budget 24] [--no-prefilter]\n"
+              << "               [--local-budget N] [--cleanup-budget N] [--time-budget-ms N] [--no-prefilter]\n"
               << "               [--r1-mode sat|log|unique] [--r1-lambda 0.25]\n"
               << "               default r1-mode=sat lambda=0.25\n"
               << "  plan-file    --map data/city_demo.cuc4m --out-lines data/city_demo_planned.cuc3l\n"
@@ -866,6 +884,8 @@ int main(int argc, char** argv) {
     bool localSearch = true;
     bool prefilter = true;
     int localBudget = 0;
+    int cleanupBudget = 0;
+    int timeBudgetOverride = -1;
     int shortThreshold = 3;
     std::string r1Mode = "sat";
     double coverageLambda = 0.25;
@@ -918,6 +938,10 @@ int main(int argc, char** argv) {
             prefilter = false;
         } else if (arg == "--local-budget" && i + 1 < argc) {
             localBudget = std::stoi(argv[++i]);
+        } else if (arg == "--cleanup-budget" && i + 1 < argc) {
+            cleanupBudget = std::stoi(argv[++i]);
+        } else if (arg == "--time-budget-ms" && i + 1 < argc) {
+            timeBudgetOverride = std::stoi(argv[++i]);
         } else if (arg == "--short-threshold" && i + 1 < argc) {
             shortThreshold = std::stoi(argv[++i]);
         } else if (arg == "--r1-mode" && i + 1 < argc) {
@@ -974,7 +998,8 @@ int main(int argc, char** argv) {
         modePlanFile(mapPath, outLinesPath, k, maxLines, localBudget, prefilter,
                      r1Mode, coverageLambda, lineOverlap, lineProximity,
                      proximityDistance, minLineStations, corridorCandidates, corridorOnly,
-                     interiorConnector, corridorEdgeRatio, speedMode);
+                     interiorConnector, corridorEdgeRatio, speedMode, cleanupBudget,
+                     timeBudgetOverride);
     } else if (mode == "audit") {
         modeAudit(mapPath, linePath, shortThreshold);
     } else if (mode == "check-map") {

@@ -559,20 +559,30 @@ void applyCoverageParams(EvalParams& params, const std::string& mode,
     params.multiLineLambda = lambda;
 }
 
-void applySpeedMode(SearchParams& search, const std::string& mode) {
-    if (mode == "deep") {
+void applySpeedMode(SearchParams& search, const std::string& mode, int stationCount) {
+    std::string resolved = mode;
+    if (resolved == "auto") {
+        if (stationCount <= 40) {
+            resolved = "deep";
+        } else if (stationCount <= 100) {
+            resolved = "full";
+        } else {
+            resolved = "balanced";
+        }
+    }
+    if (resolved == "deep") {
         search.timeBudgetMs = 30000;
         search.localSearchBudget = 400;
         search.cleanupBudget = 300;
-    } else if (mode == "full") {
+    } else if (resolved == "full") {
         search.timeBudgetMs = 0;
         search.localSearchBudget = 160;
         search.cleanupBudget = 120;
-    } else if (mode == "fast") {
+    } else if (resolved == "fast") {
         search.timeBudgetMs = 800;
         search.localSearchBudget = 50;
         search.cleanupBudget = 20;
-    } else if (mode == "turbo") {
+    } else if (resolved == "turbo") {
         search.timeBudgetMs = 400;
         search.localSearchBudget = 20;
         search.cleanupBudget = 8;
@@ -624,7 +634,7 @@ void modePlan(int cols, int rows, int k, int maxLines, const std::string& profil
     search.localSearchBudget = localBudget > 0 ? localBudget : (scenario == "grid" ? 120 : 24);
     search.enableLocalSearch = localSearch;
     search.useCorridorCandidates = corridorCandidates;
-    applySpeedMode(search, speedMode);
+    applySpeedMode(search, speedMode, map.stationCount());
     search.prefilter = prefilter;
     applyScoreProfile(search.score, profile);
     search.score.minCoverage = minCoverage;
@@ -697,10 +707,9 @@ void modePlanFile(const std::string& mapPath, const std::string& outLinesPath,
     search.score.lineProximityDistance = proximityDistance;
     search.score.wInteriorConnector = interiorConnector;
     search.corridorEdgeRatio = corridorEdgeRatio;
-    applySpeedMode(search, speedMode);
     search.minLineStations = minLineStations;
     search.useCorridorCandidates = corridorCandidates;
-    applySpeedMode(search, speedMode);
+    applySpeedMode(search, speedMode, stationCount);
     search.corridorOnly = corridorOnly;
 
     const PlanResult plan =

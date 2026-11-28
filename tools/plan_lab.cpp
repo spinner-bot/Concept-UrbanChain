@@ -559,6 +559,26 @@ void applyCoverageParams(EvalParams& params, const std::string& mode,
     params.multiLineLambda = lambda;
 }
 
+void applySpeedMode(SearchParams& search, const std::string& mode) {
+    if (mode == "full") {
+        search.timeBudgetMs = 0;
+        search.localSearchBudget = 160;
+        search.cleanupBudget = 120;
+    } else if (mode == "fast") {
+        search.timeBudgetMs = 800;
+        search.localSearchBudget = 50;
+        search.cleanupBudget = 20;
+    } else if (mode == "turbo") {
+        search.timeBudgetMs = 400;
+        search.localSearchBudget = 20;
+        search.cleanupBudget = 8;
+    } else {  // balanced
+        search.timeBudgetMs = 1500;
+        search.localSearchBudget = 100;
+        search.cleanupBudget = 60;
+    }
+}
+
 void applyScoreProfile(ScoreParams& score, const std::string& profile) {
     if (profile == "coverage") {
         score.wCoverage = 0.50;
@@ -581,7 +601,8 @@ void modePlan(int cols, int rows, int k, int maxLines, const std::string& profil
               double minCoverage, double coveragePenalty, const std::string& scenario,
               int cityCenters, int perCenter, int citySeed, bool localSearch,
               int localBudget, bool prefilter, const std::string& r1Mode,
-              double coverageLambda, bool corridorCandidates) {
+              double coverageLambda, bool corridorCandidates,
+              const std::string& speedMode) {
     DynamicArray<Line> baselineLines;
     const Map map = scenario == "grid"
                         ? makeGridMap(cols, rows)
@@ -599,6 +620,7 @@ void modePlan(int cols, int rows, int k, int maxLines, const std::string& profil
     search.localSearchBudget = localBudget > 0 ? localBudget : (scenario == "grid" ? 120 : 24);
     search.enableLocalSearch = localSearch;
     search.useCorridorCandidates = corridorCandidates;
+    applySpeedMode(search, speedMode);
     search.prefilter = prefilter;
     applyScoreProfile(search.score, profile);
     search.score.minCoverage = minCoverage;
@@ -643,7 +665,8 @@ void modePlanFile(const std::string& mapPath, const std::string& outLinesPath,
                   const std::string& r1Mode, double coverageLambda,
                   double lineOverlap, double lineProximity, double proximityDistance,
                   int minLineStations, bool corridorCandidates, bool corridorOnly,
-                  double interiorConnector, double corridorEdgeRatio) {
+                  double interiorConnector, double corridorEdgeRatio,
+                  const std::string& speedMode) {
     Network source;
     std::string error;
     if (!io::loadMap(mapPath, source.map(), &error)) {
@@ -670,8 +693,10 @@ void modePlanFile(const std::string& mapPath, const std::string& outLinesPath,
     search.score.lineProximityDistance = proximityDistance;
     search.score.wInteriorConnector = interiorConnector;
     search.corridorEdgeRatio = corridorEdgeRatio;
+    applySpeedMode(search, speedMode);
     search.minLineStations = minLineStations;
     search.useCorridorCandidates = corridorCandidates;
+    applySpeedMode(search, speedMode);
     search.corridorOnly = corridorOnly;
 
     const PlanResult plan =
@@ -698,6 +723,7 @@ void modePlanFile(const std::string& mapPath, const std::string& outLinesPath,
               << " edges=" << source.map().edges().size() << " r1=" << r1Mode
               << " lambda=" << number(coverageLambda) << '\n';
     std::cout << "planned lines=" << plan.lines.size()
+              << " planMs=" << number(plan.elapsedMs)
               << " merged=" << plan.mergedLines
               << " duplicatesRemoved=" << plan.duplicateLinesRemoved
               << " redundantRemoved=" << plan.redundantLinesRemoved
@@ -838,6 +864,7 @@ int main(int argc, char** argv) {
     int minLineStations = 2;
     bool corridorCandidates = true;
     bool corridorOnly = false;
+    std::string speedMode = "balanced";
     std::string mapPath = "data/demo.cuc4m";
     std::string linePath = "data/demo.cuc3l";
     std::string outLinesPath = "data/city_demo_planned.cuc3l";
@@ -900,6 +927,8 @@ int main(int argc, char** argv) {
             corridorCandidates = true;
         } else if (arg == "--no-corridor-candidates") {
             corridorCandidates = false;
+        } else if (arg == "--speed" && i + 1 < argc) {
+            speedMode = argv[++i];
         } else if (arg == "--corridor-only") {
             corridorCandidates = true;
             corridorOnly = true;
@@ -927,12 +956,12 @@ int main(int argc, char** argv) {
     } else if (mode == "plan") {
         modePlan(cols, rows, k, maxLines, profile, minCoverage, coveragePenalty,
                  scenario, cityCenters, perCenter, citySeed, localSearch, localBudget,
-                 prefilter, r1Mode, coverageLambda, corridorCandidates);
+                 prefilter, r1Mode, coverageLambda, corridorCandidates, speedMode);
     } else if (mode == "plan-file") {
         modePlanFile(mapPath, outLinesPath, k, maxLines, localBudget, prefilter,
                      r1Mode, coverageLambda, lineOverlap, lineProximity,
                      proximityDistance, minLineStations, corridorCandidates, corridorOnly,
-                     interiorConnector, corridorEdgeRatio);
+                     interiorConnector, corridorEdgeRatio, speedMode);
     } else if (mode == "audit") {
         modeAudit(mapPath, linePath, shortThreshold);
     } else if (mode == "check-map") {

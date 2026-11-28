@@ -51,6 +51,8 @@ struct SearchParams {
     double corridorTurnDeg = 100.0;
     int corridorCandidateLimit = 240;
     double corridorEdgeRatio = 0.10;
+    // 规划总时间预算；<=0 表示不限时。
+    int timeBudgetMs = 1800;
     // 候选线路与搜索过程中的最短站数；过短的“线路”通常只是接驳段。
     int minLineStations = 2;
     double minCoverageGain = 1e-9;
@@ -77,6 +79,7 @@ struct PlanResult {
     int duplicateLinesRemoved = 0;
     int redundantLinesRemoved = 0;
     double score = 0.0;
+    double elapsedMs = 0.0;
 };
 
 // 线路相似度惩罚（共线 + 过近），供测试与实验观察。

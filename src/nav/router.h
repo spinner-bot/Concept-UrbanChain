@@ -29,6 +29,9 @@ class Router {
 public:
     Journey findRoute(const Network& network, Index origin, Index destination,
                       double departTimeSec) const;
+    // 批量版本：一个起点只跑一次 Dijkstra，返回到所有站点的行程。
+    DynamicArray<Journey> findRoutesFrom(const Network& network, Index origin,
+                                         double departTimeSec) const;
 };
 
 }  // namespace uc

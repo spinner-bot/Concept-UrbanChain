@@ -456,6 +456,25 @@ void testRouter() {
     CHECK(reverse.found);
     CHECK(std::fabs(reverse.arriveTime - 1020.0) < 1e-6);
 
+    // 批量路由必须与逐对 findRoute 完全一致。
+    for (int origin = 0; origin < network.map().stationCount(); ++origin) {
+        const uc::DynamicArray<uc::Journey> batch =
+            router.findRoutesFrom(network, origin, 0.0);
+        CHECK(static_cast<int>(batch.size()) == network.map().stationCount());
+        for (int destination = 0; destination < network.map().stationCount();
+             ++destination) {
+            const uc::Journey single =
+                router.findRoute(network, origin, destination, 0.0);
+            const uc::Journey& grouped = batch[static_cast<std::size_t>(destination)];
+            CHECK(single.found == grouped.found);
+            if (single.found) {
+                CHECK(std::fabs(single.arriveTime - grouped.arriveTime) < 1e-6);
+                CHECK(single.transfers == grouped.transfers);
+                CHECK(single.legs.size() == grouped.legs.size());
+            }
+        }
+    }
+
     const uc::Journey same = router.findRoute(network, a, a, 0.0);
     CHECK(same.found);
     CHECK(std::fabs(same.arriveTime - 0.0) < 1e-9);

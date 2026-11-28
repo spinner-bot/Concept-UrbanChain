@@ -1,6 +1,7 @@
 #include "plan/search.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <string>
@@ -536,6 +537,16 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
         return result;
     }
 
+    const auto planStart = std::chrono::steady_clock::now();
+    auto timeUp = [&]() {
+        if (search.timeBudgetMs <= 0) {
+            return false;
+        }
+        const auto now = std::chrono::steady_clock::now();
+        return std::chrono::duration<double, std::milli>(now - planStart).count() >=
+               search.timeBudgetMs;
+    };
+
     ScoreContext context = makeScoreContext(map);
     CorridorOptions corridorOptions;
     corridorOptions.corridorEdgeRatio = search.corridorEdgeRatio;
@@ -814,11 +825,17 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
 
     double currentR1 = 0.0;
     for (int step = 0; step < search.maxLines; ++step) {
+        if (timeUp()) {
+            break;
+        }
         int best = -1;
         double bestScore = -kInfinity;
         double bestGain = 0.0;
         double bestR1 = 0.0;
         for (std::size_t c = 0; c < candidates.size(); ++c) {
+            if (timeUp()) {
+                break;
+            }
             if (used[c]) {
                 continue;
             }
@@ -901,6 +918,9 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
         // 先用便宜静态指标过滤，再对候选做完整 OD 评价。
         auto evaluateTrial = [&](const DynamicArray<Line>& trial, Metrics& metrics,
                                  double& trialStatic) {
+            if (timeUp()) {
+                return false;
+            }
             const Metrics staticMetrics =
                 evaluate(map, trial, weights, demand, localStatic);
             trialStatic = scorePlan(context, trial, staticMetrics, scoreParams);
@@ -913,7 +933,7 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
             metrics = evaluate(map, trial, weights, demand, finalParams);
             return true;
         };
-        while (improved && evaluations < search.localSearchBudget) {
+        while (improved && evaluations < search.localSearchBudget && !timeUp()) {
             improved = false;
 
             // 1) 尝试加入候选线路：必须与已覆盖站点共享至少一个站。
@@ -1217,7 +1237,8 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
         bool changed = true;
         int guard = 0;
 
-        while (changed && cleanupEvaluations < search.cleanupBudget && guard < 64) {
+        while (changed && cleanupEvaluations < search.cleanupBudget && guard < 64 &&
+               !timeUp()) {
             changed = false;
             ++guard;
 
@@ -1343,6 +1364,9 @@ PlanResult buildGreedyPlan(const Map& map, const WeightResult& weights,
     }
 
     result.lines = current;
+    const auto planEnd = std::chrono::steady_clock::now();
+    result.elapsedMs =
+        std::chrono::duration<double, std::milli>(planEnd - planStart).count();
     return result;
 }
 

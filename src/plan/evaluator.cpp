@@ -229,6 +229,8 @@ Metrics evaluateNetwork(const Network& network, const WeightResult& weights,
         Router router;
         const double departTime = params.ops.initialTimeSec;
         for (int i = 0; i < stationCount; ++i) {
+            const DynamicArray<Journey> journeys =
+                router.findRoutesFrom(network, i, departTime);
             for (int j = i + 1; j < stationCount; ++j) {
                 const double od =
                     demand.od[static_cast<std::size_t>(i) * stationCount +
@@ -240,7 +242,7 @@ Metrics evaluateNetwork(const Network& network, const WeightResult& weights,
                 if (params.unreachable != UnreachablePolicy::Exclude) {
                     denominator += od;
                 }
-                const Journey journey = router.findRoute(network, i, j, departTime);
+                const Journey& journey = journeys[static_cast<std::size_t>(j)];
                 if (journey.found) {
                     ++metrics.reachablePairs;
                     const double travel = std::max(0.0, journey.arriveTime - departTime);

@@ -16,46 +16,30 @@ int stationPosition(const Line& line, Index station) {
     return -1;
 }
 
-}  // namespace
+struct RouteTables {
+    DynamicArray<double> dist;
+    DynamicArray<int> previous;
+};
 
-Journey Router::findRoute(const Network& network, Index origin, Index destination,
-                          double departTimeSec) const {
-    Journey journey;
-    journey.departTime = departTimeSec;
-
+// 从一个起点跑一次时间相关 Dijkstra，得到所有 (站点, 线路) 状态的最早到达时间。
+void computeTables(const Network& network, Index origin, double departTimeSec,
+                   int lineCount, RouteTables& tables) {
     const Map& map = network.map();
-    if (origin < 0 || destination < 0 || origin >= map.stationCount() ||
-        destination >= map.stationCount()) {
-        return journey;
-    }
-    if (origin == destination) {
-        journey.found = true;
-        journey.arriveTime = departTimeSec;
-        return journey;
-    }
-
-    const int lineCount = static_cast<int>(network.lines().size());
-    if (lineCount == 0) {
-        return journey;
-    }
-
     const std::size_t stateCount =
         static_cast<std::size_t>(map.stationCount()) * static_cast<std::size_t>(lineCount);
-    DynamicArray<double> dist;
-    dist.resize(stateCount);
-    DynamicArray<int> previous;
-    previous.resize(stateCount);
+    tables.dist.resize(stateCount);
+    tables.previous.resize(stateCount);
     for (std::size_t i = 0; i < stateCount; ++i) {
-        dist[i] = kInfinity;
-        previous[i] = -1;
+        tables.dist[i] = kInfinity;
+        tables.previous[i] = -1;
     }
 
     BinaryMinHeap heap;
     auto relax = [&](Index station, int line, double time, int fromState) {
         const std::size_t state = static_cast<std::size_t>(station) * lineCount + line;
-        if (time + 1e-9 < dist[state]) {
-            dist[state] = time;
-            previous[state] = fromState;
+        if (time + 1e-9 < tables.dist[state]) {
+            tables.dist[state] = time;
+            tables.previous[state] = fromState;
             heap.push(time, static_cast<int>(state));
         }
     };
@@ -76,7 +60,7 @@ Journey Router::findRoute(const Network& network, Index origin, Index destinatio
     while (!heap.empty()) {
         const HeapItem item = heap.pop();
         const int state = item.value;
-        if (item.key > dist[static_cast<std::size_t>(state)] + 1e-9) {
+        if (item.key > tables.dist[static_cast<std::size_t>(state)] + 1e-9) {
             continue;
         }
 
@@ -90,7 +74,8 @@ Journey Router::findRoute(const Network& network, Index origin, Index destinatio
 
         const double dwell = line.ops().dwellSec;
         if (position + 1 < line.stationCount()) {
-            const double ride = dwell + line.ops().segmentRunSec[static_cast<std::size_t>(position)];
+            const double ride =
+                dwell + line.ops().segmentRunSec[static_cast<std::size_t>(position)];
             relax(line.stations()[static_cast<std::size_t>(position + 1)], lineIndex,
                   item.key + ride, state);
         }
@@ -120,18 +105,31 @@ Journey Router::findRoute(const Network& network, Index origin, Index destinatio
             relax(station, other, boardTime, state);
         }
     }
+}
+
+Journey reconstructJourney(const Network& network, Index origin, Index destination,
+                           double departTimeSec, int lineCount,
+                           const RouteTables& tables) {
+    Journey journey;
+    journey.departTime = departTimeSec;
+    const Map& map = network.map();
+    if (origin == destination) {
+        journey.found = true;
+        journey.arriveTime = departTimeSec;
+        return journey;
+    }
 
     int bestState = -1;
     double bestTime = kInfinity;
     for (int lineIndex = 0; lineIndex < lineCount; ++lineIndex) {
         const std::size_t state =
             static_cast<std::size_t>(destination) * lineCount + lineIndex;
-        if (dist[state] < bestTime) {
-            bestTime = dist[state];
+        if (tables.dist[state] < bestTime) {
+            bestTime = tables.dist[state];
             bestState = static_cast<int>(state);
         }
     }
-    if (bestState < 0) {
+    if (bestState < 0 || std::isinf(bestTime)) {
         return journey;
     }
 
@@ -139,10 +137,10 @@ Journey Router::findRoute(const Network& network, Index origin, Index destinatio
     int current = bestState;
     while (current >= 0) {
         chain.push_back(current);
-        if (chain.size() > stateCount) {
+        if (chain.size() > tables.dist.size()) {
             return journey;
         }
-        current = previous[static_cast<std::size_t>(current)];
+        current = tables.previous[static_cast<std::size_t>(current)];
     }
     for (std::size_t i = 0, j = chain.size(); i + 1 < j; ++i, --j) {
         const int tmp = chain[i];
@@ -164,8 +162,8 @@ Journey Router::findRoute(const Network& network, Index origin, Index destinatio
         leg.line = lineIndex;
         leg.fromStation = firstState / lineCount;
         leg.toStation = lastState / lineCount;
-        leg.boardTime = dist[static_cast<std::size_t>(firstState)];
-        leg.alightTime = dist[static_cast<std::size_t>(lastState)];
+        leg.boardTime = tables.dist[static_cast<std::size_t>(firstState)];
+        leg.alightTime = tables.dist[static_cast<std::size_t>(lastState)];
         for (std::size_t k = index; k + 1 < next; ++k) {
             const Index from = chain[k] / lineCount;
             const Index to = chain[k + 1] / lineCount;
@@ -183,6 +181,65 @@ Journey Router::findRoute(const Network& network, Index origin, Index destinatio
     journey.transfers =
         journey.legs.empty() ? 0 : static_cast<int>(journey.legs.size()) - 1;
     return journey;
+}
+
+}  // namespace
+
+Journey Router::findRoute(const Network& network, Index origin, Index destination,
+                          double departTimeSec) const {
+    Journey journey;
+    journey.departTime = departTimeSec;
+    const Map& map = network.map();
+    if (origin < 0 || destination < 0 || origin >= map.stationCount() ||
+        destination >= map.stationCount()) {
+        return journey;
+    }
+    if (origin == destination) {
+        journey.found = true;
+        journey.arriveTime = departTimeSec;
+        return journey;
+    }
+    const int lineCount = static_cast<int>(network.lines().size());
+    if (lineCount == 0) {
+        return journey;
+    }
+    RouteTables tables;
+    computeTables(network, origin, departTimeSec, lineCount, tables);
+    return reconstructJourney(network, origin, destination, departTimeSec, lineCount, tables);
+}
+
+DynamicArray<Journey> Router::findRoutesFrom(const Network& network, Index origin,
+                                             double departTimeSec) const {
+    DynamicArray<Journey> journeys;
+    const Map& map = network.map();
+    const int stationCount = map.stationCount();
+    if (origin < 0 || origin >= stationCount) {
+        return journeys;
+    }
+    journeys.resize(static_cast<std::size_t>(stationCount));
+    const int lineCount = static_cast<int>(network.lines().size());
+    for (int destination = 0; destination < stationCount; ++destination) {
+        Journey& journey = journeys[static_cast<std::size_t>(destination)];
+        journey.departTime = departTimeSec;
+        if (destination == origin) {
+            journey.found = true;
+            journey.arriveTime = departTimeSec;
+        }
+    }
+    if (lineCount == 0) {
+        return journeys;
+    }
+    RouteTables tables;
+    computeTables(network, origin, departTimeSec, lineCount, tables);
+    for (int destination = 0; destination < stationCount; ++destination) {
+        if (destination == origin) {
+            continue;
+        }
+        journeys[static_cast<std::size_t>(destination)] =
+            reconstructJourney(network, origin, destination, departTimeSec, lineCount,
+                               tables);
+    }
+    return journeys;
 }
 
 }  // namespace uc

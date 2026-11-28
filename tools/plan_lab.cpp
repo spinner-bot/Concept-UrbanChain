@@ -624,7 +624,8 @@ void modePlan(int cols, int rows, int k, int maxLines, const std::string& profil
               int cityCenters, int perCenter, int citySeed, bool localSearch,
               int localBudget, bool prefilter, const std::string& r1Mode,
               double coverageLambda, bool corridorCandidates,
-              const std::string& speedMode) {
+              const std::string& speedMode, const std::string& outMapPath,
+              const std::string& outLinesPath) {
     DynamicArray<Line> baselineLines;
     const Map map = scenario == "grid"
                         ? makeGridMap(cols, rows)
@@ -679,6 +680,31 @@ void modePlan(int cols, int rows, int k, int maxLines, const std::string& profil
             evaluate(map, baselineLines, weights, demand, params);
         std::cout << "radial spoke baseline: " << baselineLines.size() << " lines\n";
         printMetrics(baselineMetrics);
+    }
+
+    if (!outMapPath.empty() && !outLinesPath.empty()) {
+        Network output;
+        output.map() = map;
+        for (std::size_t i = 0; i < plan.lines.size(); ++i) {
+            Line line = plan.lines[i];
+            line.setName("Planned " + std::to_string(i + 1));
+            line.ops().dwellSec = 30.0;
+            line.ops().headway.clear();
+            line.ops().headway.push_back(HeadwayPeriod{0, 86400, 300});
+            line.ops().segmentRunSec.clear();
+            for (int j = 0; j + 1 < line.stationCount(); ++j) {
+                line.ops().segmentRunSec.push_back(120.0);
+            }
+            output.addLine(static_cast<Line&&>(line));
+        }
+        std::string error;
+        if (!io::saveMap(outMapPath, map, &error)) {
+            std::cout << "map save failed: " << error << '\n';
+        } else if (!io::saveLines(outLinesPath, output, &error)) {
+            std::cout << "line save failed: " << error << '\n';
+        } else {
+            std::cout << "saved map=" << outMapPath << " lines=" << outLinesPath << '\n';
+        }
     }
 }
 
@@ -900,6 +926,7 @@ int main(int argc, char** argv) {
     std::string speedMode = "balanced";
     std::string mapPath = "data/demo.cuc4m";
     std::string linePath = "data/demo.cuc3l";
+    std::string outMapPath = "data/city_planned.cuc4m";
     std::string outLinesPath = "data/city_demo_planned.cuc3l";
 
     for (int i = 2; i < argc; ++i) {
@@ -975,6 +1002,8 @@ int main(int argc, char** argv) {
             linePath = argv[++i];
         } else if (arg == "--out-lines" && i + 1 < argc) {
             outLinesPath = argv[++i];
+        } else if (arg == "--out-map" && i + 1 < argc) {
+            outMapPath = argv[++i];
         }
     }
 
@@ -993,7 +1022,8 @@ int main(int argc, char** argv) {
     } else if (mode == "plan") {
         modePlan(cols, rows, k, maxLines, profile, minCoverage, coveragePenalty,
                  scenario, cityCenters, perCenter, citySeed, localSearch, localBudget,
-                 prefilter, r1Mode, coverageLambda, corridorCandidates, speedMode);
+                 prefilter, r1Mode, coverageLambda, corridorCandidates, speedMode,
+                 outMapPath, outLinesPath);
     } else if (mode == "plan-file") {
         modePlanFile(mapPath, outLinesPath, k, maxLines, localBudget, prefilter,
                      r1Mode, coverageLambda, lineOverlap, lineProximity,
